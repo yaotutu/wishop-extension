@@ -6,3 +6,11 @@
 npm run dev
 npm run build
 ```
+
+## Release
+
+```bash
+npm run push
+```
+
+This validates and builds the extension locally, bumps the patch version with `npm version patch`, pushes the version commit and tag, then lets GitHub Actions build the zip package and publish a GitHub Release from the `v*` tag.

@@ -4,10 +4,15 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
   pull_request:
     branches:
       - main
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -33,9 +38,39 @@ jobs:
       - name: Build Chrome extension
         run: npm run build
 
+      - name: Package Chrome extension
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          npm run zip
+          mkdir -p release
+          VERSION=$(node -p "require('./package.json').version")
+          cp .output/*.zip "release/wishop-extension-v${VERSION}.zip"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "ZIP_PATH=release/wishop-extension-v${VERSION}.zip" >> "$GITHUB_ENV"
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: chrome-mv3-build
           path: .output/chrome-mv3
           if-no-files-found: error
+
+      - name: Upload release package artifact
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: wishop-extension-v${{ env.VERSION }}
+          path: ${{ env.ZIP_PATH }}
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Wishop Extension v${{ env.VERSION }}
+          files: ${{ env.ZIP_PATH }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

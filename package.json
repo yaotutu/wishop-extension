@@ -12,6 +12,7 @@
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
     "compile": "tsc --noEmit",
+    "push": "npm run compile && npm run build && npm version patch -m 'chore: v%s' && git push --follow-tags",
     "postinstall": "wxt prepare"
   },
   "dependencies": {
