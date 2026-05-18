@@ -4,6 +4,10 @@ import packageJson from './package.json';
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
+  outDir: 'output',
+  webExt: {
+    chromiumArgs: ['--user-data-dir=./wxt-chrome-data'],
+  },
   manifest: {
     name: '微店管家',
     description: '微信小店多账户商品提审、订单管理和违规词检测工具',
