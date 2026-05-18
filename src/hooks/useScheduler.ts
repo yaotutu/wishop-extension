@@ -5,7 +5,7 @@ import { useIpcFetch } from './useIpcFetch';
 
 const defaultTaskConfig: TaskConfig = {
   listUnreviewed: true,
-  listUnreviewedQuantity: 2,
+  listUnreviewedQuantity: 0,
   autoDeleteFailed: true,
 };
 

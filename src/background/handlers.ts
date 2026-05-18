@@ -331,6 +331,7 @@ async function runTask(accountId: string, taskConfig: TaskConfig): Promise<TaskC
       const quota = await (await getClient(accountId)).getAuditQuota();
       logger.info(`配额检查: 剩余 ${quota.quota} / 总共 ${quota.total}`);
       addLog({ runId, productId: '', productTitle: `今日提审配额: 剩余${quota.quota}/${quota.total}`, action: 'check', status: quota.quota > 0 ? 'success' : 'failed' });
+      taskConfig = { ...taskConfig, listUnreviewedQuantity: quota.quota };
     } catch (error: any) {
       addLog({ runId, productId: '', productTitle: '', action: 'check', status: 'failed', errorMsg: `配额检查失败: ${error.message}` });
       logger.error('配额检查失败:', error);

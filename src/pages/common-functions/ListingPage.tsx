@@ -33,7 +33,7 @@ function cronToLabel(cron: string): string {
 
 const defaultTaskConfig: TaskConfig = {
   listUnreviewed: true,
-  listUnreviewedQuantity: 2,
+  listUnreviewedQuantity: 0,
   autoDeleteFailed: true,
 };
 
@@ -124,11 +124,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
     setRunning(true);
     setResult(null);
     setLocalListedCount(0);
-    // 启动时自动将提交数量设为当前剩余配额
-    if (quota.quota > 0 && taskConfig.listUnreviewedQuantity > quota.quota) {
-      await saveTaskConfig({ ...taskConfig, listUnreviewedQuantity: quota.quota });
-    }
-    const config = { ...taskConfig, listUnreviewedQuantity: Math.min(taskConfig.listUnreviewedQuantity, quota.quota || taskConfig.listUnreviewedQuantity) };
+    const config = { ...taskConfig, listUnreviewedQuantity: quota.quota };
     unsubscribeRef.current = extensionApi.task.onLog(accountId, (log: LogEntry) => {
       fetchLogs();
       if (log.status === 'success' && log.action === 'list') {
@@ -350,18 +346,10 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
               </Checkbox>
               <InputNumber
                 controls={false}
-                size="small" min={1} max={quota.quota || undefined} value={taskConfig.listUnreviewedQuantity}
-                onChange={v => updateConfig({ listUnreviewedQuantity: v || 2 })}
+                size="small" min={0} value={quota.quota}
                 disabled={!taskConfig.listUnreviewed}
                 style={{ width: 60 }}
               />
-              <Button
-                size="small"
-                disabled={!taskConfig.listUnreviewed || !quota.quota}
-                onClick={() => updateConfig({ listUnreviewedQuantity: quota.quota })}
-              >
-                最大
-              </Button>
               <span style={{ color: '#666' }}>条</span>
             </Space>
             <Checkbox
@@ -814,13 +802,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
               {formData.taskConfig.listUnreviewed && (
                 <Space style={{ marginLeft: 24 }}>
                   <span style={{ color: '#666', fontSize: 12 }}>每次</span>
-                  <InputNumber size="small" controls={false} min={1} max={quota.quota || undefined} value={formData.taskConfig.listUnreviewedQuantity}
-                    onChange={v => setFormData(prev => ({
-                      ...prev,
-                      taskConfig: { ...prev.taskConfig, listUnreviewedQuantity: v || 2 },
-                    }))}
-                    style={{ width: 60 }}
-                  />
+                  <InputNumber size="small" controls={false} min={0} value={quota.quota} disabled style={{ width: 60 }} />
                   <span style={{ color: '#666', fontSize: 12 }}>条</span>
                 </Space>
               )}

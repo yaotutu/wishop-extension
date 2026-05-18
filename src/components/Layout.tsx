@@ -97,7 +97,7 @@ const AccountModuleContent: React.FC<{
 };
 
 const Layout: React.FC = () => {
-  const [activeModule, setActiveModule] = useState<ModuleType>('orders');
+  const [activeModule, setActiveModule] = useState<ModuleType>('commonFunctions');
   const [version, setVersion] = useState('');
   const [settingsTab, setSettingsTab] = useState<string | undefined>(undefined);
   const { accounts, activeAccountId, fetchAccounts, addAccount, removeAccount, updateAccount, switchAccount } = useAccounts();

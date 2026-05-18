@@ -7,7 +7,7 @@ export function useTaskConfig(accountId: string) {
   const { data: taskConfig, loading, fetch: fetchTaskConfig, setData: setTaskConfigState } = useIpcFetch<TaskConfig>(
     accountId,
     useCallback(async () => extensionApi.taskConfig.get(accountId), [accountId]),
-    { listUnreviewed: true, listUnreviewedQuantity: 2, autoDeleteFailed: true },
+    { listUnreviewed: true, listUnreviewedQuantity: 0, autoDeleteFailed: true },
   );
 
   const saveTaskConfig = useCallback(async (config: TaskConfig) => {

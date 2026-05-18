@@ -28,7 +28,7 @@ let logCounter = 0;
 
 const DEFAULT_TASK_CONFIG: TaskConfig = {
   listUnreviewed: true,
-  listUnreviewedQuantity: 2,
+  listUnreviewedQuantity: 0,
   autoDeleteFailed: true,
 };
 

@@ -85,7 +85,7 @@ export async function executeTask(accountId: string, taskId: string): Promise<vo
     const result = await runTaskCycle(
       api,
       createScopedAddLog(accountId),
-      task.taskConfig,
+      { ...task.taskConfig, listUnreviewedQuantity: quota.quota },
       `alarm-${taskId}-${Date.now()}`,
       undefined,
       accountId,
