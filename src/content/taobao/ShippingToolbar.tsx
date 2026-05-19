@@ -2,19 +2,12 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { OrderAddressInfo, OrderRealAddressCache, ShippingSession } from '../../shared/types';
 import { extensionApi } from '../../shared/extension-api';
 import { formatOrderAddressForCopy } from '../../shared/address-format';
+import { useShippingToolbarStore, type ShippingToolbarPosition } from '../../stores/shipping-toolbar-store';
 import { readTaobaoPageSnapshot, type TaobaoPageSnapshot } from './page-adapter';
 
 interface Props {
   session: ShippingSession;
 }
-
-interface ToolbarPosition {
-  top: number;
-  left: number;
-}
-
-const POSITION_STORAGE_KEY = 'taobaoShippingToolbarPosition';
-const DEFAULT_POSITION: ToolbarPosition = { top: 96, left: 16 };
 
 function skuText(session: ShippingSession): string {
   const attrs = session.order.skuAttrs
@@ -61,7 +54,7 @@ function formatFetchedAt(timestamp?: number): string {
   });
 }
 
-function clampPosition(position: ToolbarPosition, width = 380): ToolbarPosition {
+function clampPosition(position: ShippingToolbarPosition, width = 380): ShippingToolbarPosition {
   const maxLeft = Math.max(8, window.innerWidth - Math.min(width, window.innerWidth - 16) - 8);
   const maxTop = Math.max(8, window.innerHeight - 80);
   return {
@@ -73,10 +66,13 @@ function clampPosition(position: ToolbarPosition, width = 380): ToolbarPosition 
 export const ShippingToolbar: React.FC<Props> = ({ session }) => {
   const [snapshot, setSnapshot] = useState<TaobaoPageSnapshot>(() => readTaobaoPageSnapshot());
   const [notice, setNotice] = useState('');
-  const [collapsed, setCollapsed] = useState(false);
   const [addressCache, setAddressCache] = useState<OrderRealAddressCache | null>(null);
   const [addressLoading, setAddressLoading] = useState(false);
-  const [position, setPosition] = useState<ToolbarPosition>(DEFAULT_POSITION);
+  const collapsed = useShippingToolbarStore(state => state.collapsed);
+  const position = useShippingToolbarStore(state => state.position);
+  const hydrateToolbarState = useShippingToolbarStore(state => state.hydrate);
+  const setCollapsed = useShippingToolbarStore(state => state.setCollapsed);
+  const setPosition = useShippingToolbarStore(state => state.setPosition);
   const toolbarRef = useRef<HTMLElement | null>(null);
   const dragStateRef = useRef<{
     pointerId: number;
@@ -85,6 +81,13 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
     startTop: number;
     startLeft: number;
   } | null>(null);
+
+  useEffect(() => {
+    void hydrateToolbarState().then(() => {
+      const current = useShippingToolbarStore.getState().position;
+      setPosition(clampPosition(current), false);
+    }).catch(() => {});
+  }, [hydrateToolbarState, setPosition]);
 
   useEffect(() => {
     void extensionApi.shipping.markPageReady(session.id).catch(() => {});
@@ -97,31 +100,17 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
   }, [session.accountId, session.orderId]);
 
   useEffect(() => {
-    chrome.storage.local.get(POSITION_STORAGE_KEY)
-      .then(data => {
-        const saved = data[POSITION_STORAGE_KEY] as Partial<ToolbarPosition> | undefined;
-        if (typeof saved?.top === 'number' && typeof saved?.left === 'number') {
-          setPosition(clampPosition({ top: saved.top, left: saved.left }));
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
     const handleResize = () => {
-      setPosition(prev => clampPosition(prev, toolbarRef.current?.offsetWidth || 380));
+      const next = clampPosition(useShippingToolbarStore.getState().position, toolbarRef.current?.offsetWidth || 380);
+      setPosition(next, false);
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [setPosition]);
 
   const refreshSnapshot = useCallback(() => {
     setSnapshot(readTaobaoPageSnapshot());
     setNotice('已重新读取页面');
-  }, []);
-
-  const persistPosition = useCallback((next: ToolbarPosition) => {
-    void chrome.storage.local.set({ [POSITION_STORAGE_KEY]: next }).catch(() => {});
   }, []);
 
   const handleDragStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -143,17 +132,16 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
       top: drag.startTop + event.clientY - drag.startY,
       left: drag.startLeft + event.clientX - drag.startX,
     }, toolbarRef.current?.offsetWidth || 380);
-    setPosition(next);
-  }, []);
+    setPosition(next, false);
+  }, [setPosition]);
 
   const handleDragEnd = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const drag = dragStateRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     dragStateRef.current = null;
     const next = clampPosition(position, toolbarRef.current?.offsetWidth || 380);
-    setPosition(next);
-    persistPosition(next);
-  }, [persistPosition, position]);
+    setPosition(next, true);
+  }, [position, setPosition]);
 
   const copyOrderInfo = useCallback(async () => {
     const address = addressCache?.address || session.order.address;

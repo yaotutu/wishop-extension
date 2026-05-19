@@ -1,127 +1,131 @@
-# Repository Guidelines
+# 仓库协作指南
 
-## Project Structure & Module Organization
+## 项目结构与模块组织
 
-This is a WXT Chrome Manifest V3 extension built with React, TypeScript, and Ant Design.
+这是一个基于 WXT、React、TypeScript 和 Ant Design 构建的 Chrome Manifest V3 插件。
 
-- `entrypoints/background.ts` registers the extension background entrypoint.
-- `entrypoints/dashboard/` contains dashboard HTML and React bootstrapping.
-- `entrypoints/taobao-shipping.content.tsx` registers the Taobao/Tmall content script for the order shipping assistant.
-- `src/App.tsx`, `src/main.tsx`, and `src/index.css` provide the app shell and global styles.
-- `src/components/` contains shared UI such as layout, statistic cards, and account modals.
-- `src/pages/` contains feature pages, grouped by domain: `orders`, `settings`, `store-management`, `violation`, and `common-functions`.
-- `src/pages/orders/` is split by responsibility: `OrdersPage.tsx` owns page state and actions, `components/` owns table columns, toolbar, detail modal, and source modals, and `order-display.ts` owns order display helpers.
-- `src/background/` contains background runtime wiring, feature handlers, schedulers, task modules, services, repositories, and WeChat shop client code.
-- `src/background/handlers.ts` should stay a thin runtime message transport. Add new IPC behavior through `src/background/router/`, `src/background/runtime-handlers/`, and `src/background/services/`.
-- `src/background/store/` contains storage repositories. Keep `src/background/store.ts` as a compatibility export layer; new background code should import specific repositories directly.
-- `src/content/taobao/` contains Taobao/Tmall page adapters and injected UI for the shipping assistant.
-- `src/hooks/`, `src/contexts/`, and `src/shared/` hold reusable hooks, providers, shared types, errors, and IPC helpers.
-- `src/shared/runtime-channels.ts` is the source of truth for runtime IPC channel argument and result types.
-- `public/` and `assets/` store static extension assets and icons.
+- `entrypoints/background.ts` 注册插件后台入口。
+- `entrypoints/dashboard/` 包含后台管理页面的 HTML 和 React 启动代码。
+- `entrypoints/taobao-shipping.content.tsx` 注册淘宝/天猫页面的发货助手 content script。
+- `src/App.tsx`、`src/main.tsx` 和 `src/index.css` 提供应用外壳和全局样式。
+- `src/components/` 放置通用 UI，例如布局、统计卡片和账号弹窗。
+- `src/pages/` 按业务域组织功能页面，包括 `orders`、`settings`、`store-management`、`violation` 和 `common-functions`。
+- `src/pages/orders/` 按职责拆分：`OrdersPage.tsx` 负责页面状态和动作，`components/` 负责表格列、工具栏、详情弹窗和货源弹窗，`order-display.ts` 负责订单展示辅助逻辑。
+- `src/background/` 包含后台运行时接线、功能处理器、定时任务、任务模块、服务、仓储和微信小店客户端代码。
+- `src/background/handlers.ts` 应保持为很薄的 runtime 消息传输层。新增 IPC 行为应通过 `src/background/router/`、`src/background/runtime-handlers/` 和 `src/background/services/` 实现。
+- `src/background/store/` 包含存储仓储。`src/background/store.ts` 仅保留为兼容导出层；新的后台代码应直接导入具体仓储。
+- `src/content/taobao/` 包含淘宝/天猫页面适配器和注入的发货助手 UI。
+- `src/hooks/`、`src/contexts/` 和 `src/shared/` 放置可复用 hook、Provider、共享类型、错误和 IPC 辅助方法。
+- `src/shared/runtime-channels.ts` 是 runtime IPC channel 参数和返回值类型的唯一事实来源。
+- `public/` 和 `assets/` 存放插件静态资源和图标。
 
-## Architecture Guidelines
+## 架构指南
 
-Background code is layered as:
+后台代码按以下层次组织：
 
-1. `src/background/handlers.ts`: runtime message listener only.
-2. `src/background/router/`: channel registration, feature gates, and dispatch.
-3. `src/background/runtime-handlers/`: IPC argument adaptation and feature-level entrypoints.
-4. `src/background/services/`: business workflows such as draft fetching, order queries, task runs, and violation scans.
-5. `src/background/modules/`: lower-level task algorithms.
-6. `src/background/store/`, `src/background/wxshop/`, and `src/background/global-logs/`: infrastructure.
+1. `src/background/handlers.ts`：只负责 runtime 消息监听。
+2. `src/background/router/`：负责 channel 注册、功能鉴权入口和分发。
+3. `src/background/runtime-handlers/`：负责 IPC 参数适配和功能级入口。
+4. `src/background/services/`：负责业务流程，例如草稿商品获取、订单查询、任务执行和违规扫描。
+5. `src/background/modules/`：负责更底层的任务算法。
+6. `src/background/store/`、`src/background/wxshop/` 和 `src/background/global-logs/`：负责基础设施。
 
-Do not add new switch cases to `handlers.ts`. Add a typed channel in `src/shared/runtime-channels.ts`, expose it through `src/shared/extension-api.ts`, then register a runtime handler in `src/background/router/create-background-router.ts`.
+不要在 `handlers.ts` 中新增 switch 分支。新增功能时，应先在 `src/shared/runtime-channels.ts` 添加带类型的 channel，通过 `src/shared/extension-api.ts` 暴露，再在 `src/background/router/create-background-router.ts` 注册 runtime handler。
 
-Runtime IPC must stay typed. Every new channel must be added to `RuntimeChannels` with explicit `args` and `result` types. Frontend code should call IPC through `extensionApi`, not raw `chrome.runtime.sendMessage`, except for low-level event listeners already wrapped by shared helpers.
+Runtime IPC 必须保持类型化。每个新增 channel 都必须添加到 `RuntimeChannels`，并显式声明 `args` 和 `result` 类型。前端代码应通过 `extensionApi` 调用 IPC，不要直接调用原始 `chrome.runtime.sendMessage`，已经由共享辅助方法封装的底层事件监听除外。
 
-Storage uses `chrome.storage.local` with versioned migrations. Keep data migrations in `src/background/store/migrations.ts` and bump `CURRENT_STORAGE_VERSION` in `src/background/store/core.ts` when changing persisted schema. Do not silently reshape persisted account data inside UI components or unrelated services.
+存储使用 `chrome.storage.local`，并通过版本化 migration 管理。持久化数据迁移放在 `src/background/store/migrations.ts`，变更持久化 schema 时同步提升 `src/background/store/core.ts` 中的 `CURRENT_STORAGE_VERSION`。不要在 UI 组件或无关 service 中静默改写已持久化的账号数据结构。
 
-`wxt.config.ts` host permissions should remain grouped in `HOST_PERMISSIONS` with comments explaining the user-facing purpose of each domain. Prefer convenience for merchant workflows, but avoid unexplained broad permissions.
+前端异步业务数据应使用 TanStack Query。Query key 放在 `src/query/` 下，页面 hook 在 mutation 后应通过失效或更新 query data 来刷新数据，不要在组件 state 中维护重复的业务数据副本。持久化业务状态仍以后端 background repository 为准；Query 只是前端缓存。
 
-## Shipping Assistant Guidelines
+Zustand 只用于轻量 UI 状态和用户偏好，例如悬浮工具栏位置、折叠状态、选中的 tab 和视图偏好。不要把订单、真实地址、采购单详情、凭证或其它持久化业务数据放入 Zustand。
 
-The order shipping flow is session-based:
+`wxt.config.ts` 中的 host permissions 应继续集中在 `HOST_PERMISSIONS`，并用注释说明每个域名权限对应的用户功能。优先保证商家工作流使用方便，但不要添加无法解释的宽泛权限。
 
-- Dashboard order actions create a short-lived `ShippingSession` through background IPC.
-- Background opens the Taobao/Tmall tab and binds `tabId` to the session.
-- The content script requests the session from background and mounts the toolbar.
-- Content scripts must not read WeChat credentials or call WeChat APIs directly.
+## 发货助手指南
 
-Taobao/Tmall DOM access belongs behind adapters in `src/content/taobao/`. Keep selectors and page-detection logic out of toolbar components. Future automation should add stable adapter methods such as `detect`, `read`, `fill`, and `validate` before changing UI code.
+订单发货流程基于会话：
 
-## Licensing Guidelines
+- 后台管理页的订单动作通过后台 IPC 创建短生命周期的 `ShippingSession`。
+- 后台打开淘宝/天猫标签页，并将 `tabId` 绑定到该会话。
+- Content script 从后台请求当前会话并挂载工具栏。
+- Content script 不得读取微信凭证，也不得直接调用微信接口。
 
-Licensing structure exists but enforcement is intentionally disabled until the service backend is ready.
+淘宝/天猫 DOM 访问应放在 `src/content/taobao/` 的适配器后面。选择器和页面识别逻辑不要写进工具栏组件。后续自动化能力应先在适配器中添加稳定的方法，例如 `detect`、`read`、`fill` 和 `validate`，再改 UI 代码。
 
-- Shared license types live in `src/shared/types.ts`.
-- Local license persistence lives in `src/background/store/license-repository.ts`.
-- License business logic lives in `src/background/licensing/licensing-service.ts`.
-- License IPC lives in `src/background/runtime-handlers/license-handlers.ts`.
-- Router-level feature gates live in `src/background/router/create-background-router.ts` and `src/background/router/runtime-router.ts`.
-- The settings page has an authorization status panel, but `enforcementEnabled` defaults to `false`.
+## 鉴权指南
 
-Do not block user workflows with license checks until the backend is implemented and the project owner explicitly enables enforcement. New paid-capable features should still be mapped to a `LicensedFeature` in the router feature map so enforcement can be turned on later without reworking every module.
+鉴权结构已经存在，但在服务端准备好之前，鉴权拦截保持关闭。
 
-## Build, Test, and Development Commands
+- 共享鉴权类型位于 `src/shared/types.ts`。
+- 本地鉴权持久化位于 `src/background/store/license-repository.ts`。
+- 鉴权业务逻辑位于 `src/background/licensing/licensing-service.ts`。
+- 鉴权 IPC 位于 `src/background/runtime-handlers/license-handlers.ts`。
+- 路由层功能门控位于 `src/background/router/create-background-router.ts` 和 `src/background/router/runtime-router.ts`。
+- 设置页有授权状态面板，但 `enforcementEnabled` 默认是 `false`。
 
-- `npm install` installs dependencies and runs `wxt prepare`.
-- `npm run dev` starts the WXT development server for Chrome.
-- `npm run dev:firefox` starts development mode targeting Firefox.
-- `npm run compile` runs `tsc --noEmit` for TypeScript validation.
-- `npm run build` builds the Chrome extension package.
-- `npm run build:firefox` builds the Firefox variant.
-- `npm run zip` and `npm run zip:firefox` create distributable extension archives.
+在后端实现并且项目负责人明确开启拦截之前，不要用鉴权检查阻断用户工作流。新的付费能力仍应映射到 router feature map 中的 `LicensedFeature`，这样后续开启鉴权时不需要重做各个模块。
 
-## Coding Style & Naming Conventions
+## 构建、测试与开发命令
 
-Use TypeScript modules with ES imports and React functional components. Match two-space indentation, single quotes, and semicolons. Name React components in `PascalCase` (`OrdersPage.tsx`), hooks with `use` prefixes (`useOrders.ts`), and background modules with descriptive kebab-case filenames (`violation-detect.ts`). Keep IPC channel strings namespaced by feature, such as `accounts:list` or `scheduler:update`.
+- `npm install` 安装依赖并运行 `wxt prepare`。
+- `npm run dev` 启动 Chrome 目标的 WXT 开发服务器。
+- `npm run dev:firefox` 启动 Firefox 目标的开发模式。
+- `npm run compile` 运行 `tsc --noEmit` 做 TypeScript 校验。
+- `npm run build` 构建 Chrome 插件包。
+- `npm run build:firefox` 构建 Firefox 版本。
+- `npm run zip` 和 `npm run zip:firefox` 创建可分发的插件压缩包。
 
-## Testing Guidelines
+## 代码风格与命名规范
 
-No automated test framework is currently configured in `package.json`. For every change, run `npm run compile`; for background, manifest, or packaging changes, also run `npm run build`. When adding tests, colocate them with the feature or use a dedicated `tests/` directory. Prefer `*.test.ts` or `*.test.tsx` names.
+使用 TypeScript 模块、ES imports 和 React 函数组件。保持两个空格缩进、单引号和分号。React 组件使用 `PascalCase` 命名，例如 `OrdersPage.tsx`；hook 使用 `use` 前缀，例如 `useOrders.ts`；后台模块使用描述性的 kebab-case 文件名，例如 `violation-detect.ts`。IPC channel 字符串应按功能命名空间组织，例如 `accounts:list` 或 `scheduler:update`。
 
-## Commit & Pull Request Guidelines
+## 测试指南
 
-This checkout does not include Git history, so no repository-specific commit convention can be inferred. Use short imperative commits, for example `Add scheduler quota validation` or `Fix order search pagination`.
+当前 `package.json` 没有配置自动化测试框架。每次修改后运行 `npm run compile`；涉及 background、manifest 或打包行为的修改，还要运行 `npm run build`。新增测试时，可以与功能代码放在一起，也可以放到专门的 `tests/` 目录。测试文件优先使用 `*.test.ts` 或 `*.test.tsx` 命名。
 
-Pull requests should include a clear summary, verification commands, linked issue or task context, and screenshots or recordings for UI changes. Note permission, manifest, or API behavior changes.
+## 提交与 PR 指南
 
-## Security & Configuration Tips
+使用简短的祈使句提交信息，例如 `Add scheduler quota validation` 或 `Fix order search pagination`。
 
-Do not commit live app credentials, access tokens, or customer data. Treat account configuration and WeChat API client values as sensitive. Keep new host permissions in `wxt.config.ts` narrow and explain permission changes in the PR.
+PR 应包含清晰摘要、验证命令、关联 issue 或任务背景，以及 UI 变更对应的截图或录屏。涉及权限、manifest 或 API 行为变化时，需要明确说明。
 
-## Global Log Center Guidelines
+## 安全与配置提示
 
-The global log center is a structured task event stream, not a generic debug log and not a product-level detail log.
+不要提交真实 app 凭证、access token 或客户数据。账号配置和微信 API 客户端值都应视为敏感信息。新增 `wxt.config.ts` host permissions 时保持范围尽量窄，并在 PR 中解释权限变化。
 
-- Shared global log types live in `src/shared/global-log.ts`.
-- Background global log infrastructure lives in `src/background/global-logs/`.
-- UI reads global logs through `src/hooks/useGlobalLogs.ts` and displays them in `src/components/GlobalLogDrawer.tsx`.
-- Business modules must write global logs through `src/background/global-logs/global-log-service.ts`; do not write `chrome.storage.local.globalLogs` directly from business code.
-- Current sinks are local storage, runtime event notification, and a reserved cloud upload sink. Cloud upload failures must never block business tasks.
+## 全局日志中心指南
 
-Use global logs for:
+全局日志中心是结构化任务事件流，不是通用 debug 日志，也不是产品级明细日志。
 
-- Automation tasks, such as scheduled jobs and all-account jobs.
-- Background tasks that may finish after the user leaves the current page.
-- Important foreground tasks, including manual tasks whose outcome users need to review later.
-- Task-level started, completed, skipped, and failed events.
+- 共享全局日志类型位于 `src/shared/global-log.ts`。
+- 后台全局日志基础设施位于 `src/background/global-logs/`。
+- UI 通过 `src/hooks/useGlobalLogs.ts` 读取全局日志，并在 `src/components/GlobalLogDrawer.tsx` 中展示。
+- 业务模块必须通过 `src/background/global-logs/global-log-service.ts` 写入全局日志；不要在业务代码中直接写 `chrome.storage.local.globalLogs`。
+- 当前 sink 包括本地存储、runtime 事件通知和预留的云上传 sink。云上传失败绝不能阻断业务任务。
 
-Do not use global logs for:
+全局日志适用于：
 
-- Per-product, per-order, or per-API-call detail records.
-- High-frequency loop entries. Loops should write detailed account logs as needed, then one global summary after the loop.
-- Debug output or internal development traces.
+- 自动化任务，例如定时任务和全账号任务。
+- 用户离开当前页面后仍可能完成的后台任务。
+- 重要的前台任务，包括用户后续需要回看结果的手动任务。
+- 任务级 started、completed、skipped 和 failed 事件。
 
-Global log rules:
+全局日志不适用于：
 
-1. Account-level detail logs stay in account logs, such as `accounts[].logs`.
-2. Global logs record important operation runs and their outcomes.
-3. Manual important tasks should also write global logs.
-4. Failed, skipped, and abnormal task outcomes must be visible in the global log center.
-5. Global logs are observational data only; they must not be used as the source of business state.
-6. Clearing global logs must not clear account logs.
-7. Future cloud analytics must use the cloud sink and structured fields such as `module`, `eventType`, `taskKind`, `runId`, `summary`, and `error`; do not upload credentials, tokens, customer data, or sensitive order/address/product detail.
+- 单商品、单订单或单 API 调用的明细记录。
+- 高频循环条目。循环内部如需细节，应写账号日志，然后在循环结束后写一条全局摘要。
+- debug 输出或内部开发跟踪。
+
+全局日志规则：
+
+1. 账号级明细日志保留在账号日志中，例如 `accounts[].logs`。
+2. 全局日志记录重要操作运行及其结果。
+3. 重要手动任务也应写入全局日志。
+4. 失败、跳过和异常任务结果必须能在全局日志中心看到。
+5. 全局日志只是观测数据，不得作为业务状态的数据源。
+6. 清空全局日志不得清空账号日志。
+7. 未来云端分析必须使用 cloud sink 和结构化字段，例如 `module`、`eventType`、`taskKind`、`runId`、`summary` 和 `error`；不得上传凭证、token、客户数据或敏感的订单、地址、商品明细。
 
 
 # 优先级最高的规则，该规则由用户手写，不允许被覆盖，不允许修改

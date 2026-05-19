@@ -1,6 +1,15 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { Table, Button, Empty, message } from 'antd';
-import { useOrders } from '../../hooks/useIpc';
+import {
+  useFetchRealAddressMutation,
+  useOrderAssociationsQuery,
+  useOrderDetailQuery,
+  useOrdersQuery,
+  useProductSourcesQuery,
+  useRealAddressCachesQuery,
+  useSaveOrderAssociationMutation,
+  useSaveProductSourcesMutation,
+} from '../../hooks/useIpc';
 import { extensionApi } from '../../shared/extension-api';
 import type { Order, OrderStatus, OrderProductInfo, OrderSearchParams, OrderRealAddressCache, OrderAssociation, ProductSourceItem } from '../../shared/types';
 import { formatOrderAddressForCopy } from '../../shared/address-format';
@@ -14,49 +23,6 @@ function normalizeUrl(url: string): string {
   const trimmed = url.trim();
   if (!trimmed) return trimmed;
   return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-}
-
-function isUnknownRuntimeChannelError(err: unknown): boolean {
-  return err instanceof Error && err.message.includes('Unknown runtime channel');
-}
-
-async function fetchRealAddressWithFallback(accountId: string, orderId: string, refresh: boolean): Promise<OrderRealAddressCache> {
-  try {
-    return refresh
-      ? await extensionApi.orderRealAddresses.refresh(accountId, orderId)
-      : await extensionApi.orderRealAddresses.fetch(accountId, orderId);
-  } catch (err) {
-    if (!isUnknownRuntimeChannelError(err)) throw err;
-    const address = await extensionApi.orders.decodeAddress(accountId, orderId);
-    const now = Date.now();
-    return {
-      orderId,
-      address,
-      fetchedAt: now,
-      updatedAt: now,
-    };
-  }
-}
-
-async function readLocalRealAddressCaches(accountId: string): Promise<OrderRealAddressCache[]> {
-  const data = await chrome.storage.local.get('accounts');
-  const accounts = Array.isArray(data.accounts) ? data.accounts : [];
-  const account = accounts.find((item: { id?: string }) => item.id === accountId);
-  return Array.isArray(account?.realAddressCaches) ? account.realAddressCaches : [];
-}
-
-async function persistLocalRealAddressCache(accountId: string, cache: OrderRealAddressCache): Promise<void> {
-  const data = await chrome.storage.local.get('accounts');
-  const accounts = Array.isArray(data.accounts) ? data.accounts : [];
-  const nextAccounts = accounts.map((account: { id?: string; realAddressCaches?: OrderRealAddressCache[] }) => {
-    if (account.id !== accountId) return account;
-    const caches = Array.isArray(account.realAddressCaches) ? account.realAddressCaches : [];
-    return {
-      ...account,
-      realAddressCaches: [...caches.filter(item => item.orderId !== cache.orderId), cache],
-    };
-  });
-  await chrome.storage.local.set({ accounts: nextAccounts });
 }
 
 async function convertImageBlobToPng(blob: Blob): Promise<Blob> {
@@ -77,29 +43,40 @@ async function convertImageBlobToPng(blob: Blob): Promise<Blob> {
 }
 
 const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
-  const { orders, hasMore, loading, error, clearError, fetchOrders, fetchOrderDetail, searchOrders } = useOrders(accountId);
   const [activeStatus, setActiveStatus] = useState<OrderStatus | undefined>(undefined);
   const [searchType, setSearchType] = useState<OrderSearchParams['search_type']>('order_id');
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [activeSearch, setActiveSearch] = useState<OrderSearchParams | null>(null);
+  const [hiddenError, setHiddenError] = useState('');
   const [detailModalOpen, setDetailModalOpen] = useState(false);
-  const [detailOrder, setDetailOrder] = useState<Order | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [realAddressCaches, setRealAddressCaches] = useState<Record<string, OrderRealAddressCache>>({});
+  const [detailOrderId, setDetailOrderId] = useState('');
   const [decodingOrderIds, setDecodingOrderIds] = useState<Set<string>>(new Set());
-  const [productSources, setProductSourcesState] = useState<Record<string, ProductSourceItem[]>>({});
-  const [orderAssociations, setOrderAssociations] = useState<Record<string, OrderAssociation>>({});
   const [associationModalOpen, setAssociationModalOpen] = useState(false);
   const [associationOrder, setAssociationOrder] = useState<Order | null>(null);
-  const [associationSaving, setAssociationSaving] = useState(false);
   const [sourceModalOpen, setSourceModalOpen] = useState(false);
   const [sourceProduct, setSourceProduct] = useState<OrderProductInfo | null>(null);
   const [sourceRows, setSourceRows] = useState<ProductSourceItem[]>([]);
-  const [sourceSaving, setSourceSaving] = useState(false);
   const [shipSourceModalOpen, setShipSourceModalOpen] = useState(false);
   const [shipSourceOrder, setShipSourceOrder] = useState<Order | null>(null);
   const [shipSourceProduct, setShipSourceProduct] = useState<OrderProductInfo | null>(null);
   const tableAreaRef = useRef<HTMLDivElement>(null);
   const [scrollY, setScrollY] = useState(400);
+  const ordersQuery = useOrdersQuery(accountId, activeStatus, activeSearch);
+  const detailQuery = useOrderDetailQuery(accountId, detailOrderId);
+  const productSourcesQuery = useProductSourcesQuery(accountId);
+  const orderAssociationsQuery = useOrderAssociationsQuery(accountId);
+  const realAddressCachesQuery = useRealAddressCachesQuery(accountId);
+  const saveProductSourcesMutation = useSaveProductSourcesMutation(accountId);
+  const saveOrderAssociationMutation = useSaveOrderAssociationMutation(accountId);
+  const fetchRealAddressMutation = useFetchRealAddressMutation(accountId);
+  const orders = ordersQuery.orders;
+  const hasMore = ordersQuery.hasMore;
+  const loading = ordersQuery.loading;
+  const productSources = productSourcesQuery.data || {};
+  const orderAssociations = orderAssociationsQuery.data || {};
+  const realAddressCaches = realAddressCachesQuery.data || {};
+  const orderError = ordersQuery.error instanceof Error ? ordersQuery.error.message : '';
+  const error = orderError && orderError !== hiddenError ? orderError : null;
 
   useEffect(() => {
     const el = tableAreaRef.current;
@@ -115,75 +92,57 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   }, []);
 
   useEffect(() => {
-    if (accountId) {
-      setActiveStatus(undefined);
-      setProductSourcesState({});
-      setOrderAssociations({});
-      setRealAddressCaches({});
-      fetchOrders();
-      extensionApi.productSources.list(accountId)
-        .then(bindings => {
-          setProductSourcesState(Object.fromEntries(bindings.map(binding => [binding.productId, binding.sources])));
-        })
-        .catch((err: Error) => message.error(`加载货源失败: ${err.message}`));
-      extensionApi.orderAssociations.list(accountId)
-        .then(associations => {
-          setOrderAssociations(Object.fromEntries(associations.map(item => [item.orderId, item])));
-        })
-        .catch((err: Error) => message.error(`加载订单关联失败: ${err.message}`));
-      extensionApi.orderRealAddresses.list(accountId)
-        .then(caches => {
-          setRealAddressCaches(Object.fromEntries(caches.map(item => [item.orderId, item])));
-        })
-        .catch(async (err: Error) => {
-          // 开发热更新时可能出现 dashboard 已更新、background service worker 仍是旧版本。
-          // 这种情况下先不打扰用户；重新加载插件后新 channel 会正常可用。
-          if (isUnknownRuntimeChannelError(err)) {
-            const caches = await readLocalRealAddressCaches(accountId);
-            setRealAddressCaches(Object.fromEntries(caches.map(item => [item.orderId, item])));
-            return;
-          }
-          message.error(`加载真实地址缓存失败: ${err.message}`);
-        });
-    }
-  }, [accountId, fetchOrders]);
+    setActiveStatus(undefined);
+    setActiveSearch(null);
+    setSearchKeyword('');
+    setDetailOrderId('');
+  }, [accountId]);
+
+  useEffect(() => {
+    const errors = [
+      ['加载货源失败', productSourcesQuery.error],
+      ['加载订单关联失败', orderAssociationsQuery.error],
+      ['加载真实地址缓存失败，请在扩展管理页重新加载插件后再试', realAddressCachesQuery.error],
+      ['加载订单详情失败', detailQuery.error],
+    ] as const;
+    errors.forEach(([prefix, err]) => {
+      if (err instanceof Error) message.error(`${prefix}: ${err.message}`);
+    });
+  }, [productSourcesQuery.error, orderAssociationsQuery.error, realAddressCachesQuery.error, detailQuery.error]);
 
   const handleStatusChange = useCallback((val: string | number | null) => {
     if (val === null) return;
     const status = val === 'all' ? undefined : val as OrderStatus;
     setActiveStatus(status);
     setSearchKeyword('');
-    fetchOrders(status);
-  }, [fetchOrders]);
+    setActiveSearch(null);
+    setHiddenError('');
+  }, []);
 
   const handleSearch = useCallback((value: string) => {
-    if (!value?.trim()) {
-      fetchOrders(activeStatus);
+    const keyword = value?.trim();
+    setHiddenError('');
+    if (!keyword) {
+      setActiveSearch(null);
       return;
     }
-    searchOrders({ search_type: searchType, keyword: value.trim() });
-  }, [activeStatus, searchType, fetchOrders, searchOrders]);
+    setActiveSearch({ search_type: searchType, keyword });
+  }, [searchType]);
 
   const handleLoadMore = useCallback(() => {
-    fetchOrders(activeStatus, true);
-  }, [activeStatus, fetchOrders]);
+    void ordersQuery.fetchNextPage();
+  }, [ordersQuery]);
 
-  const handleViewDetail = useCallback(async (orderId: string) => {
+  const handleViewDetail = useCallback((orderId: string) => {
     setDetailModalOpen(true);
-    setDetailLoading(true);
-    setDetailOrder(null);
-    const order = await fetchOrderDetail(orderId);
-    setDetailOrder(order);
-    setDetailLoading(false);
-  }, [fetchOrderDetail]);
+    setDetailOrderId(orderId);
+  }, []);
 
   const handleDecodeAddress = useCallback(async (orderId: string) => {
     setDecodingOrderIds(prev => new Set(prev).add(orderId));
     try {
-      const cache = await fetchRealAddressWithFallback(accountId, orderId, false);
+      const cache = await fetchRealAddressMutation.mutateAsync({ orderId, refresh: false });
       if (cache) {
-        await persistLocalRealAddressCache(accountId, cache);
-        setRealAddressCaches(prev => ({ ...prev, [orderId]: cache }));
         const text = formatOrderAddressForCopy(cache.address);
         navigator.clipboard.writeText(text).then(() => message.success('真实地址已显示并复制')).catch(() => message.success('真实地址已显示'));
       }
@@ -192,21 +151,19 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     } finally {
       setDecodingOrderIds(prev => { const s = new Set(prev); s.delete(orderId); return s; });
     }
-  }, [accountId]);
+  }, [fetchRealAddressMutation]);
 
   const handleRefreshAddress = useCallback(async (orderId: string) => {
     setDecodingOrderIds(prev => new Set(prev).add(orderId));
     try {
-      const cache = await fetchRealAddressWithFallback(accountId, orderId, true);
-      await persistLocalRealAddressCache(accountId, cache);
-      setRealAddressCaches(prev => ({ ...prev, [orderId]: cache }));
+      await fetchRealAddressMutation.mutateAsync({ orderId, refresh: true });
       message.success('真实地址已刷新');
     } catch (err: any) {
       message.error(`刷新真实地址失败: ${err.message}`);
     } finally {
       setDecodingOrderIds(prev => { const s = new Set(prev); s.delete(orderId); return s; });
     }
-  }, [accountId]);
+  }, [fetchRealAddressMutation]);
 
   const handleCopyAddress = useCallback((cache: OrderRealAddressCache) => {
     const text = formatOrderAddressForCopy(cache.address);
@@ -241,15 +198,6 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     }
   }, []);
 
-  const syncProductSources = useCallback((productId: string, sources: ProductSourceItem[]) => {
-    setProductSourcesState(prev => {
-      const next = { ...prev };
-      if (sources.length > 0) next[productId] = sources;
-      else delete next[productId];
-      return next;
-    });
-  }, []);
-
   const openSourceManager = useCallback((product: OrderProductInfo) => {
     setSourceProduct(product);
     const sources = (productSources[product.product_id] || []).map(source => ({ ...source }));
@@ -266,18 +214,14 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const handleSaveSources = useCallback(async () => {
     if (!sourceProduct) return;
     const sourcesToSave = sourceRows.filter(source => source.url.trim());
-    setSourceSaving(true);
     try {
-      const binding = await extensionApi.productSources.set(accountId, sourceProduct.product_id, sourcesToSave);
-      syncProductSources(sourceProduct.product_id, binding.sources);
+      await saveProductSourcesMutation.mutateAsync({ productId: sourceProduct.product_id, sources: sourcesToSave });
       setSourceModalOpen(false);
       message.success('货源已保存');
     } catch (err: any) {
       message.error(`保存货源失败: ${err.message}`);
-    } finally {
-      setSourceSaving(false);
     }
-  }, [accountId, sourceProduct, sourceRows, syncProductSources]);
+  }, [saveProductSourcesMutation, sourceProduct, sourceRows]);
 
   const openAssociationEditor = useCallback((order: Order) => {
     setAssociationOrder(order);
@@ -286,23 +230,14 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
 
   const handleSaveAssociation = useCallback(async (input: Pick<OrderAssociation, 'internalRemark' | 'linkedOrders'>) => {
     if (!associationOrder) return;
-    setAssociationSaving(true);
     try {
-      const saved = await extensionApi.orderAssociations.set(accountId, associationOrder.order_id, input);
-      setOrderAssociations(prev => {
-        const next = { ...prev };
-        if (saved.internalRemark || saved.linkedOrders.length > 0) next[saved.orderId] = saved;
-        else delete next[saved.orderId];
-        return next;
-      });
+      await saveOrderAssociationMutation.mutateAsync({ orderId: associationOrder.order_id, input });
       setAssociationModalOpen(false);
       message.success('内部关联已保存');
     } catch (err: any) {
       message.error(`保存内部关联失败: ${err.message}`);
-    } finally {
-      setAssociationSaving(false);
     }
-  }, [accountId, associationOrder]);
+  }, [associationOrder, saveOrderAssociationMutation]);
 
   const handleOpenShippingSession = useCallback(async (source: ProductSourceItem) => {
     if (!shipSourceOrder || !shipSourceProduct) return;
@@ -385,8 +320,8 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         onSearchTypeChange={setSearchType}
         onSearchKeywordChange={setSearchKeyword}
         onSearch={handleSearch}
-        onRefresh={() => fetchOrders(activeStatus)}
-        onClearError={clearError}
+        onRefresh={() => ordersQuery.refetch()}
+        onClearError={() => setHiddenError(orderError)}
       />
 
       <div ref={tableAreaRef} style={{ flex: 1, minHeight: 0 }}>
@@ -419,9 +354,9 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
 
       <OrderDetailModal
         open={detailModalOpen}
-        loading={detailLoading}
-        order={detailOrder}
-        realAddressCache={detailOrder ? realAddressCaches[detailOrder.order_id] : undefined}
+        loading={detailQuery.isLoading || detailQuery.isFetching}
+        order={detailQuery.data || null}
+        realAddressCache={detailQuery.data ? realAddressCaches[detailQuery.data.order_id] : undefined}
         onCancel={() => setDetailModalOpen(false)}
       />
 
@@ -429,7 +364,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         open={sourceModalOpen}
         product={sourceProduct}
         rows={sourceRows}
-        saving={sourceSaving}
+        saving={saveProductSourcesMutation.isPending}
         onRowsChange={setSourceRows}
         onCancel={() => setSourceModalOpen(false)}
         onSave={handleSaveSources}
@@ -445,7 +380,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       <OrderAssociationModal
         open={associationModalOpen}
         association={associationOrder ? orderAssociations[associationOrder.order_id] : undefined}
-        saving={associationSaving}
+        saving={saveOrderAssociationMutation.isPending}
         onCancel={() => setAssociationModalOpen(false)}
         onSave={handleSaveAssociation}
       />
