@@ -16,7 +16,7 @@ export function useOrders(accountId: string) {
   const { data: orders, loading, fetch, setData: setOrders } = useIpcFetch<Order[]>(
     accountId,
     useCallback(async () => {
-      const result = await extensionApi.orders.list(accountId, statusRef.current);
+      const result = await extensionApi.orders.list(accountId, statusRef.current, undefined, true);
       setHasMore(result.hasMore);
       return result.orders;
     }, [accountId]),

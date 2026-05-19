@@ -57,7 +57,12 @@ export const extensionApi = {
     list: (accountId: string, productId: string): Promise<{ success: boolean; error?: string }> => invoke('drafts:list', accountId, productId),
   },
   orders: {
-    list: (accountId: string, status?: OrderStatus, pageSize?: number): Promise<{ orders: Order[]; hasMore: boolean }> => invoke('orders:list', accountId, status, pageSize),
+    list: (
+      accountId: string,
+      status?: OrderStatus,
+      pageSize?: number,
+      reset?: boolean,
+    ): Promise<{ orders: Order[]; hasMore: boolean }> => invoke('orders:list', accountId, status, pageSize, reset),
     detail: (accountId: string, orderId: string): Promise<Order> => invoke('orders:detail', accountId, orderId),
     search: (accountId: string, params: OrderSearchParams): Promise<{ orders: Order[]; hasMore: boolean }> => invoke('orders:search', accountId, params),
     decodeAddress: (accountId: string, orderId: string): Promise<OrderAddressInfo> => invoke('orders:decodeAddress', accountId, orderId),

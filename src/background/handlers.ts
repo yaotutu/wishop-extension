@@ -142,7 +142,12 @@ async function handleMessage(channel: string, args: unknown[]): Promise<unknown>
       return listDraft(args[0] as string, args[1] as string);
 
     case 'orders:list':
-      return listOrders(args[0] as string, args[1] as OrderStatus | undefined, args[2] as number | undefined);
+      return listOrders(
+        args[0] as string,
+        args[1] as OrderStatus | undefined,
+        args[2] as number | undefined,
+        args[3] as boolean | undefined,
+      );
     case 'orders:detail':
       return (await getClient(args[0] as string)).getOrderDetail(args[1] as string);
     case 'orders:search':
@@ -331,11 +336,16 @@ async function listDraft(accountId: string, productId: string): Promise<{ succes
   }
 }
 
-async function listOrders(accountId: string, status?: OrderStatus, pageSize?: number): Promise<{ orders: Order[]; hasMore: boolean }> {
+async function listOrders(
+  accountId: string,
+  status?: OrderStatus,
+  pageSize?: number,
+  reset?: boolean,
+): Promise<{ orders: Order[]; hasMore: boolean }> {
   const logger = createLogger('Orders', accountId);
   const key = `${accountId}:${status ?? 'all'}`;
   let pag = orderPaginationMap.get(key);
-  if (!pag) {
+  if (!pag || reset) {
     pag = { nextKey: '', hasMore: true, timeRange: makeTimeRange() };
     orderPaginationMap.set(key, pag);
   }
