@@ -5,6 +5,15 @@ import packageJson from './package.json';
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   outDir: 'output',
+  vite: () => ({
+    build: {
+      sourcemap: false,
+      minify: 'esbuild',
+    },
+  }),
+  zip: {
+    exclude: ['**/*.map'],
+  },
   webExt: {
     chromiumProfile: '.wxt/chrome-profile',
     keepProfileChanges: true,
