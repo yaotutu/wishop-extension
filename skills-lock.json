@@ -6,6 +6,18 @@
       "sourceType": "github",
       "skillPath": "skills/ant-design/SKILL.md",
       "computedHash": "096d4ac9513e43030f960aab49b50168a3d5eb35be86926ac6e96e5998ea9466"
+    },
+    "chrome-extension-development": {
+      "source": "mindrally/skills",
+      "sourceType": "github",
+      "skillPath": "chrome-extension-development/SKILL.md",
+      "computedHash": "0de6cab64ca8aa87aeb89905a0b08cd5a081c68823894c6e85ae6df14a763b03"
+    },
+    "chrome-extension-wxt": {
+      "source": "tenequm/claude-plugins",
+      "sourceType": "github",
+      "skillPath": "skills/chrome-extension-wxt/SKILL.md",
+      "computedHash": "fed13e2c035a0f7c0b292323c3f77812e701173787ac6efd8e0b45792cc840db"
     }
   }
 }
