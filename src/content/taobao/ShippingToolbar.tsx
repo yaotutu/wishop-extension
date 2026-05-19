@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import type { OrderAddressInfo, ShippingSession } from '../../shared/types';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import type { OrderAddressInfo, OrderRealAddressCache, ShippingSession } from '../../shared/types';
 import { extensionApi } from '../../shared/extension-api';
 import { formatOrderAddressForCopy } from '../../shared/address-format';
 import { readTaobaoPageSnapshot, type TaobaoPageSnapshot } from './page-adapter';
@@ -7,6 +7,14 @@ import { readTaobaoPageSnapshot, type TaobaoPageSnapshot } from './page-adapter'
 interface Props {
   session: ShippingSession;
 }
+
+interface ToolbarPosition {
+  top: number;
+  left: number;
+}
+
+const POSITION_STORAGE_KEY = 'taobaoShippingToolbarPosition';
+const DEFAULT_POSITION: ToolbarPosition = { top: 96, left: 16 };
 
 function skuText(session: ShippingSession): string {
   const attrs = session.order.skuAttrs
@@ -43,23 +51,112 @@ function noteText(label: string, value?: string): string {
   return value?.trim() ? `${label}：${value.trim()}` : '';
 }
 
+function formatFetchedAt(timestamp?: number): string {
+  if (!timestamp) return '';
+  return new Date(timestamp).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function clampPosition(position: ToolbarPosition, width = 380): ToolbarPosition {
+  const maxLeft = Math.max(8, window.innerWidth - Math.min(width, window.innerWidth - 16) - 8);
+  const maxTop = Math.max(8, window.innerHeight - 80);
+  return {
+    top: Math.min(Math.max(8, position.top), maxTop),
+    left: Math.min(Math.max(8, position.left), maxLeft),
+  };
+}
+
 export const ShippingToolbar: React.FC<Props> = ({ session }) => {
   const [snapshot, setSnapshot] = useState<TaobaoPageSnapshot>(() => readTaobaoPageSnapshot());
   const [notice, setNotice] = useState('');
   const [collapsed, setCollapsed] = useState(false);
-  const [address, setAddress] = useState<OrderAddressInfo | undefined>(session.order.address);
+  const [addressCache, setAddressCache] = useState<OrderRealAddressCache | null>(null);
   const [addressLoading, setAddressLoading] = useState(false);
+  const [position, setPosition] = useState<ToolbarPosition>(DEFAULT_POSITION);
+  const toolbarRef = useRef<HTMLElement | null>(null);
+  const dragStateRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    startTop: number;
+    startLeft: number;
+  } | null>(null);
 
   useEffect(() => {
     void extensionApi.shipping.markPageReady(session.id).catch(() => {});
   }, [session.id]);
+
+  useEffect(() => {
+    extensionApi.orderRealAddresses.get(session.accountId, session.orderId)
+      .then(cache => setAddressCache(cache))
+      .catch(() => {});
+  }, [session.accountId, session.orderId]);
+
+  useEffect(() => {
+    chrome.storage.local.get(POSITION_STORAGE_KEY)
+      .then(data => {
+        const saved = data[POSITION_STORAGE_KEY] as Partial<ToolbarPosition> | undefined;
+        if (typeof saved?.top === 'number' && typeof saved?.left === 'number') {
+          setPosition(clampPosition({ top: saved.top, left: saved.left }));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setPosition(prev => clampPosition(prev, toolbarRef.current?.offsetWidth || 380));
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const refreshSnapshot = useCallback(() => {
     setSnapshot(readTaobaoPageSnapshot());
     setNotice('已重新读取页面');
   }, []);
 
+  const persistPosition = useCallback((next: ToolbarPosition) => {
+    void chrome.storage.local.set({ [POSITION_STORAGE_KEY]: next }).catch(() => {});
+  }, []);
+
+  const handleDragStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest('button')) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startTop: position.top,
+      startLeft: position.left,
+    };
+  }, [position.left, position.top]);
+
+  const handleDragMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragStateRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const next = clampPosition({
+      top: drag.startTop + event.clientY - drag.startY,
+      left: drag.startLeft + event.clientX - drag.startX,
+    }, toolbarRef.current?.offsetWidth || 380);
+    setPosition(next);
+  }, []);
+
+  const handleDragEnd = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragStateRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    dragStateRef.current = null;
+    const next = clampPosition(position, toolbarRef.current?.offsetWidth || 380);
+    setPosition(next);
+    persistPosition(next);
+  }, [persistPosition, position]);
+
   const copyOrderInfo = useCallback(async () => {
+    const address = addressCache?.address || session.order.address;
     const lines = [
       `订单号：${session.orderId}`,
       `商品：${session.order.title}`,
@@ -75,9 +172,10 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
     ].filter(Boolean);
     await copyText(lines.join('\n'));
     setNotice('订单信息已复制');
-  }, [address, session]);
+  }, [addressCache, session]);
 
   const copyAddress = useCallback(async () => {
+    const address = addressCache?.address || session.order.address;
     const text = addressText(address);
     if (!text) {
       setNotice('当前会话没有地址信息');
@@ -85,14 +183,16 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
     }
     await copyText(text);
     setNotice('地址已复制');
-  }, [address]);
+  }, [addressCache, session.order.address]);
 
-  const fetchRealAddress = useCallback(async () => {
+  const fetchRealAddress = useCallback(async (forceRefresh = false) => {
     setAddressLoading(true);
     try {
-      const decoded = await extensionApi.orders.decodeAddress(session.accountId, session.orderId);
-      setAddress(decoded);
-      setNotice('真实地址已获取，本次已消耗地址查看额度');
+      const cache = forceRefresh
+        ? await extensionApi.orderRealAddresses.refresh(session.accountId, session.orderId)
+        : await extensionApi.orderRealAddresses.fetch(session.accountId, session.orderId);
+      setAddressCache(cache);
+      setNotice('');
     } catch (err) {
       setNotice(`获取真实地址失败：${err instanceof Error ? err.message : '未知错误'}`);
     } finally {
@@ -121,7 +221,11 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
 
   if (collapsed) {
     return (
-      <section className="wishop-shipping-toolbar wishop-shipping-toolbar--collapsed">
+      <section
+        ref={toolbarRef}
+        className="wishop-shipping-toolbar wishop-shipping-toolbar--collapsed"
+        style={{ top: position.top, left: position.left }}
+      >
         <button
           type="button"
           className="wishop-shipping-collapsed-button"
@@ -134,12 +238,25 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
     );
   }
 
+  const address = addressCache?.address || session.order.address;
+  const fetchedAt = formatFetchedAt(addressCache?.fetchedAt);
+
   return (
-    <section className="wishop-shipping-toolbar">
-      <div className="wishop-shipping-header">
+    <section
+      ref={toolbarRef}
+      className="wishop-shipping-toolbar"
+      style={{ top: position.top, left: position.left }}
+    >
+      <div
+        className="wishop-shipping-header"
+        onPointerDown={handleDragStart}
+        onPointerMove={handleDragMove}
+        onPointerUp={handleDragEnd}
+        onPointerCancel={handleDragEnd}
+      >
         <div className="wishop-shipping-title">
           <strong>微店管家发货助手</strong>
-          <span className="wishop-shipping-status">{session.status}</span>
+          <span className="wishop-shipping-status">{session.status} · 拖动标题可调整位置</span>
         </div>
         <button
           type="button"
@@ -168,6 +285,27 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
           <p title={addressText(address)}>
             {addressText(address) || '未获取真实地址，点击下方按钮会消耗今日额度'}
           </p>
+          {fetchedAt && <small>获取时间：{fetchedAt}</small>}
+          {!address && (
+            <button
+              type="button"
+              className="wishop-shipping-inline-primary"
+              onClick={() => fetchRealAddress(false)}
+              disabled={addressLoading}
+            >
+              {addressLoading ? '获取中...' : '获取真实地址'}
+            </button>
+          )}
+          {address && (
+            <button
+              type="button"
+              className="wishop-shipping-inline-primary"
+              onClick={() => fetchRealAddress(true)}
+              disabled={addressLoading}
+            >
+              {addressLoading ? '刷新中...' : '刷新真实地址'}
+            </button>
+          )}
         </div>
         <div className="wishop-shipping-card">
           <label>备注</label>
@@ -185,11 +323,6 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
         <button type="button" onClick={copyOrderInfo}>复制订单</button>
         <button type="button" onClick={copySku}>复制SKU</button>
         <button type="button" onClick={copyAddress}>复制地址</button>
-        {!address && (
-          <button type="button" onClick={fetchRealAddress} disabled={addressLoading}>
-            {addressLoading ? '获取中...' : '获取真实地址'}
-          </button>
-        )}
         <button type="button" onClick={copyNotes}>复制备注</button>
         <button type="button" onClick={refreshSnapshot}>重读页面</button>
       </div>

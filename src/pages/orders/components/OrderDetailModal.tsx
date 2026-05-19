@@ -1,6 +1,6 @@
 import React from 'react';
 import { Descriptions, Empty, Flex, Image, Modal, Spin, Tag, Typography } from 'antd';
-import type { Order } from '../../../shared/types';
+import type { Order, OrderRealAddressCache } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
 import { formatOrderAddressLine, formatOrderPhoneInline } from '../../../shared/address-format';
 
@@ -22,6 +22,7 @@ interface Props {
   open: boolean;
   loading: boolean;
   order: Order | null;
+  realAddressCache?: OrderRealAddressCache;
   onCancel: () => void;
 }
 
@@ -36,7 +37,14 @@ function formatPrice(cents: number): string {
   return `¥${(cents / 100).toFixed(2)}`;
 }
 
-export const OrderDetailModal: React.FC<Props> = ({ open, loading, order, onCancel }) => {
+export const OrderDetailModal: React.FC<Props> = ({ open, loading, order, realAddressCache, onCancel }) => {
+  const addressInfo = order
+    ? realAddressCache?.address || order.order_detail?.delivery_info?.address_info
+    : undefined;
+  const fetchedAt = realAddressCache?.fetchedAt
+    ? new Date(realAddressCache.fetchedAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : '';
+
   return (
     <Modal
       title="订单详情"
@@ -106,20 +114,21 @@ export const OrderDetailModal: React.FC<Props> = ({ open, loading, order, onCanc
             />
           )}
 
-          {order.order_detail?.delivery_info?.address_info && (
+          {addressInfo && (
             <Descriptions
               size="small"
               column={1}
               bordered
               title="收货信息"
               items={[
-                { key: 'userName', label: '收货人', children: order.order_detail.delivery_info.address_info.user_name },
-                { key: 'telNumber', label: '联系电话', children: formatOrderPhoneInline(order.order_detail.delivery_info.address_info) },
+                { key: 'userName', label: '收货人', children: addressInfo.user_name },
+                { key: 'telNumber', label: '联系电话', children: formatOrderPhoneInline(addressInfo) },
                 {
                   key: 'address',
                   label: '地址',
-                  children: formatOrderAddressLine(order.order_detail.delivery_info.address_info),
+                  children: formatOrderAddressLine(addressInfo),
                 },
+                ...(fetchedAt ? [{ key: 'fetchedAt', label: '获取时间', children: fetchedAt }] : []),
               ]}
             />
           )}

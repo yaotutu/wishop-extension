@@ -24,6 +24,8 @@ export async function addAccount(name: string, config: Config): Promise<FullAcco
     violationWords: [],
     logs: [],
     productSources: [],
+    orderAssociations: [],
+    realAddressCaches: [],
     createdAt: Date.now(),
   };
   store.accounts.push(account);

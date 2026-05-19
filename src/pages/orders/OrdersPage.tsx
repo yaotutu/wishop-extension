@@ -2,17 +2,61 @@ import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { Table, Button, Empty, message } from 'antd';
 import { useOrders } from '../../hooks/useIpc';
 import { extensionApi } from '../../shared/extension-api';
-import type { Order, OrderStatus, OrderProductInfo, OrderSearchParams, OrderAddressInfo, ProductSourceItem } from '../../shared/types';
+import type { Order, OrderStatus, OrderProductInfo, OrderSearchParams, OrderRealAddressCache, OrderAssociation, ProductSourceItem } from '../../shared/types';
 import { formatOrderAddressForCopy } from '../../shared/address-format';
 import { newProductSourceRow, ShippingSourceModal, SourceManagementModal } from './components/ProductSourceModals';
 import { OrderDetailModal } from './components/OrderDetailModal';
 import { createOrderColumns } from './components/OrderTableColumns';
 import { OrderToolbar } from './components/OrderToolbar';
+import { OrderAssociationModal } from './components/OrderAssociationModal';
 
 function normalizeUrl(url: string): string {
   const trimmed = url.trim();
   if (!trimmed) return trimmed;
   return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
+function isUnknownRuntimeChannelError(err: unknown): boolean {
+  return err instanceof Error && err.message.includes('Unknown runtime channel');
+}
+
+async function fetchRealAddressWithFallback(accountId: string, orderId: string, refresh: boolean): Promise<OrderRealAddressCache> {
+  try {
+    return refresh
+      ? await extensionApi.orderRealAddresses.refresh(accountId, orderId)
+      : await extensionApi.orderRealAddresses.fetch(accountId, orderId);
+  } catch (err) {
+    if (!isUnknownRuntimeChannelError(err)) throw err;
+    const address = await extensionApi.orders.decodeAddress(accountId, orderId);
+    const now = Date.now();
+    return {
+      orderId,
+      address,
+      fetchedAt: now,
+      updatedAt: now,
+    };
+  }
+}
+
+async function readLocalRealAddressCaches(accountId: string): Promise<OrderRealAddressCache[]> {
+  const data = await chrome.storage.local.get('accounts');
+  const accounts = Array.isArray(data.accounts) ? data.accounts : [];
+  const account = accounts.find((item: { id?: string }) => item.id === accountId);
+  return Array.isArray(account?.realAddressCaches) ? account.realAddressCaches : [];
+}
+
+async function persistLocalRealAddressCache(accountId: string, cache: OrderRealAddressCache): Promise<void> {
+  const data = await chrome.storage.local.get('accounts');
+  const accounts = Array.isArray(data.accounts) ? data.accounts : [];
+  const nextAccounts = accounts.map((account: { id?: string; realAddressCaches?: OrderRealAddressCache[] }) => {
+    if (account.id !== accountId) return account;
+    const caches = Array.isArray(account.realAddressCaches) ? account.realAddressCaches : [];
+    return {
+      ...account,
+      realAddressCaches: [...caches.filter(item => item.orderId !== cache.orderId), cache],
+    };
+  });
+  await chrome.storage.local.set({ accounts: nextAccounts });
 }
 
 async function convertImageBlobToPng(blob: Blob): Promise<Blob> {
@@ -33,16 +77,20 @@ async function convertImageBlobToPng(blob: Blob): Promise<Blob> {
 }
 
 const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
-  const { orders, hasMore, loading, error, clearError, fetchOrders, fetchOrderDetail, searchOrders, decodeAddress } = useOrders(accountId);
+  const { orders, hasMore, loading, error, clearError, fetchOrders, fetchOrderDetail, searchOrders } = useOrders(accountId);
   const [activeStatus, setActiveStatus] = useState<OrderStatus | undefined>(undefined);
   const [searchType, setSearchType] = useState<OrderSearchParams['search_type']>('order_id');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [detailOrder, setDetailOrder] = useState<Order | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [decodedAddresses, setDecodedAddresses] = useState<Record<string, OrderAddressInfo>>({});
+  const [realAddressCaches, setRealAddressCaches] = useState<Record<string, OrderRealAddressCache>>({});
   const [decodingOrderIds, setDecodingOrderIds] = useState<Set<string>>(new Set());
   const [productSources, setProductSourcesState] = useState<Record<string, ProductSourceItem[]>>({});
+  const [orderAssociations, setOrderAssociations] = useState<Record<string, OrderAssociation>>({});
+  const [associationModalOpen, setAssociationModalOpen] = useState(false);
+  const [associationOrder, setAssociationOrder] = useState<Order | null>(null);
+  const [associationSaving, setAssociationSaving] = useState(false);
   const [sourceModalOpen, setSourceModalOpen] = useState(false);
   const [sourceProduct, setSourceProduct] = useState<OrderProductInfo | null>(null);
   const [sourceRows, setSourceRows] = useState<ProductSourceItem[]>([]);
@@ -70,12 +118,33 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     if (accountId) {
       setActiveStatus(undefined);
       setProductSourcesState({});
+      setOrderAssociations({});
+      setRealAddressCaches({});
       fetchOrders();
       extensionApi.productSources.list(accountId)
         .then(bindings => {
           setProductSourcesState(Object.fromEntries(bindings.map(binding => [binding.productId, binding.sources])));
         })
         .catch((err: Error) => message.error(`加载货源失败: ${err.message}`));
+      extensionApi.orderAssociations.list(accountId)
+        .then(associations => {
+          setOrderAssociations(Object.fromEntries(associations.map(item => [item.orderId, item])));
+        })
+        .catch((err: Error) => message.error(`加载订单关联失败: ${err.message}`));
+      extensionApi.orderRealAddresses.list(accountId)
+        .then(caches => {
+          setRealAddressCaches(Object.fromEntries(caches.map(item => [item.orderId, item])));
+        })
+        .catch(async (err: Error) => {
+          // 开发热更新时可能出现 dashboard 已更新、background service worker 仍是旧版本。
+          // 这种情况下先不打扰用户；重新加载插件后新 channel 会正常可用。
+          if (isUnknownRuntimeChannelError(err)) {
+            const caches = await readLocalRealAddressCaches(accountId);
+            setRealAddressCaches(Object.fromEntries(caches.map(item => [item.orderId, item])));
+            return;
+          }
+          message.error(`加载真实地址缓存失败: ${err.message}`);
+        });
     }
   }, [accountId, fetchOrders]);
 
@@ -111,19 +180,36 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const handleDecodeAddress = useCallback(async (orderId: string) => {
     setDecodingOrderIds(prev => new Set(prev).add(orderId));
     try {
-      const addr = await decodeAddress(orderId);
-      if (addr) {
-        setDecodedAddresses(prev => ({ ...prev, [orderId]: addr }));
-        const text = formatOrderAddressForCopy(addr);
+      const cache = await fetchRealAddressWithFallback(accountId, orderId, false);
+      if (cache) {
+        await persistLocalRealAddressCache(accountId, cache);
+        setRealAddressCaches(prev => ({ ...prev, [orderId]: cache }));
+        const text = formatOrderAddressForCopy(cache.address);
         navigator.clipboard.writeText(text).then(() => message.success('真实地址已显示并复制')).catch(() => message.success('真实地址已显示'));
       }
+    } catch (err: any) {
+      message.error(`获取真实地址失败: ${err.message}`);
     } finally {
       setDecodingOrderIds(prev => { const s = new Set(prev); s.delete(orderId); return s; });
     }
-  }, [decodeAddress]);
+  }, [accountId]);
 
-  const handleCopyAddress = useCallback((addr: OrderAddressInfo) => {
-    const text = formatOrderAddressForCopy(addr);
+  const handleRefreshAddress = useCallback(async (orderId: string) => {
+    setDecodingOrderIds(prev => new Set(prev).add(orderId));
+    try {
+      const cache = await fetchRealAddressWithFallback(accountId, orderId, true);
+      await persistLocalRealAddressCache(accountId, cache);
+      setRealAddressCaches(prev => ({ ...prev, [orderId]: cache }));
+      message.success('真实地址已刷新');
+    } catch (err: any) {
+      message.error(`刷新真实地址失败: ${err.message}`);
+    } finally {
+      setDecodingOrderIds(prev => { const s = new Set(prev); s.delete(orderId); return s; });
+    }
+  }, [accountId]);
+
+  const handleCopyAddress = useCallback((cache: OrderRealAddressCache) => {
+    const text = formatOrderAddressForCopy(cache.address);
     navigator.clipboard.writeText(text).then(() => message.success('地址已复制')).catch(() => {});
   }, []);
 
@@ -193,9 +279,34 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     }
   }, [accountId, sourceProduct, sourceRows, syncProductSources]);
 
+  const openAssociationEditor = useCallback((order: Order) => {
+    setAssociationOrder(order);
+    setAssociationModalOpen(true);
+  }, []);
+
+  const handleSaveAssociation = useCallback(async (input: Pick<OrderAssociation, 'internalRemark' | 'linkedOrders'>) => {
+    if (!associationOrder) return;
+    setAssociationSaving(true);
+    try {
+      const saved = await extensionApi.orderAssociations.set(accountId, associationOrder.order_id, input);
+      setOrderAssociations(prev => {
+        const next = { ...prev };
+        if (saved.internalRemark || saved.linkedOrders.length > 0) next[saved.orderId] = saved;
+        else delete next[saved.orderId];
+        return next;
+      });
+      setAssociationModalOpen(false);
+      message.success('内部关联已保存');
+    } catch (err: any) {
+      message.error(`保存内部关联失败: ${err.message}`);
+    } finally {
+      setAssociationSaving(false);
+    }
+  }, [accountId, associationOrder]);
+
   const handleOpenShippingSession = useCallback(async (source: ProductSourceItem) => {
     if (!shipSourceOrder || !shipSourceProduct) return;
-    const address = decodedAddresses[shipSourceOrder.order_id];
+    const address = realAddressCaches[shipSourceOrder.order_id]?.address;
 
     /**
      * 发货会话是 dashboard 到淘宝 content script 的唯一桥梁。
@@ -230,30 +341,36 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     });
     setShipSourceModalOpen(false);
     message.success(address ? '已打开淘宝发货页' : '已打开淘宝发货页，真实地址需手动获取');
-  }, [accountId, decodedAddresses, shipSourceOrder, shipSourceProduct]);
+  }, [accountId, realAddressCaches, shipSourceOrder, shipSourceProduct]);
 
   const columns = useMemo(() => createOrderColumns({
-    decodedAddresses,
+    realAddressCaches,
     decodingOrderIds,
     productSources,
+    orderAssociations,
     onCopyText: handleCopyText,
     onCopyImage: handleCopyImage,
     onCopyAddress: handleCopyAddress,
     onDecodeAddress: handleDecodeAddress,
+    onRefreshAddress: handleRefreshAddress,
     onViewDetail: handleViewDetail,
     onOpenSourceManager: openSourceManager,
     onOpenShipSources: openShipSources,
+    onEditAssociation: openAssociationEditor,
   }), [
-    decodedAddresses,
+    realAddressCaches,
     decodingOrderIds,
     productSources,
+    orderAssociations,
     handleCopyText,
     handleCopyImage,
     handleCopyAddress,
     handleDecodeAddress,
+    handleRefreshAddress,
     handleViewDetail,
     openSourceManager,
     openShipSources,
+    openAssociationEditor,
   ]);
 
   return (
@@ -280,7 +397,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
           size="small"
           loading={loading}
           pagination={false}
-          scroll={{ x: 1100, y: scrollY }}
+          scroll={{ x: 1050, y: scrollY }}
           styles={{
             content: { height: '100%', display: 'flex', flexDirection: 'column' },
             section: { flex: 1 },
@@ -304,6 +421,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         open={detailModalOpen}
         loading={detailLoading}
         order={detailOrder}
+        realAddressCache={detailOrder ? realAddressCaches[detailOrder.order_id] : undefined}
         onCancel={() => setDetailModalOpen(false)}
       />
 
@@ -323,6 +441,13 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         sources={shipSourceProduct ? productSources[shipSourceProduct.product_id] || [] : []}
         onCancel={() => setShipSourceModalOpen(false)}
         onOpenShipping={handleOpenShippingSession}
+      />
+      <OrderAssociationModal
+        open={associationModalOpen}
+        association={associationOrder ? orderAssociations[associationOrder.order_id] : undefined}
+        saving={associationSaving}
+        onCancel={() => setAssociationModalOpen(false)}
+        onSave={handleSaveAssociation}
       />
     </div>
   );

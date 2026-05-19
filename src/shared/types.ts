@@ -104,6 +104,36 @@ export interface ProductSourceBinding {
   sources: ProductSourceItem[];
 }
 
+export type LinkedOrderPlatform = 'taobao' | 'tmall' | '1688' | 'manual';
+
+export interface LinkedPlatformOrder {
+  id: string;
+  platform: LinkedOrderPlatform;
+  platformOrderId: string;
+  platformOrderStatus: string;
+  logisticsStatus: string;
+  logisticsCompany?: string;
+  trackingNumber?: string;
+  remark?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface OrderAssociation {
+  orderId: string;
+  internalRemark: string;
+  linkedOrders: LinkedPlatformOrder[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface OrderRealAddressCache {
+  orderId: string;
+  address: OrderAddressInfo;
+  fetchedAt: number;
+  updatedAt: number;
+}
+
 export type ShippingSessionStatus = 'created' | 'opened' | 'page-ready' | 'completed' | 'failed';
 
 export interface ShippingOrderSnapshot {
@@ -341,5 +371,7 @@ export interface FullAccount {
   logs: LogEntry[];
   violationWords: string[];
   productSources: ProductSourceBinding[];
+  orderAssociations: OrderAssociation[];
+  realAddressCaches: OrderRealAddressCache[];
   createdAt: number;
 }

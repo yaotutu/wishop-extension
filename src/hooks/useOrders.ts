@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { extensionApi } from '../shared/extension-api';
-import type { Order, OrderStatus, OrderSearchParams, OrderAddressInfo } from '../shared/types';
+import type { Order, OrderStatus, OrderSearchParams } from '../shared/types';
 import { isCredentialError } from '../shared/errors';
 import { useCredentialError } from '../contexts/CredentialErrorContext';
 
@@ -74,17 +74,7 @@ export function useOrders(accountId: string) {
     }
   }, [accountId, setOrders, reportCredentialError]);
 
-  const decodeAddress = useCallback(async (orderId: string): Promise<OrderAddressInfo | null> => {
-    try {
-      return await extensionApi.orders.decodeAddress(accountId, orderId);
-    } catch (err: any) {
-      if (isCredentialError(err)) reportCredentialError(err);
-      setError(err.message || '解密收货信息失败');
-      return null;
-    }
-  }, [accountId, reportCredentialError]);
-
   const clearError = useCallback(() => setError(null), []);
 
-  return { orders, hasMore, loading, error, clearError, fetchOrders, fetchOrderDetail, searchOrders, decodeAddress };
+  return { orders, hasMore, loading, error, clearError, fetchOrders, fetchOrderDetail, searchOrders };
 }

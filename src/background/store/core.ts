@@ -69,6 +69,8 @@ export function normalizeAccount(account: FullAccount): FullAccount {
     violationWords: account.violationWords || [],
     logs: account.logs || [],
     productSources: account.productSources || [],
+    orderAssociations: account.orderAssociations || [],
+    realAddressCaches: account.realAddressCaches || [],
   };
 }
 

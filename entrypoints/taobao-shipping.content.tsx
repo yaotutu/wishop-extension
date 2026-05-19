@@ -15,8 +15,6 @@ const toolbarCss = `
   .wishop-shipping-toolbar {
     box-sizing: border-box;
     position: fixed;
-    top: 96px;
-    left: 16px;
     z-index: 2147483647;
     width: 380px;
     max-width: calc(100vw - 32px);
@@ -47,6 +45,9 @@ const toolbarCss = `
     align-items: center;
     gap: 8px;
     margin-bottom: 10px;
+    cursor: move;
+    user-select: none;
+    touch-action: none;
   }
   .wishop-shipping-title {
     display: flex;
@@ -122,6 +123,25 @@ const toolbarCss = `
     color: #595959;
     overflow-wrap: anywhere;
     line-height: 18px;
+  }
+  .wishop-shipping-inline-primary {
+    width: 100%;
+    height: 30px;
+    margin-top: 6px;
+    border: 1px solid #1677ff;
+    border-radius: 4px;
+    background: #1677ff;
+    color: #fff;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .wishop-shipping-inline-primary:hover {
+    background: #4096ff;
+    border-color: #4096ff;
+  }
+  .wishop-shipping-inline-primary:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
   }
   .wishop-shipping-actions {
     display: flex;

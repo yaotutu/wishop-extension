@@ -10,6 +10,8 @@ import type {
   LogEntry,
   Order,
   OrderAddressInfo,
+  OrderAssociation,
+  OrderRealAddressCache,
   OrderSearchParams,
   OrderStatus,
   ProductSourceBinding,
@@ -71,6 +73,20 @@ export const extensionApi = {
     detail: (accountId: string, orderId: string): Promise<Order> => invoke('orders:detail', accountId, orderId),
     search: (accountId: string, params: OrderSearchParams): Promise<{ orders: Order[]; hasMore: boolean }> => invoke('orders:search', accountId, params),
     decodeAddress: (accountId: string, orderId: string): Promise<OrderAddressInfo> => invoke('orders:decodeAddress', accountId, orderId),
+  },
+  orderAssociations: {
+    list: (accountId: string): Promise<OrderAssociation[]> => invoke('orderAssociations:list', accountId),
+    set: (
+      accountId: string,
+      orderId: string,
+      input: Pick<OrderAssociation, 'internalRemark' | 'linkedOrders'>,
+    ): Promise<OrderAssociation> => invoke('orderAssociations:set', accountId, orderId, input),
+  },
+  orderRealAddresses: {
+    list: (accountId: string): Promise<OrderRealAddressCache[]> => invoke('orderRealAddresses:list', accountId),
+    get: (accountId: string, orderId: string): Promise<OrderRealAddressCache | null> => invoke('orderRealAddresses:get', accountId, orderId),
+    fetch: (accountId: string, orderId: string): Promise<OrderRealAddressCache> => invoke('orderRealAddresses:fetch', accountId, orderId),
+    refresh: (accountId: string, orderId: string): Promise<OrderRealAddressCache> => invoke('orderRealAddresses:refresh', accountId, orderId),
   },
   productSources: {
     list: (accountId: string): Promise<ProductSourceBinding[]> => invoke('productSources:list', accountId),

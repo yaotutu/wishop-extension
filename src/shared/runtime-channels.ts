@@ -11,6 +11,8 @@ import type {
   LogEntry,
   Order,
   OrderAddressInfo,
+  OrderAssociation,
+  OrderRealAddressCache,
   OrderSearchParams,
   OrderStatus,
   ProductSourceBinding,
@@ -45,6 +47,17 @@ export interface RuntimeChannels {
   'orders:detail': { args: [accountId: string, orderId: string]; result: Order };
   'orders:search': { args: [accountId: string, params: OrderSearchParams]; result: { orders: Order[]; hasMore: boolean } };
   'orders:decodeAddress': { args: [accountId: string, orderId: string]; result: OrderAddressInfo };
+
+  'orderRealAddresses:list': { args: [accountId: string]; result: OrderRealAddressCache[] };
+  'orderRealAddresses:get': { args: [accountId: string, orderId: string]; result: OrderRealAddressCache | null };
+  'orderRealAddresses:fetch': { args: [accountId: string, orderId: string]; result: OrderRealAddressCache };
+  'orderRealAddresses:refresh': { args: [accountId: string, orderId: string]; result: OrderRealAddressCache };
+
+  'orderAssociations:list': { args: [accountId: string]; result: OrderAssociation[] };
+  'orderAssociations:set': {
+    args: [accountId: string, orderId: string, input: Pick<OrderAssociation, 'internalRemark' | 'linkedOrders'>];
+    result: OrderAssociation;
+  };
 
   'productSources:list': { args: [accountId: string]; result: ProductSourceBinding[] };
   'productSources:set': { args: [accountId: string, productId: string, sources: ProductSourceItem[]]; result: ProductSourceBinding };

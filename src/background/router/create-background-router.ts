@@ -3,6 +3,8 @@ import { createAppRuntimeHandlers } from '../runtime-handlers/app-handlers';
 import { createDraftRuntimeHandlers } from '../runtime-handlers/draft-handlers';
 import { createLogRuntimeHandlers } from '../runtime-handlers/log-handlers';
 import { createOrderRuntimeHandlers } from '../runtime-handlers/order-handlers';
+import { createOrderAssociationRuntimeHandlers } from '../runtime-handlers/order-association-handlers';
+import { createRealAddressRuntimeHandlers } from '../runtime-handlers/real-address-handlers';
 import { createProductSourceRuntimeHandlers } from '../runtime-handlers/product-source-handlers';
 import { createQuotaRuntimeHandlers } from '../runtime-handlers/quota-handlers';
 import { createRuleRuntimeHandlers } from '../runtime-handlers/rule-handlers';
@@ -24,6 +26,12 @@ const FEATURE_CHANNELS = {
   'orders:detail': 'orders',
   'orders:search': 'orders',
   'orders:decodeAddress': 'orders',
+  'orderRealAddresses:list': 'orders',
+  'orderRealAddresses:get': 'orders',
+  'orderRealAddresses:fetch': 'orders',
+  'orderRealAddresses:refresh': 'orders',
+  'orderAssociations:list': 'orders',
+  'orderAssociations:set': 'orders',
   'drafts:fetch': 'listing',
   'drafts:list': 'listing',
   'quota:get': 'listing',
@@ -64,6 +72,8 @@ export function createBackgroundRouter(options: CreateBackgroundRouterOptions): 
       listOrders,
       searchOrders,
     }),
+    ...createRealAddressRuntimeHandlers(),
+    ...createOrderAssociationRuntimeHandlers(),
     ...createDraftRuntimeHandlers({
       fetchDrafts,
       listDraft,

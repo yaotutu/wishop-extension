@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button, Flex, Image, Space, Tag, Typography } from 'antd';
 import { CopyOutlined, EyeOutlined, LinkOutlined, PictureOutlined, ShoppingCartOutlined } from '@ant-design/icons';
-import type { Order, OrderAddressInfo, OrderProductInfo, ProductSourceItem } from '../../../shared/types';
+import type { Order, OrderAssociation, OrderProductInfo, OrderRealAddressCache, ProductSourceItem } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
 import { formatOrderAddressLine, getOrderPhoneDisplay } from '../../../shared/address-format';
 import { firstProduct, formatPrice, formatTime, hasAddressInfo, PAYMENT_METHOD, STATUS_CONFIG } from '../order-display';
@@ -9,16 +9,19 @@ import { firstProduct, formatPrice, formatTime, hasAddressInfo, PAYMENT_METHOD, 
 const { Text } = Typography;
 
 interface CreateOrderColumnsOptions {
-  decodedAddresses: Record<string, OrderAddressInfo>;
+  realAddressCaches: Record<string, OrderRealAddressCache>;
   decodingOrderIds: Set<string>;
   productSources: Record<string, ProductSourceItem[]>;
+  orderAssociations: Record<string, OrderAssociation>;
   onCopyText: (text: string | undefined, label: string) => void;
   onCopyImage: (imageUrl?: string) => void;
-  onCopyAddress: (addr: OrderAddressInfo) => void;
+  onCopyAddress: (cache: OrderRealAddressCache) => void;
   onDecodeAddress: (orderId: string) => void;
+  onRefreshAddress: (orderId: string) => void;
   onViewDetail: (orderId: string) => void;
   onOpenSourceManager: (product: OrderProductInfo) => void;
   onOpenShipSources: (order: Order, product: OrderProductInfo) => void;
+  onEditAssociation: (order: Order) => void;
 }
 
 /**
@@ -34,6 +37,10 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
       width: 280,
       render: (_: unknown, record: Order) => {
         const product = firstProduct(record);
+        const ext = record.order_detail?.ext_info;
+        const customerNote = ext?.customer_notes?.trim();
+        const merchantNote = ext?.merchant_notes?.trim();
+        const specs = product?.sku_attrs?.map(a => a.attr_value).filter(Boolean).join(', ') || '';
         return (
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
             {product?.thumb_img && (
@@ -80,6 +87,17 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
                 </Button>
               </Space>
               <br />
+              {product && (
+                <Text
+                  type="secondary"
+                  onClick={() => options.onCopyText(specs || undefined, '规格')}
+                  style={{ fontSize: 12, cursor: specs ? 'pointer' : 'default', maxWidth: 185, display: 'block' }}
+                  ellipsis
+                  title={specs || '无规格'}
+                >
+                  规格: {specs || '无规格'} ｜ x{product.sku_cnt}
+                </Text>
+              )}
               {product?.sku_code && (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
                   <Text
@@ -102,41 +120,19 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
               )}
               <br />
               <Text type="secondary" style={{ fontSize: 12 }}>下单: {formatTime(record.create_time)}</Text>
+              <div style={{ marginTop: 4, display: 'grid', gap: 2 }}>
+                {customerNote && (
+                  <Text style={{ fontSize: 12, color: '#cf1322' }} title={customerNote}>
+                    买家备注：{customerNote.length > 28 ? `${customerNote.substring(0, 28)}...` : customerNote}
+                  </Text>
+                )}
+                {merchantNote && (
+                  <Text style={{ fontSize: 12, color: '#d4380d' }} title={merchantNote}>
+                    卖家备注：{merchantNote.length > 28 ? `${merchantNote.substring(0, 28)}...` : merchantNote}
+                  </Text>
+                )}
+              </div>
             </div>
-          </div>
-        );
-      },
-    },
-    {
-      title: '规格/数量',
-      key: 'sku',
-      width: 140,
-      render: (_: unknown, record: Order) => {
-        const product = firstProduct(record);
-        if (!product) return '-';
-        const specs = product.sku_attrs?.map(a => a.attr_value).join(', ') || '-';
-        return (
-          <div>
-            <Flex align="center" gap={4}>
-              <Text
-                onClick={() => options.onCopyText(specs === '-' ? undefined : specs, 'SKU')}
-                style={{ fontSize: 12, color: '#333', cursor: specs === '-' ? 'default' : 'pointer', maxWidth: 105 }}
-                ellipsis
-                title={specs}
-              >
-                {specs}
-              </Text>
-              {specs !== '-' && (
-                <Button
-                  type="link"
-                  size="small"
-                  icon={<CopyOutlined />}
-                  onClick={() => options.onCopyText(specs, 'SKU')}
-                  style={{ width: 18, height: 18, minWidth: 18, padding: 0, flexShrink: 0 }}
-                />
-              )}
-            </Flex>
-            <Text type="secondary" style={{ fontSize: 12 }}>x{product.sku_cnt}</Text>
           </div>
         );
       },
@@ -206,64 +202,92 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
       width: 180,
       render: (_: unknown, record: Order) => {
         const masked = record.order_detail?.delivery_info?.address_info;
-        const real = options.decodedAddresses[record.order_id];
-        const addr = real || masked;
+        const real = options.realAddressCaches[record.order_id];
+        const addr = real?.address || masked;
         if (!addr) return '-';
         const fullAddr = formatOrderAddressLine(addr);
         const phone = getOrderPhoneDisplay(addr);
         const isDecoded = !!real;
         const isDecoding = options.decodingOrderIds.has(record.order_id);
+        const fetchedAt = real ? new Date(real.fetchedAt).toLocaleString('zh-CN', {
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        }) : '';
         return (
           <div>
             <div style={{ fontSize: 12, color: '#333' }}>{addr.user_name}</div>
             <div style={{ fontSize: 12, color: phone.isVirtual ? '#1677ff' : '#333' }}>
               {phone.label}：{phone.value || '-'}
             </div>
-            <Text type="secondary" style={{ fontSize: 12 }} title={fullAddr}>
-              {fullAddr.length > 25 ? fullAddr.substring(0, 25) + '...' : fullAddr}
+            <Text
+              type="secondary"
+              style={{ fontSize: 12, display: 'block', whiteSpace: isDecoded ? 'normal' : 'nowrap' }}
+              title={fullAddr}
+            >
+              {isDecoded || fullAddr.length <= 25 ? fullAddr : `${fullAddr.substring(0, 25)}...`}
             </Text>
+            {isDecoded && (
+              <div style={{ fontSize: 12, color: '#8c8c8c' }}>获取：{fetchedAt}</div>
+            )}
             {!isDecoded && hasAddressInfo(record) && (
               <Button type="link" size="small" loading={isDecoding} onClick={() => options.onDecodeAddress(record.order_id)} style={{ padding: 0, height: 'auto', fontSize: 12 }}>
                 查看真实地址
               </Button>
             )}
             {isDecoded && (
-              <Button type="link" size="small" onClick={() => options.onCopyAddress(real!)} style={{ padding: 0, height: 'auto', fontSize: 12 }}>
-                复制地址
-              </Button>
+              <Space size={6}>
+                <Button type="link" size="small" onClick={() => options.onCopyAddress(real)} style={{ padding: 0, height: 'auto', fontSize: 12 }}>
+                  复制地址
+                </Button>
+                <Button type="link" size="small" loading={isDecoding} onClick={() => options.onRefreshAddress(record.order_id)} style={{ padding: 0, height: 'auto', fontSize: 12 }}>
+                  刷新
+                </Button>
+              </Space>
             )}
           </div>
         );
       },
     },
     {
-      title: '备注',
-      key: 'notes',
-      width: 140,
+      title: '采购单详情',
+      key: 'purchase_detail',
+      width: 190,
       render: (_: unknown, record: Order) => {
-        const ext = record.order_detail?.ext_info;
-        if (!ext) return <Text type="secondary">无</Text>;
-        const hasCustomer = ext.customer_notes && ext.customer_notes.trim();
-        const hasMerchant = ext.merchant_notes && ext.merchant_notes.trim();
-        if (!hasCustomer && !hasMerchant) return <Text type="secondary">无</Text>;
+        const association = options.orderAssociations[record.order_id];
+        const linked = association?.linkedOrders[0];
+        const internalRemark = association?.internalRemark?.trim();
         return (
-          <div>
-            {hasCustomer && (
-              <div>
-                <Text type="secondary" style={{ fontSize: 11 }}>买家: </Text>
-                <Text style={{ fontSize: 12 }} title={ext.customer_notes}>
-                  {ext.customer_notes!.length > 15 ? ext.customer_notes!.substring(0, 15) + '...' : ext.customer_notes}
-                </Text>
-              </div>
+          <div style={{ display: 'grid', gap: 3 }}>
+            {internalRemark && (
+              <Text style={{ fontSize: 12, color: '#cf1322' }} title={internalRemark}>
+                采购备注：{internalRemark.length > 22 ? `${internalRemark.substring(0, 22)}...` : internalRemark}
+              </Text>
             )}
-            {hasMerchant && (
-              <div>
-                <Text type="secondary" style={{ fontSize: 11 }}>商家: </Text>
-                <Text style={{ fontSize: 12, color: '#1890ff' }} title={ext.merchant_notes}>
-                  {ext.merchant_notes!.length > 15 ? ext.merchant_notes!.substring(0, 15) + '...' : ext.merchant_notes}
+            {linked ? (
+              <>
+                <Text style={{ fontSize: 12, color: '#0958d9' }} title={linked.platformOrderId}>
+                  {linked.platform === 'taobao' ? '淘宝' : linked.platform}：{linked.platformOrderId || '-'}
                 </Text>
-              </div>
+                {linked.platformOrderStatus && (
+                  <Text type="secondary" style={{ fontSize: 12 }}>状态：{linked.platformOrderStatus}</Text>
+                )}
+                {linked.logisticsStatus && (
+                  <Text type="secondary" style={{ fontSize: 12 }}>物流：{linked.logisticsStatus}</Text>
+                )}
+                {linked.trackingNumber && (
+                  <Text type="secondary" style={{ fontSize: 12 }} title={linked.trackingNumber}>
+                    单号：{linked.trackingNumber.length > 18 ? `${linked.trackingNumber.substring(0, 18)}...` : linked.trackingNumber}
+                  </Text>
+                )}
+              </>
+            ) : (
+              !internalRemark && <Text type="secondary" style={{ fontSize: 12 }}>未关联采购单</Text>
             )}
+            <Button type="link" size="small" onClick={() => options.onEditAssociation(record)} style={{ padding: 0, height: 18, fontSize: 12, justifySelf: 'start' }}>
+              {association ? '编辑采购单详情' : '添加采购单详情'}
+            </Button>
           </div>
         );
       },
