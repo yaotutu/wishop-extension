@@ -83,7 +83,7 @@ const defaultGlobalTaskConfig: TaskConfig = {
 };
 
 const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account' }) => {
-  const { taskConfig, fetchTaskConfig, saveTaskConfig, runTask } = useTaskConfig(accountId);
+  const { taskConfig, fetchTaskConfig, saveTaskConfig } = useTaskConfig(accountId);
   const { logs, fetchLogs, clearLogs } = useLogs(accountId);
   const { quota, fetchQuota } = useQuota(accountId);
   const { tasks, fetchTasks, addTask, updateTask, removeTask } = useSchedulers(accountId);
@@ -91,9 +91,9 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
   const { rules: blacklistRules, fetchRules: fetchBlacklistRules, saveRules: saveBlacklistRules, defaultCodes: blacklistDefaultCodes } = useBlacklistRules();
   const { keywords: skipKeywords, fetchKeywords, saveKeywords } = useSkipKeywords();
   const { rules: statusRules, fetchRules: fetchStatusRules, saveRules: saveStatusRules, resetRules: resetStatusRules } = useStatusRules();
-  const [running, setRunning] = useState(false);
-  const [result, setResult] = useState<TaskCycleResult | null>(null);
-  const [localListedCount, setLocalListedCount] = useState(0);
+  const [runningAccountIds, setRunningAccountIds] = useState<Set<string>>(() => new Set());
+  const [resultsByAccountId, setResultsByAccountId] = useState<Record<string, TaskCycleResult | null>>({});
+  const [localListedCountsByAccountId, setLocalListedCountsByAccountId] = useState<Record<string, number>>({});
   const [schedulerOpen, setSchedulerOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<ScheduledTask | null>(null);
@@ -148,9 +148,11 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
     }
   };
 
-  const unsubscribeRef = useRef<(() => void) | null>(null);
+  const currentAccountIdRef = useRef(accountId);
+  const taskUnsubscribersRef = useRef(new Map<string, () => void>());
 
   useEffect(() => {
+    currentAccountIdRef.current = accountId;
     fetchTaskConfig();
     fetchLogs();
     fetchQuota();
@@ -159,10 +161,26 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
     fetchBlacklistRules();
     fetchKeywords();
     fetchStatusRules();
-    return () => {
-      unsubscribeRef.current?.();
-    };
   }, [accountId]);
+
+  useEffect(() => {
+    return () => {
+      taskUnsubscribersRef.current.forEach(unsubscribe => unsubscribe());
+      taskUnsubscribersRef.current.clear();
+    };
+  }, []);
+
+  const setAccountRunning = (targetAccountId: string, isRunning: boolean) => {
+    setRunningAccountIds(prev => {
+      const next = new Set(prev);
+      if (isRunning) {
+        next.add(targetAccountId);
+      } else {
+        next.delete(targetAccountId);
+      }
+      return next;
+    });
+  };
 
   const handleRun = async () => {
     if (quotaExhausted) {
@@ -179,26 +197,32 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
   };
 
   const doRun = async () => {
-    setRunning(true);
-    setResult(null);
-    setLocalListedCount(0);
+    const targetAccountId = accountId;
     const config = { ...taskConfig, listUnreviewedQuantity: quota.quota };
-    unsubscribeRef.current = extensionApi.task.onLog(accountId, (log: LogEntry) => {
-      fetchLogs();
+    setAccountRunning(targetAccountId, true);
+    setResultsByAccountId(prev => ({ ...prev, [targetAccountId]: null }));
+    setLocalListedCountsByAccountId(prev => ({ ...prev, [targetAccountId]: 0 }));
+    taskUnsubscribersRef.current.get(targetAccountId)?.();
+    const unsubscribe = extensionApi.task.onLog(targetAccountId, (log: LogEntry) => {
+      if (currentAccountIdRef.current === targetAccountId) fetchLogs();
       if (log.status === 'success' && log.action === 'list') {
-        setLocalListedCount(prev => prev + 1);
+        setLocalListedCountsByAccountId(prev => ({
+          ...prev,
+          [targetAccountId]: (prev[targetAccountId] || 0) + 1,
+        }));
       }
     });
+    taskUnsubscribersRef.current.set(targetAccountId, unsubscribe);
     try {
-      const res = await runTask(config);
-      setResult(res);
-      fetchQuota();
+      const res = await extensionApi.task.run(targetAccountId, config);
+      setResultsByAccountId(prev => ({ ...prev, [targetAccountId]: res }));
+      if (currentAccountIdRef.current === targetAccountId) fetchQuota();
     } finally {
-      unsubscribeRef.current?.();
-      unsubscribeRef.current = null;
-      setRunning(false);
-      setLocalListedCount(0);
-      fetchLogs();
+      taskUnsubscribersRef.current.get(targetAccountId)?.();
+      taskUnsubscribersRef.current.delete(targetAccountId);
+      setAccountRunning(targetAccountId, false);
+      setLocalListedCountsByAccountId(prev => ({ ...prev, [targetAccountId]: 0 }));
+      if (currentAccountIdRef.current === targetAccountId) fetchLogs();
     }
   };
 
@@ -588,6 +612,9 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
     message.success('已恢复默认规则');
   };
 
+  const running = runningAccountIds.has(accountId);
+  const result = resultsByAccountId[accountId] || null;
+  const localListedCount = localListedCountsByAccountId[accountId] || 0;
   const displayQuota = running ? quota.quota - localListedCount : quota.quota;
   const quotaExhausted = displayQuota <= 0 && quota.total > 0;
   const renderRulesSection = () => (
