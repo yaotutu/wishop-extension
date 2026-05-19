@@ -5,6 +5,7 @@ import type {
   BlacklistRule,
   Config,
   FullAccount,
+  GlobalScheduledTask,
   LogEntry,
   ScheduledTask,
   StatusRule,
@@ -16,6 +17,7 @@ export type { AddLogFn };
 export interface StoreSchema {
   accounts: FullAccount[];
   activeAccountId: string;
+  globalSchedulers?: GlobalScheduledTask[];
   skipKeywords?: string[];
   blacklistRules?: BlacklistRule[];
   statusRules?: StatusRule[];
@@ -53,10 +55,11 @@ const DEFAULT_STATUS_RULES: StatusRule[] = [
 ];
 
 async function readStore(): Promise<StoreSchema> {
-  const data = await chrome.storage.local.get(['accounts', 'activeAccountId', 'skipKeywords', 'blacklistRules', 'statusRules']);
+  const data = await chrome.storage.local.get(['accounts', 'activeAccountId', 'globalSchedulers', 'skipKeywords', 'blacklistRules', 'statusRules']);
   return {
     accounts: Array.isArray(data.accounts) ? data.accounts : [],
     activeAccountId: typeof data.activeAccountId === 'string' ? data.activeAccountId : '',
+    globalSchedulers: Array.isArray(data.globalSchedulers) ? data.globalSchedulers : [],
     skipKeywords: Array.isArray(data.skipKeywords) ? data.skipKeywords : [],
     blacklistRules: Array.isArray(data.blacklistRules) ? data.blacklistRules : undefined,
     statusRules: Array.isArray(data.statusRules) ? data.statusRules : undefined,
@@ -189,6 +192,52 @@ export async function updateScheduler(accountId: string, taskId: string, patch: 
 export async function removeScheduler(accountId: string, taskId: string): Promise<void> {
   await updateAccountData(accountId, account => {
     account.schedulers = (account.schedulers || []).filter(task => task.id !== taskId);
+  });
+}
+
+export async function getGlobalSchedulers(): Promise<GlobalScheduledTask[]> {
+  return (await readStore()).globalSchedulers || [];
+}
+
+export async function addGlobalScheduler(task: Omit<GlobalScheduledTask, 'id' | 'accountStats'>): Promise<GlobalScheduledTask> {
+  const store = await readStore();
+  const newTask: GlobalScheduledTask = { ...task, id: uuidv4(), accountStats: {} };
+  await writeStore({ globalSchedulers: [...(store.globalSchedulers || []), newTask] });
+  return newTask;
+}
+
+export async function updateGlobalScheduler(taskId: string, patch: Partial<GlobalScheduledTask>): Promise<void> {
+  const store = await readStore();
+  await writeStore({
+    globalSchedulers: (store.globalSchedulers || []).map(task => task.id === taskId ? { ...task, ...patch } : task),
+  });
+}
+
+export async function removeGlobalScheduler(taskId: string): Promise<void> {
+  const store = await readStore();
+  await writeStore({
+    globalSchedulers: (store.globalSchedulers || []).filter(task => task.id !== taskId),
+  });
+}
+
+export async function updateGlobalSchedulerAccountStat(
+  taskId: string,
+  accountId: string,
+  patch: Partial<GlobalScheduledTask['accountStats'][string]>,
+): Promise<void> {
+  const store = await readStore();
+  await writeStore({
+    globalSchedulers: (store.globalSchedulers || []).map(task => {
+      if (task.id !== taskId) return task;
+      const prev = task.accountStats?.[accountId] || { lastRunDate: '', todayListedCount: 0 };
+      return {
+        ...task,
+        accountStats: {
+          ...(task.accountStats || {}),
+          [accountId]: { ...prev, ...patch },
+        },
+      };
+    }),
   });
 }
 

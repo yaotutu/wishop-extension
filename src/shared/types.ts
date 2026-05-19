@@ -16,6 +16,22 @@ export interface ScheduledTask {
   todayListedCount: number;
 }
 
+export interface GlobalScheduledTaskAccountStat {
+  lastRunDate: string;
+  todayListedCount: number;
+}
+
+export interface GlobalScheduledTask {
+  id: string;
+  name: string;
+  enabled: boolean;
+  cronExpression: string;
+  staggerMinutes: number;
+  excludedAccountIds: string[];
+  taskConfig: TaskConfig;
+  accountStats: Record<string, GlobalScheduledTaskAccountStat>;
+}
+
 export interface LogEntry {
   id: string;
   timestamp: number;

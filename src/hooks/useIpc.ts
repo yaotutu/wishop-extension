@@ -1,7 +1,9 @@
-export type { Config, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, TaskCycleResult, Account, Order, OrderStatus, OrderSearchParams } from '../shared/types';
+export type { Config, GlobalScheduledTask, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, TaskCycleResult, Account, Order, OrderStatus, OrderSearchParams } from '../shared/types';
+export type { GlobalLogEntry } from '../shared/global-log';
 export { useAccounts } from './useAccounts';
 export { useConfig } from './useConfig';
-export { useSchedulers } from './useScheduler';
+export { useGlobalSchedulers, useSchedulers } from './useScheduler';
+export { useGlobalLogs } from './useGlobalLogs';
 export { useLogs } from './useLogs';
 export { useQuota } from './useQuota';
 export { useDrafts } from './useDrafts';

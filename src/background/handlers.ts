@@ -2,6 +2,7 @@ import type {
   BlacklistRule,
   Config,
   DraftProduct,
+  GlobalScheduledTask,
   LogEntry,
   Order,
   OrderAddressInfo,
@@ -17,6 +18,7 @@ import type {
 } from '../shared/types';
 import {
   addAccount,
+  addGlobalScheduler,
   addScheduler,
   clearLogs,
   createScopedAddLog,
@@ -27,6 +29,7 @@ import {
   getConfig,
   getDefaultBlacklistCodes,
   getDefaultStatusRules,
+  getGlobalSchedulers,
   getLogs,
   getSchedulers,
   getSkipKeywords,
@@ -34,6 +37,7 @@ import {
   getTaskConfig,
   getViolationWords,
   removeAccount,
+  removeGlobalScheduler,
   removeScheduler,
   setActiveAccountId,
   setBlacklistRules,
@@ -43,8 +47,11 @@ import {
   setTaskConfig,
   setViolationWords,
   updateAccount,
+  updateGlobalScheduler,
   updateScheduler,
 } from './store';
+import { clearGlobalLogs, getGlobalLogs } from './global-logs/global-log-store';
+import { recordTaskCompleted, recordTaskFailed, recordTaskStarted } from './global-logs/global-log-service';
 import { removeClient } from './wxshop/client-registry';
 import { createWxShopClient } from './wxshop/client';
 import { getClient } from './wxshop/client-registry';
@@ -52,7 +59,7 @@ import { runTaskCycle } from './modules/task-cycle';
 import { batchDeleteViolations, batchScan, scanOneByOne } from './modules/violation-detect';
 import { createLogger } from './utils/logger';
 import { SessionManager } from './utils/session-manager';
-import { isSupportedCron, startTask, stopAllTasks, stopTask } from './scheduler/listing-scheduler';
+import { isSupportedCron, startAllTasks, startGlobalTask, startTask, stopAllTasks, stopGlobalTask, stopTask } from './scheduler/listing-scheduler';
 
 interface PaginationState {
   nextKey: string;
@@ -90,12 +97,16 @@ async function handleMessage(channel: string, args: unknown[]): Promise<unknown>
   switch (channel) {
     case 'accounts:list':
       return getAccounts();
-    case 'accounts:add':
-      return addAccount(args[0] as string, args[1] as Config);
+    case 'accounts:add': {
+      const account = await addAccount(args[0] as string, args[1] as Config);
+      await startAllTasks();
+      return account;
+    }
     case 'accounts:remove': {
       const accountId = args[0] as string;
       await stopAllTasks();
       await removeAccount(accountId);
+      await startAllTasks();
       removeClient(accountId);
       draftPaginationMap.delete(accountId);
       return undefined;
@@ -142,6 +153,10 @@ async function handleMessage(channel: string, args: unknown[]): Promise<unknown>
       return getLogs(args[0] as string);
     case 'logs:clear':
       return clearLogs(args[0] as string);
+    case 'globalLogs:list':
+      return getGlobalLogs();
+    case 'globalLogs:clear':
+      return clearGlobalLogs();
 
     case 'scheduler:list':
       return getSchedulers(args[0] as string);
@@ -168,6 +183,37 @@ async function handleMessage(channel: string, args: unknown[]): Promise<unknown>
     case 'scheduler:remove':
       await stopTask(args[0] as string, args[1] as string);
       return removeScheduler(args[0] as string, args[1] as string);
+
+    case 'globalScheduler:list':
+      return getGlobalSchedulers();
+    case 'globalScheduler:add': {
+      const task = args[0] as Omit<GlobalScheduledTask, 'id' | 'accountStats'>;
+      if (!isSupportedCron(task.cronExpression)) {
+        throw new Error(`当前插件定时器不支持该 cron 表达式: ${task.cronExpression}。请改为 */N * * * *、M * * * * 或 M H * * *。`);
+      }
+      const newTask = await addGlobalScheduler(task);
+      if (newTask.enabled) {
+        const ok = await startGlobalTask(newTask);
+        if (!ok) throw new Error(`当前插件定时器不支持该 cron 表达式: ${newTask.cronExpression}。请改为 */N * * * *、M * * * * 或 M H * * *。`);
+      }
+      return newTask;
+    }
+    case 'globalScheduler:update': {
+      const [taskId, patch] = args as [string, Partial<GlobalScheduledTask>];
+      if (patch.cronExpression && !isSupportedCron(patch.cronExpression)) {
+        throw new Error(`当前插件定时器不支持该 cron 表达式: ${patch.cronExpression}。请改为 */N * * * *、M * * * * 或 M H * * *。`);
+      }
+      await updateGlobalScheduler(taskId, patch);
+      const task = (await getGlobalSchedulers()).find(item => item.id === taskId);
+      if (patch.enabled === false) await stopGlobalTask(taskId);
+      else if (task?.enabled) await startGlobalTask(task);
+      return undefined;
+    }
+    case 'globalScheduler:remove': {
+      const taskId = args[0] as string;
+      await stopGlobalTask(taskId);
+      return removeGlobalScheduler(taskId);
+    }
 
     case 'taskConfig:get':
       return getTaskConfig(args[0] as string);
@@ -325,6 +371,18 @@ async function runTask(accountId: string, taskConfig: TaskConfig): Promise<TaskC
   const logger = createLogger('TaskRun', accountId);
   const runId = Date.now().toString();
   const addLog = createScopedAddLog(accountId);
+  const account = await getAccount(accountId);
+
+  await recordTaskStarted({
+    module: 'listing',
+    scope: 'account',
+    accountId,
+    accountName: account?.name,
+    taskKind: 'manual',
+    runId,
+    title: '商品提审手动执行开始',
+    detail: `账号「${account?.name || accountId}」开始执行手动提审任务`,
+  });
 
   if (taskConfig.listUnreviewed) {
     try {
@@ -334,6 +392,16 @@ async function runTask(accountId: string, taskConfig: TaskConfig): Promise<TaskC
       taskConfig = { ...taskConfig, listUnreviewedQuantity: quota.quota };
     } catch (error: any) {
       addLog({ runId, productId: '', productTitle: '', action: 'check', status: 'failed', errorMsg: `配额检查失败: ${error.message}` });
+      await recordTaskFailed({
+        module: 'listing',
+        scope: 'account',
+        accountId,
+        accountName: account?.name,
+        taskKind: 'manual',
+        runId,
+        title: '商品提审手动执行失败',
+        error: { message: `配额检查失败: ${error.message}` },
+      });
       logger.error('配额检查失败:', error);
       return { scanned: 0, deleted: 0, listed: 0, errors: 0, skipped: 0, stopped: true, reason: `配额检查失败: ${error.message}` };
     }
@@ -341,7 +409,7 @@ async function runTask(accountId: string, taskConfig: TaskConfig): Promise<TaskC
 
   const signal = taskSessions.start(accountId, undefined);
   try {
-    return await runTaskCycle(
+    const result = await runTaskCycle(
       await getClient(accountId),
       addLog,
       taskConfig,
@@ -352,6 +420,37 @@ async function runTask(accountId: string, taskConfig: TaskConfig): Promise<TaskC
       await getSkipKeywords(),
       await getStatusRules(),
     );
+    await recordTaskCompleted({
+      module: 'listing',
+      scope: 'account',
+      accountId,
+      accountName: account?.name,
+      taskKind: 'manual',
+      runId,
+      level: result.stopped || result.errors > 0 ? 'warning' : 'success',
+      title: '商品提审手动执行完成',
+      detail: result.reason ? `原因：${result.reason}` : undefined,
+      summary: {
+        scanned: result.scanned,
+        listed: result.listed,
+        deleted: result.deleted,
+        skipped: result.skipped,
+        errors: result.errors,
+      },
+    });
+    return result;
+  } catch (error: any) {
+    await recordTaskFailed({
+      module: 'listing',
+      scope: 'account',
+      accountId,
+      accountName: account?.name,
+      taskKind: 'manual',
+      runId,
+      title: '商品提审手动执行异常',
+      error: { message: error?.message || String(error) },
+    });
+    throw error;
   } finally {
     taskSessions.complete(accountId);
   }

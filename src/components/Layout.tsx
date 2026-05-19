@@ -6,6 +6,7 @@ import SettingsPage from '../pages/settings/SettingsPage';
 import OrdersPage from '../pages/orders/OrdersPage';
 import ListingPage from '../pages/common-functions/ListingPage';
 import ViolationPage from '../pages/violation/ViolationPage';
+import GlobalLogDrawer from './GlobalLogDrawer';
 import { useAccounts } from '../hooks/useAccounts';
 import type { Account } from '../shared/types';
 import { CredentialErrorProvider } from '../contexts/CredentialErrorContext';
@@ -13,6 +14,7 @@ import { CredentialErrorProvider } from '../contexts/CredentialErrorContext';
 const { Header, Sider, Content } = AntLayout;
 
 type ModuleType = 'orders' | 'storeManagement' | 'commonFunctions' | 'violation' | 'settings';
+type ProductReviewScope = 'global' | 'account';
 
 const ACCOUNT_MODULES = new Set<string>(['orders', 'commonFunctions', 'violation']);
 
@@ -28,10 +30,32 @@ const MODULES: { key: ModuleType; label: string }[] = [
 const AccountSider: React.FC<{
   accounts: Account[];
   activeAccountId: string;
+  activeModule: ModuleType;
+  productReviewScope: ProductReviewScope;
+  setProductReviewScope: (scope: ProductReviewScope) => void;
   switchAccount: (id: string) => void;
-}> = ({ accounts, activeAccountId, switchAccount }) => (
+}> = ({ accounts, activeAccountId, activeModule, productReviewScope, setProductReviewScope, switchAccount }) => (
   <Sider width={180} theme="light" style={{ borderRight: '1px solid #f0f0f0' }}>
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {activeModule === 'commonFunctions' && (
+        <div style={{ padding: '8px 8px 10px', borderBottom: '1px solid #f0f0f0' }}>
+          <div
+            onClick={() => setProductReviewScope('global')}
+            style={{
+              padding: '8px 10px',
+              cursor: 'pointer',
+              background: productReviewScope === 'global' ? '#e6f4ff' : '#fafafa',
+              border: productReviewScope === 'global' ? '1px solid #91caff' : '1px solid #f0f0f0',
+              borderRadius: 6,
+              fontSize: 13,
+              fontWeight: 500,
+              userSelect: 'none',
+            }}
+          >
+            全部账号
+          </div>
+        </div>
+      )}
       <div style={{ padding: '12px 16px 8px', fontWeight: 500, fontSize: 13, color: '#999' }}>
         账号列表
       </div>
@@ -39,12 +63,15 @@ const AccountSider: React.FC<{
         {accounts.map((account, index) => (
           <div
             key={account.id}
-            onClick={() => switchAccount(account.id)}
+            onClick={() => {
+              if (activeModule === 'commonFunctions') setProductReviewScope('account');
+              switchAccount(account.id);
+            }}
             style={{
               padding: '8px 16px',
               cursor: 'pointer',
-              background: account.id === activeAccountId ? '#e6f4ff' : 'transparent',
-              borderLeft: account.id === activeAccountId ? '3px solid #1677ff' : '3px solid transparent',
+              background: (activeModule !== 'commonFunctions' || productReviewScope === 'account') && account.id === activeAccountId ? '#e6f4ff' : 'transparent',
+              borderLeft: (activeModule !== 'commonFunctions' || productReviewScope === 'account') && account.id === activeAccountId ? '3px solid #1677ff' : '3px solid transparent',
               fontSize: 13,
               userSelect: 'none',
               transition: 'background 0.2s',
@@ -63,13 +90,17 @@ const AccountModuleContent: React.FC<{
   accounts: Account[];
   activeAccountId: string;
   activeModule: ModuleType;
-}> = ({ accounts, activeAccountId, activeModule }) => {
+  productReviewScope: ProductReviewScope;
+}> = ({ accounts, activeAccountId, activeModule, productReviewScope }) => {
   if (accounts.length === 0) {
     return (
       <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Empty description="请先添加店铺" />
       </div>
     );
+  }
+  if (activeModule === 'commonFunctions' && productReviewScope === 'global') {
+    return <ListingPage accountId={activeAccountId} accounts={accounts} scope="global" />;
   }
   return (
     <div style={{ height: '100%', position: 'relative' }}>
@@ -85,7 +116,7 @@ const AccountModuleContent: React.FC<{
             <OrdersPage accountId={account.id} />
           </div>
           <div style={{ height: '100%', display: activeModule === 'commonFunctions' ? 'flex' : 'none', flexDirection: 'column' }}>
-            <ListingPage accountId={account.id} />
+            <ListingPage accountId={account.id} accounts={accounts} scope="account" />
           </div>
           <div style={{ height: '100%', display: activeModule === 'violation' ? 'flex' : 'none', flexDirection: 'column' }}>
             <ViolationPage accountId={account.id} />
@@ -98,6 +129,7 @@ const AccountModuleContent: React.FC<{
 
 const Layout: React.FC = () => {
   const [activeModule, setActiveModule] = useState<ModuleType>('commonFunctions');
+  const [productReviewScope, setProductReviewScope] = useState<ProductReviewScope>('account');
   const [version, setVersion] = useState('');
   const [settingsTab, setSettingsTab] = useState<string | undefined>(undefined);
   const { accounts, activeAccountId, fetchAccounts, addAccount, removeAccount, updateAccount, switchAccount } = useAccounts();
@@ -139,11 +171,23 @@ const Layout: React.FC = () => {
         </Header>
         <AntLayout>
           {isAccountModule && (
-            <AccountSider accounts={accounts} activeAccountId={activeAccountId} switchAccount={switchAccount} />
+            <AccountSider
+              accounts={accounts}
+              activeAccountId={activeAccountId}
+              activeModule={activeModule}
+              productReviewScope={productReviewScope}
+              setProductReviewScope={setProductReviewScope}
+              switchAccount={switchAccount}
+            />
           )}
           <Content style={{ padding: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <div style={{ flex: 1, minHeight: 0, display: isAccountModule ? 'flex' : 'none', flexDirection: 'column' }}>
-              <AccountModuleContent accounts={accounts} activeAccountId={activeAccountId} activeModule={activeModule} />
+              <AccountModuleContent
+                accounts={accounts}
+                activeAccountId={activeAccountId}
+                activeModule={activeModule}
+                productReviewScope={productReviewScope}
+              />
             </div>
             <div style={{ flex: 1, minHeight: 0, display: activeModule === 'storeManagement' ? 'flex' : 'none', flexDirection: 'column' }}>
               <StoreManagement
@@ -160,6 +204,7 @@ const Layout: React.FC = () => {
             </div>
           </Content>
         </AntLayout>
+        <GlobalLogDrawer />
       </AntLayout>
     </CredentialErrorProvider>
   );

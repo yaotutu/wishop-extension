@@ -3,6 +3,7 @@ import type {
   BlacklistRule,
   Config,
   DraftProduct,
+  GlobalScheduledTask,
   LogEntry,
   Order,
   OrderAddressInfo,
@@ -16,6 +17,7 @@ import type {
   ViolationMatch,
   ViolationScanResult,
 } from './types';
+import type { GlobalLogEntry } from './global-log';
 
 async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
   const response = await chrome.runtime.sendMessage({ channel, args }) as { ok?: boolean; result?: unknown; error?: string };
@@ -65,11 +67,22 @@ export const extensionApi = {
     get: (accountId: string): Promise<LogEntry[]> => invoke('logs:get', accountId),
     clear: (accountId: string): Promise<void> => invoke('logs:clear', accountId),
   },
+  globalLogs: {
+    list: (): Promise<GlobalLogEntry[]> => invoke('globalLogs:list'),
+    clear: (): Promise<void> => invoke('globalLogs:clear'),
+    onAdded: (callback: (log: GlobalLogEntry) => void) => onRuntimeEvent('globalLog:added', callback),
+  },
   scheduler: {
     list: (accountId: string): Promise<ScheduledTask[]> => invoke('scheduler:list', accountId),
     add: (accountId: string, task: Omit<ScheduledTask, 'id' | 'lastRunDate' | 'todayListedCount'>): Promise<ScheduledTask> => invoke('scheduler:add', accountId, task),
     update: (accountId: string, taskId: string, patch: Partial<ScheduledTask>): Promise<void> => invoke('scheduler:update', accountId, taskId, patch),
     remove: (accountId: string, taskId: string): Promise<void> => invoke('scheduler:remove', accountId, taskId),
+  },
+  globalScheduler: {
+    list: (): Promise<GlobalScheduledTask[]> => invoke('globalScheduler:list'),
+    add: (task: Omit<GlobalScheduledTask, 'id' | 'accountStats'>): Promise<GlobalScheduledTask> => invoke('globalScheduler:add', task),
+    update: (taskId: string, patch: Partial<GlobalScheduledTask>): Promise<void> => invoke('globalScheduler:update', taskId, patch),
+    remove: (taskId: string): Promise<void> => invoke('globalScheduler:remove', taskId),
   },
   taskConfig: {
     get: (accountId: string): Promise<TaskConfig> => invoke('taskConfig:get', accountId),
