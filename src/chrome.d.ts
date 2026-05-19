@@ -59,6 +59,10 @@ declare namespace chrome {
     function query(queryInfo: { url?: string; active?: boolean; currentWindow?: boolean }): Promise<Tab[]>;
     function update(tabId: number, updateProperties: { active?: boolean; url?: string }): Promise<Tab>;
     function create(createProperties: { url: string; active?: boolean }): Promise<Tab>;
+
+    namespace onRemoved {
+      function addListener(callback: (tabId: number) => void): void;
+    }
   }
 
   namespace windows {

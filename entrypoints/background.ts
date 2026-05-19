@@ -1,10 +1,13 @@
 import { installRuntimeHandlers } from '../src/background/handlers';
 import { installAlarmListener, startAllTasks } from '../src/background/scheduler/listing-scheduler';
+import { installShippingTabCleanup } from '../src/background/shipping/shipping-session-service';
+import { migrateStore } from '../src/background/store';
 
 export default defineBackground(() => {
   installRuntimeHandlers();
+  installShippingTabCleanup();
   installAlarmListener();
-  void startAllTasks();
+  void migrateStore().then(() => startAllTasks());
 
   chrome.action.onClicked.addListener(async () => {
     const dashboardUrl = chrome.runtime.getURL('/dashboard.html');

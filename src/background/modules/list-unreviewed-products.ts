@@ -1,5 +1,5 @@
 import { WxShopClient, DraftProduct } from '../wxshop/client';
-import { AddLogFn } from '../store';
+import type { AddLogFn } from '../../shared/types';
 import type { BlacklistRule } from '../../shared/types';
 import { createLogger } from '../utils/logger';
 

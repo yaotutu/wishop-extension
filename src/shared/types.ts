@@ -104,6 +104,72 @@ export interface ProductSourceBinding {
   sources: ProductSourceItem[];
 }
 
+export type ShippingSessionStatus = 'created' | 'opened' | 'page-ready' | 'completed' | 'failed';
+
+export interface ShippingOrderSnapshot {
+  orderId: string;
+  productId: string;
+  title: string;
+  skuCode?: string;
+  skuAttrs: OrderSkuAttr[];
+  quantity: number;
+  thumbImg?: string;
+  address?: OrderAddressInfo;
+  merchantNotes?: string;
+  customerNotes?: string;
+  createTime?: number;
+  payTime?: number;
+  orderPrice?: number;
+}
+
+export interface ShippingSourceSnapshot {
+  id: string;
+  url: string;
+  quantity: number;
+  remark: string;
+}
+
+export interface ShippingSession {
+  id: string;
+  accountId: string;
+  orderId: string;
+  productId: string;
+  source: ShippingSourceSnapshot;
+  order: ShippingOrderSnapshot;
+  status: ShippingSessionStatus;
+  createdAt: number;
+  updatedAt: number;
+  expiresAt: number;
+  tabId?: number;
+  lastError?: string;
+}
+
+export interface CreateShippingSessionInput {
+  accountId: string;
+  orderId: string;
+  productId: string;
+  source: ShippingSourceSnapshot;
+  order: ShippingOrderSnapshot;
+}
+
+export type LicensedFeature = 'orders' | 'listing' | 'violation' | 'shipping';
+
+export interface LicenseActivationInput {
+  licenseKey: string;
+}
+
+export interface LicenseState {
+  enforcementEnabled: boolean;
+  status: 'inactive' | 'active' | 'expired' | 'invalid' | 'grace';
+  plan: 'none' | 'paid';
+  licenseKey?: string;
+  deviceId: string;
+  activatedAt?: number;
+  expiresAt?: number;
+  checkedAt?: number;
+  lastError?: string;
+}
+
 // Order types
 
 export enum OrderStatus {
@@ -157,7 +223,18 @@ export interface OrderAddressInfo {
   county_name: string;
   detail_info: string;
   tel_number: string;
+  purchaser_tel_number?: string;
+  virtual_order_tel_number?: string;
+  national_code?: string;
   house_number: string;
+  virtual_number_info?: OrderVirtualNumberInfo;
+}
+
+export interface OrderVirtualNumberInfo {
+  virtual_number: string;
+  extension: string;
+  expiration: number;
+  number_state: number;
 }
 
 export interface OrderDeliveryProductInfo {

@@ -2,8 +2,11 @@ import type {
   Account,
   BlacklistRule,
   Config,
+  CreateShippingSessionInput,
   DraftProduct,
   GlobalScheduledTask,
+  LicenseActivationInput,
+  LicenseState,
   LogEntry,
   Order,
   OrderAddressInfo,
@@ -13,6 +16,7 @@ import type {
   ProductSourceItem,
   QuotaResult,
   ScheduledTask,
+  ShippingSession,
   StatusRule,
   TaskConfig,
   TaskCycleResult,
@@ -20,13 +24,14 @@ import type {
   ViolationScanResult,
 } from './types';
 import type { GlobalLogEntry } from './global-log';
+import type { RuntimeArgs, RuntimeChannel, RuntimeResult } from './runtime-channels';
 
-async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
+async function invoke<K extends RuntimeChannel>(channel: K, ...args: RuntimeArgs<K>): Promise<RuntimeResult<K>> {
   const response = await chrome.runtime.sendMessage({ channel, args }) as { ok?: boolean; result?: unknown; error?: string };
   if (!response?.ok) {
     throw new Error(response?.error || `Runtime request failed: ${channel}`);
   }
-  return response.result as T;
+  return response.result as RuntimeResult<K>;
 }
 
 function onRuntimeEvent<T>(event: string, callback: (payload: T) => void): () => void {
@@ -71,6 +76,13 @@ export const extensionApi = {
     list: (accountId: string): Promise<ProductSourceBinding[]> => invoke('productSources:list', accountId),
     set: (accountId: string, productId: string, sources: ProductSourceItem[]): Promise<ProductSourceBinding> => invoke('productSources:set', accountId, productId, sources),
     remove: (accountId: string, productId: string, sourceId: string): Promise<ProductSourceBinding> => invoke('productSources:remove', accountId, productId, sourceId),
+  },
+  shipping: {
+    open: (input: CreateShippingSessionInput): Promise<ShippingSession> => invoke('shipping:open', input),
+    getCurrentTabSession: (): Promise<ShippingSession | null> => invoke('shipping:getCurrentTabSession'),
+    markPageReady: (sessionId: string): Promise<ShippingSession> => invoke('shipping:markPageReady', sessionId),
+    complete: (sessionId: string): Promise<ShippingSession> => invoke('shipping:complete', sessionId),
+    fail: (sessionId: string, error: string): Promise<ShippingSession> => invoke('shipping:fail', sessionId, error),
   },
   quota: {
     get: (accountId: string): Promise<QuotaResult> => invoke('quota:get', accountId),
@@ -131,6 +143,12 @@ export const extensionApi = {
     get: (): Promise<StatusRule[]> => invoke('statusRules:get'),
     set: (rules: StatusRule[]): Promise<void> => invoke('statusRules:set', rules),
     reset: (): Promise<StatusRule[]> => invoke('statusRules:reset'),
+  },
+  license: {
+    get: (): Promise<LicenseState> => invoke('license:get'),
+    activate: (input: LicenseActivationInput): Promise<LicenseState> => invoke('license:activate', input),
+    refresh: (): Promise<LicenseState> => invoke('license:refresh'),
+    clear: (): Promise<LicenseState> => invoke('license:clear'),
   },
   app: {
     version: (): Promise<string> => invoke('app:version'),

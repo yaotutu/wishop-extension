@@ -224,7 +224,10 @@ export function createWxShopClient(config: Config) {
     if (data.errcode && data.errcode !== 0) {
       throw new Error(data.errmsg || `解密收货信息失败: ${data.errcode}`);
     }
-    return data.address_info;
+    return {
+      ...data.address_info,
+      virtual_number_info: data.virtual_number_info,
+    };
   }
 
   function clearTokenCache(): void {

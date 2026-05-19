@@ -1,73 +1,13 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Table, Tag, Button, Input, InputNumber, Select, Modal, Descriptions, Image, Spin, Empty, Alert, Flex, Typography, Space, message } from 'antd';
-import { ReloadOutlined, EyeOutlined, SendOutlined, PlusOutlined, DeleteOutlined, LinkOutlined, ShoppingCartOutlined, CopyOutlined, PictureOutlined } from '@ant-design/icons';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { Table, Button, Empty, message } from 'antd';
 import { useOrders } from '../../hooks/useIpc';
 import { extensionApi } from '../../shared/extension-api';
 import type { Order, OrderStatus, OrderProductInfo, OrderSearchParams, OrderAddressInfo, ProductSourceItem } from '../../shared/types';
-import { OrderStatus as OrderStatusEnum } from '../../shared/types';
-
-const { Text } = Typography;
-
-const STATUS_CONFIG: Record<number, { color: string; text: string }> = {
-  [OrderStatusEnum.PendingPayment]: { color: 'orange', text: '待付款' },
-  [OrderStatusEnum.GiftPendingAccept]: { color: 'purple', text: '礼物待收下' },
-  [OrderStatusEnum.GroupBuying]: { color: 'cyan', text: '凑单中' },
-  [OrderStatusEnum.PendingShipment]: { color: 'blue', text: '待发货' },
-  [OrderStatusEnum.PartialShipment]: { color: 'geekblue', text: '部分发货' },
-  [OrderStatusEnum.PendingReceipt]: { color: 'cyan', text: '待收货' },
-  [OrderStatusEnum.Completed]: { color: 'green', text: '已完成' },
-  [OrderStatusEnum.CancelledByAfterSale]: { color: 'red', text: '售后取消' },
-  [OrderStatusEnum.CancelledByUser]: { color: 'default', text: '已取消' },
-};
-
-const PAYMENT_METHOD: Record<number, string> = {
-  1: '微信支付',
-  2: '先用后付',
-  3: '0元抽奖',
-  4: '积分兑换',
-};
-
-const STATUS_FILTER_OPTIONS = [
-  { label: '全部', value: 'all' },
-  { label: '待付款', value: OrderStatusEnum.PendingPayment },
-  { label: '待发货', value: OrderStatusEnum.PendingShipment },
-  { label: '已发货', value: OrderStatusEnum.PendingReceipt },
-  { label: '已完成', value: OrderStatusEnum.Completed },
-];
-
-const SEARCH_TYPE_OPTIONS = [
-  { value: 'order_id', label: '订单号' },
-  { value: 'title', label: '商品标题' },
-  { value: 'user_name', label: '收件人' },
-  { value: 'merchant_notes', label: '商家备注' },
-  { value: 'customer_notes', label: '买家备注' },
-];
-
-function formatTime(timestamp: number): string {
-  if (!timestamp) return '-';
-  const d = new Date(timestamp * 1000);
-  return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
-
-function formatPrice(cents: number): string {
-  if (cents === undefined || cents === null) return '-';
-  return `¥${(cents / 100).toFixed(2)}`;
-}
-
-const firstProduct = (order: Order): OrderProductInfo | undefined =>
-  order.order_detail?.product_infos?.[0];
-
-const canDecodeAddress = (status: OrderStatus): boolean =>
-  [OrderStatusEnum.PendingShipment, OrderStatusEnum.PartialShipment, OrderStatusEnum.PendingReceipt].includes(status);
-
-const createEmptySource = (): ProductSourceItem => ({
-  id: crypto.randomUUID(),
-  url: '',
-  quantity: 1,
-  remark: '',
-  createdAt: Date.now(),
-  updatedAt: Date.now(),
-});
+import { formatOrderAddressForCopy } from '../../shared/address-format';
+import { newProductSourceRow, ShippingSourceModal, SourceManagementModal } from './components/ProductSourceModals';
+import { OrderDetailModal } from './components/OrderDetailModal';
+import { createOrderColumns } from './components/OrderTableColumns';
+import { OrderToolbar } from './components/OrderToolbar';
 
 function normalizeUrl(url: string): string {
   const trimmed = url.trim();
@@ -108,13 +48,10 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const [sourceRows, setSourceRows] = useState<ProductSourceItem[]>([]);
   const [sourceSaving, setSourceSaving] = useState(false);
   const [shipSourceModalOpen, setShipSourceModalOpen] = useState(false);
+  const [shipSourceOrder, setShipSourceOrder] = useState<Order | null>(null);
   const [shipSourceProduct, setShipSourceProduct] = useState<OrderProductInfo | null>(null);
   const tableAreaRef = useRef<HTMLDivElement>(null);
   const [scrollY, setScrollY] = useState(400);
-
-  const openExternal = useCallback(async (url: string) => {
-    await chrome.tabs.create({ url: normalizeUrl(url) });
-  }, []);
 
   useEffect(() => {
     const el = tableAreaRef.current;
@@ -173,17 +110,20 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
 
   const handleDecodeAddress = useCallback(async (orderId: string) => {
     setDecodingOrderIds(prev => new Set(prev).add(orderId));
-    const addr = await decodeAddress(orderId);
-    if (addr) {
-      setDecodedAddresses(prev => ({ ...prev, [orderId]: addr }));
-      const text = `${addr.user_name} ${addr.tel_number}\n${addr.province_name || ''}${addr.city_name || ''}${addr.county_name || ''}${addr.detail_info || ''}`;
-      navigator.clipboard.writeText(text).then(() => message.success('地址已复制')).catch(() => {});
+    try {
+      const addr = await decodeAddress(orderId);
+      if (addr) {
+        setDecodedAddresses(prev => ({ ...prev, [orderId]: addr }));
+        const text = formatOrderAddressForCopy(addr);
+        navigator.clipboard.writeText(text).then(() => message.success('真实地址已显示并复制')).catch(() => message.success('真实地址已显示'));
+      }
+    } finally {
+      setDecodingOrderIds(prev => { const s = new Set(prev); s.delete(orderId); return s; });
     }
-    setDecodingOrderIds(prev => { const s = new Set(prev); s.delete(orderId); return s; });
   }, [decodeAddress]);
 
   const handleCopyAddress = useCallback((addr: OrderAddressInfo) => {
-    const text = `${addr.user_name} ${addr.tel_number}\n${addr.province_name || ''}${addr.city_name || ''}${addr.county_name || ''}${addr.detail_info || ''}`;
+    const text = formatOrderAddressForCopy(addr);
     navigator.clipboard.writeText(text).then(() => message.success('地址已复制')).catch(() => {});
   }, []);
 
@@ -227,28 +167,14 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const openSourceManager = useCallback((product: OrderProductInfo) => {
     setSourceProduct(product);
     const sources = (productSources[product.product_id] || []).map(source => ({ ...source }));
-    setSourceRows(sources.length > 0 ? sources : [createEmptySource()]);
+    setSourceRows(sources.length > 0 ? sources : [newProductSourceRow()]);
     setSourceModalOpen(true);
   }, [productSources]);
 
-  const openShipSources = useCallback((product: OrderProductInfo) => {
+  const openShipSources = useCallback((order: Order, product: OrderProductInfo) => {
+    setShipSourceOrder(order);
     setShipSourceProduct(product);
     setShipSourceModalOpen(true);
-  }, []);
-
-  const updateSourceRow = useCallback((sourceId: string, patch: Partial<ProductSourceItem>) => {
-    setSourceRows(prev => prev.map(source => source.id === sourceId ? { ...source, ...patch, updatedAt: Date.now() } : source));
-  }, []);
-
-  const handleAddSource = useCallback(() => {
-    setSourceRows(prev => [...prev, createEmptySource()]);
-  }, []);
-
-  const handleRemoveSource = useCallback((sourceId: string) => {
-    setSourceRows(prev => {
-      const next = prev.filter(source => source.id !== sourceId);
-      return next.length > 0 ? next : [createEmptySource()];
-    });
   }, []);
 
   const handleSaveSources = useCallback(async () => {
@@ -267,304 +193,84 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     }
   }, [accountId, sourceProduct, sourceRows, syncProductSources]);
 
-  const columns = [
-    {
-      title: '订单信息',
-      key: 'order_info',
-      width: 280,
-      render: (_: unknown, record: Order) => {
-        const product = firstProduct(record);
-        return (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-            {product?.thumb_img && (
-              <Image src={product.thumb_img} width={50} height={50} alt={product.title || '商品图片'} style={{ borderRadius: 4, objectFit: 'cover', flexShrink: 0 }} preview={false} />
-            )}
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <Space size={4} align="center">
-                <Text
-                  type="secondary"
-                  onClick={() => handleCopyText(record.order_id, '订单号')}
-                  style={{ fontSize: 12, cursor: 'pointer' }}
-                >
-                  {record.order_id}
-                </Text>
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<CopyOutlined />}
-                  onClick={() => handleCopyText(record.order_id, '订单号')}
-                  style={{ width: 18, height: 18, minWidth: 18, padding: 0 }}
-                />
-              </Space>
-              <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{product?.title || '-'}</div>
-              <Space size={4} style={{ marginTop: 2 }}>
-                <Button
-                  type="link"
-                  size="small"
-                  icon={<PictureOutlined />}
-                  disabled={!product?.thumb_img}
-                  onClick={() => handleCopyImage(product?.thumb_img)}
-                  style={{ padding: 0, height: 20, fontSize: 12 }}
-                >
-                  复制图片
-                </Button>
-                <Button
-                  type="link"
-                  size="small"
-                  icon={<CopyOutlined />}
-                  disabled={!product?.title}
-                  onClick={() => handleCopyText(product?.title, '标题')}
-                  style={{ padding: 0, height: 20, fontSize: 12 }}
-                >
-                  复制标题
-                </Button>
-              </Space>
-              <br />
-              {product?.sku_code && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
-                  <Text
-                    type="secondary"
-                    onClick={() => handleCopyText(product.sku_code, 'SKU')}
-                    style={{ fontSize: 12, cursor: 'pointer', maxWidth: 145 }}
-                    ellipsis
-                    title={`编码: ${product.sku_code}`}
-                  >
-                    编码: {product.sku_code}
-                  </Text>
-                  <Button
-                    type="link"
-                    size="small"
-                    icon={<CopyOutlined />}
-                    onClick={() => handleCopyText(product.sku_code, 'SKU')}
-                    style={{ width: 18, height: 18, minWidth: 18, padding: 0, flexShrink: 0 }}
-                  />
-                </span>
-              )}
-              <br />
-              <Text type="secondary" style={{ fontSize: 12 }}>下单: {formatTime(record.create_time)}</Text>
-            </div>
-          </div>
-        );
-      },
-    },
-    {
-      title: '规格/数量',
-      key: 'sku',
-      width: 140,
-      render: (_: unknown, record: Order) => {
-        const product = firstProduct(record);
-        if (!product) return '-';
-        const specs = product.sku_attrs?.map(a => a.attr_value).join(', ') || '-';
-        return (
-          <div>
-            <Flex align="center" gap={4}>
-              <Text
-                onClick={() => handleCopyText(specs === '-' ? undefined : specs, 'SKU')}
-                style={{ fontSize: 12, color: '#333', cursor: specs === '-' ? 'default' : 'pointer', maxWidth: 105 }}
-                ellipsis
-                title={specs}
-              >
-                {specs}
-              </Text>
-              {specs !== '-' && (
-                <Button
-                  type="link"
-                  size="small"
-                  icon={<CopyOutlined />}
-                  onClick={() => handleCopyText(specs, 'SKU')}
-                  style={{ width: 18, height: 18, minWidth: 18, padding: 0, flexShrink: 0 }}
-                />
-              )}
-            </Flex>
-            <Text type="secondary" style={{ fontSize: 12 }}>x{product.sku_cnt}</Text>
-          </div>
-        );
-      },
-    },
-    {
-      title: '实付款',
-      key: 'price',
-      width: 130,
-      render: (_: unknown, record: Order) => {
-        const pi = record.order_detail?.price_info;
-        if (!pi) return '-';
-        return (
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 13 }}>{formatPrice(pi.order_price)}</div>
-            <Text type="secondary" style={{ fontSize: 12 }}>商品 {formatPrice(pi.product_price)}</Text>
-            <br />
-            <Text type="secondary" style={{ fontSize: 12 }}>运费 {formatPrice(pi.freight)}</Text>
-            {pi.discounted_price > 0 && (
-              <>
-                <br />
-                <Text type="danger" style={{ fontSize: 12 }}>优惠 -{formatPrice(pi.discounted_price)}</Text>
-              </>
-            )}
-          </div>
-        );
-      },
-    },
-    {
-      title: '订单状态',
-      key: 'status',
-      width: 170,
-      render: (_: unknown, record: Order) => {
-        const cfg = STATUS_CONFIG[record.status] || { color: 'default', text: `未知(${record.status})` };
-        const payInfo = record.order_detail?.pay_info;
-        const deliveryInfos = record.order_detail?.delivery_info?.delivery_product_info;
-        const product = firstProduct(record);
+  const handleOpenShippingSession = useCallback(async (source: ProductSourceItem) => {
+    if (!shipSourceOrder || !shipSourceProduct) return;
+    const address = decodedAddresses[shipSourceOrder.order_id];
 
-        return (
-          <div>
-            <Tag color={cfg.color} style={{ marginBottom: 4 }}>{cfg.text}</Tag>
-            {payInfo?.payment_method && (
-              <Text type="secondary" style={{ fontSize: 12 }}>{PAYMENT_METHOD[payInfo.payment_method] || `支付方式${payInfo.payment_method}`}</Text>
-            )}
-            {record.status === OrderStatusEnum.PendingShipment && product?.delivery_deadline && (
-              <div style={{ fontSize: 12, color: '#fa8c16' }}>
-                发货时限: {formatTime(product.delivery_deadline)}
-              </div>
-            )}
-            {(record.status === OrderStatusEnum.PendingReceipt || record.status === OrderStatusEnum.Completed) && deliveryInfos?.length > 0 && (
-              <>
-                {deliveryInfos.map((d, i) => (
-                  <div key={i} style={{ borderTop: i > 0 ? '1px dashed #f0f0f0' : undefined, paddingTop: i > 0 ? 4 : 0, marginTop: i > 0 ? 4 : 0 }}>
-                    <Text type="secondary" style={{ fontSize: 12 }}>{d.delivery_name || d.delivery_id}</Text>
-                    <div style={{ fontSize: 12, color: '#333' }}>{d.waybill_id}</div>
-                    {d.delivery_time > 0 && <Text type="secondary" style={{ fontSize: 12 }}>发货: {formatTime(d.delivery_time)}</Text>}
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-        );
+    /**
+     * 发货会话是 dashboard 到淘宝 content script 的唯一桥梁。
+     * 真实地址接口有每日额度限制，因此这里只复用用户已经手动解密过的地址；
+     * 未解密订单会在淘宝浮窗里提供显式按钮，由用户确认后再消耗额度。
+     */
+    await extensionApi.shipping.open({
+      accountId,
+      orderId: shipSourceOrder.order_id,
+      productId: shipSourceProduct.product_id,
+      source: {
+        id: source.id,
+        url: normalizeUrl(source.url),
+        quantity: source.quantity,
+        remark: source.remark,
       },
-    },
-    {
-      title: '收货地址',
-      key: 'address',
-      width: 180,
-      render: (_: unknown, record: Order) => {
-        const masked = record.order_detail?.delivery_info?.address_info;
-        const real = decodedAddresses[record.order_id];
-        const addr = real || masked;
-        if (!addr) return '-';
-        const fullAddr = `${addr.province_name || ''}${addr.city_name || ''}${addr.county_name || ''}${addr.detail_info || ''}`;
-        const isDecoded = !!real;
-        const isDecoding = decodingOrderIds.has(record.order_id);
-        return (
-          <div>
-            <div style={{ fontSize: 12, color: '#333' }}>{addr.user_name} {addr.tel_number}</div>
-            <Text type="secondary" style={{ fontSize: 12 }} title={fullAddr}>
-              {fullAddr.length > 25 ? fullAddr.substring(0, 25) + '...' : fullAddr}
-            </Text>
-            {!isDecoded && canDecodeAddress(record.status) && (
-              <Button type="link" size="small" loading={isDecoding} onClick={() => handleDecodeAddress(record.order_id)} style={{ padding: 0, height: 'auto', fontSize: 12 }}>
-                查看真实地址
-              </Button>
-            )}
-            {isDecoded && (
-              <Button type="link" size="small" onClick={() => handleCopyAddress(real!)} style={{ padding: 0, height: 'auto', fontSize: 12 }}>
-                复制地址
-              </Button>
-            )}
-          </div>
-        );
+      order: {
+        orderId: shipSourceOrder.order_id,
+        productId: shipSourceProduct.product_id,
+        title: shipSourceProduct.title,
+        skuCode: shipSourceProduct.sku_code,
+        skuAttrs: shipSourceProduct.sku_attrs || [],
+        quantity: shipSourceProduct.sku_cnt,
+        thumbImg: shipSourceProduct.thumb_img,
+        address,
+        merchantNotes: shipSourceOrder.order_detail?.ext_info?.merchant_notes,
+        customerNotes: shipSourceOrder.order_detail?.ext_info?.customer_notes,
+        createTime: shipSourceOrder.create_time,
+        payTime: shipSourceOrder.order_detail?.pay_info?.pay_time,
+        orderPrice: shipSourceOrder.order_detail?.price_info?.order_price,
       },
-    },
-    {
-      title: '备注',
-      key: 'notes',
-      width: 140,
-      render: (_: unknown, record: Order) => {
-        const ext = record.order_detail?.ext_info;
-        if (!ext) return <Text type="secondary">无</Text>;
-        const hasCustomer = ext.customer_notes && ext.customer_notes.trim();
-        const hasMerchant = ext.merchant_notes && ext.merchant_notes.trim();
-        if (!hasCustomer && !hasMerchant) return <Text type="secondary">无</Text>;
-        return (
-          <div>
-            {hasCustomer && (
-              <div>
-                <Text type="secondary" style={{ fontSize: 11 }}>买家: </Text>
-                <Text style={{ fontSize: 12 }} title={ext.customer_notes}>
-                  {ext.customer_notes!.length > 15 ? ext.customer_notes!.substring(0, 15) + '...' : ext.customer_notes}
-                </Text>
-              </div>
-            )}
-            {hasMerchant && (
-              <div>
-                <Text type="secondary" style={{ fontSize: 11 }}>商家: </Text>
-                <Text style={{ fontSize: 12, color: '#1890ff' }} title={ext.merchant_notes}>
-                  {ext.merchant_notes!.length > 15 ? ext.merchant_notes!.substring(0, 15) + '...' : ext.merchant_notes}
-                </Text>
-              </div>
-            )}
-          </div>
-        );
-      },
-    },
-    {
-      title: '操作',
-      key: 'action',
-      width: 120,
-      render: (_: unknown, record: Order) => {
-        const product = firstProduct(record);
-        const sources = product?.product_id ? productSources[product.product_id] || [] : [];
-        return (
-          <Flex vertical align="flex-start">
-            <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record.order_id)}>
-              详情
-            </Button>
-            <Button
-              type="link"
-              size="small"
-              icon={<LinkOutlined />}
-              disabled={!product?.product_id}
-              onClick={() => product && openSourceManager(product)}
-            >
-              管理货源
-            </Button>
-            {product?.product_id && sources.length > 0 && (
-              <Button type="link" size="small" icon={<ShoppingCartOutlined />} onClick={() => openShipSources(product)}>
-                去发货
-              </Button>
-            )}
-          </Flex>
-        );
-      },
-    },
-  ];
+    });
+    setShipSourceModalOpen(false);
+    message.success(address ? '已打开淘宝发货页' : '已打开淘宝发货页，真实地址需手动获取');
+  }, [accountId, decodedAddresses, shipSourceOrder, shipSourceProduct]);
+
+  const columns = useMemo(() => createOrderColumns({
+    decodedAddresses,
+    decodingOrderIds,
+    productSources,
+    onCopyText: handleCopyText,
+    onCopyImage: handleCopyImage,
+    onCopyAddress: handleCopyAddress,
+    onDecodeAddress: handleDecodeAddress,
+    onViewDetail: handleViewDetail,
+    onOpenSourceManager: openSourceManager,
+    onOpenShipSources: openShipSources,
+  }), [
+    decodedAddresses,
+    decodingOrderIds,
+    productSources,
+    handleCopyText,
+    handleCopyImage,
+    handleCopyAddress,
+    handleDecodeAddress,
+    handleViewDetail,
+    openSourceManager,
+    openShipSources,
+  ]);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Flex vertical gap={8} style={{ flexShrink: 0, borderBottom: '1px solid #f0f0f0', paddingBottom: 10 }}>
-        <Tag.CheckableTagGroup
-          options={STATUS_FILTER_OPTIONS}
-          value={activeStatus ?? 'all'}
-          onChange={handleStatusChange}
-        />
-        <Flex gap={8} align="center">
-          <Space.Compact style={{ flex: 1, maxWidth: 480 }}>
-            <Select size="small" value={searchType} onChange={setSearchType} options={SEARCH_TYPE_OPTIONS} style={{ width: 120 }} />
-            <Input.Search
-              size="small"
-              value={searchKeyword}
-              onChange={(e) => setSearchKeyword(e.target.value)}
-              onSearch={handleSearch}
-              placeholder="输入关键字搜索"
-              allowClear
-              style={{ width: '100%' }}
-              enterButton="搜索"
-            />
-          </Space.Compact>
-          <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={() => fetchOrders(activeStatus)}>刷新</Button>
-          <Text type="secondary" style={{ fontSize: 12 }}>仅显示近7天订单</Text>
-        </Flex>
-        {error && (
-          <Alert type="error" title={error} showIcon closable={{ onClose: clearError }} />
-        )}
-      </Flex>
+      <OrderToolbar
+        activeStatus={activeStatus}
+        searchType={searchType}
+        searchKeyword={searchKeyword}
+        loading={loading}
+        error={error}
+        onStatusChange={handleStatusChange}
+        onSearchTypeChange={setSearchType}
+        onSearchKeywordChange={setSearchKeyword}
+        onSearch={handleSearch}
+        onRefresh={() => fetchOrders(activeStatus)}
+        onClearError={clearError}
+      />
 
       <div ref={tableAreaRef} style={{ flex: 1, minHeight: 0 }}>
         <Table
@@ -594,210 +300,30 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         />
       </div>
 
-      <Modal
-        title="订单详情"
+      <OrderDetailModal
         open={detailModalOpen}
+        loading={detailLoading}
+        order={detailOrder}
         onCancel={() => setDetailModalOpen(false)}
-        footer={null}
-        width={720}
-        destroyOnHidden
-      >
-        {detailLoading ? (
-          <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
-        ) : detailOrder ? (
-          <Flex vertical gap={16}>
-            <Descriptions
-              size="small"
-              column={2}
-              bordered
-              items={[
-                { key: 'orderId', label: '订单号', children: detailOrder.order_id },
-                {
-                  key: 'status',
-                  label: '状态',
-                  children: <Tag color={(STATUS_CONFIG[detailOrder.status] || {}).color}>{(STATUS_CONFIG[detailOrder.status] || { text: `未知(${detailOrder.status})` }).text}</Tag>,
-                },
-                { key: 'createTime', label: '下单时间', children: formatTime(detailOrder.create_time) },
-                { key: 'updateTime', label: '更新时间', children: formatTime(detailOrder.update_time) },
-              ]}
-            />
+      />
 
-            {detailOrder.order_detail?.product_infos && (
-              <div>
-                <div style={{ fontWeight: 600, marginBottom: 8 }}>商品信息</div>
-                {detailOrder.order_detail.product_infos.map((p, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 8, padding: '8px 0', borderBottom: '1px solid #f0f0f0', alignItems: 'center' }}>
-                    {p.thumb_img && <Image src={p.thumb_img} width={50} height={50} alt={p.title || '商品图片'} style={{ borderRadius: 4, objectFit: 'cover' }} preview={false} />}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        {p.sku_attrs?.map(a => `${a.attr_key}: ${a.attr_value}`).join(' / ')}
-                      </Text>
-                      <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>
-                        <Flex gap={16}>
-                          <span>数量: {p.sku_cnt}</span>
-                          <span>单价: {formatPrice(p.sale_price)}</span>
-                          <span>实付: {formatPrice(p.real_price)}</span>
-                        </Flex>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {detailOrder.order_detail?.price_info && (
-              <Descriptions
-                size="small"
-                column={2}
-                bordered
-                title="价格信息"
-                items={[
-                  { key: 'productPrice', label: '商品总价', children: formatPrice(detailOrder.order_detail.price_info.product_price) },
-                  { key: 'orderPrice', label: '实付金额', children: formatPrice(detailOrder.order_detail.price_info.order_price) },
-                  { key: 'freight', label: '运费', children: formatPrice(detailOrder.order_detail.price_info.freight) },
-                  { key: 'discount', label: '优惠', children: formatPrice(detailOrder.order_detail.price_info.discounted_price) },
-                  { key: 'merchantReceive', label: '商家实收', children: formatPrice(detailOrder.order_detail.price_info.merchant_receieve_price), span: 2 },
-                ]}
-              />
-            )}
-
-            {detailOrder.order_detail?.delivery_info?.address_info && (
-              <Descriptions
-                size="small"
-                column={1}
-                bordered
-                title="收货信息"
-                items={[
-                  { key: 'userName', label: '收货人', children: detailOrder.order_detail.delivery_info.address_info.user_name },
-                  { key: 'telNumber', label: '电话', children: detailOrder.order_detail.delivery_info.address_info.tel_number },
-                  {
-                    key: 'address',
-                    label: '地址',
-                    children: `${detailOrder.order_detail.delivery_info.address_info.province_name}${detailOrder.order_detail.delivery_info.address_info.city_name}${detailOrder.order_detail.delivery_info.address_info.county_name}${detailOrder.order_detail.delivery_info.address_info.detail_info}`,
-                  },
-                ]}
-              />
-            )}
-
-            {detailOrder.order_detail?.delivery_info?.delivery_product_info?.length > 0 && (
-              <Descriptions
-                size="small"
-                column={2}
-                bordered
-                title="物流信息"
-                items={detailOrder.order_detail.delivery_info.delivery_product_info.flatMap((d, i) => [
-                  { key: `deliveryName${i}`, label: '快递公司', children: d.delivery_name || d.delivery_id },
-                  { key: `waybillId${i}`, label: '快递单号', children: d.waybill_id },
-                ])}
-              />
-            )}
-
-            {detailOrder.order_detail?.ext_info && (
-              <Descriptions
-                size="small"
-                column={1}
-                bordered
-                title="备注"
-                items={[
-                  { key: 'customerNotes', label: '买家备注', children: detailOrder.order_detail.ext_info.customer_notes || '无' },
-                  { key: 'merchantNotes', label: '商家备注', children: detailOrder.order_detail.ext_info.merchant_notes || '无' },
-                ]}
-              />
-            )}
-
-            {detailOrder.order_detail?.pay_info && (
-              <Descriptions
-                size="small"
-                column={2}
-                bordered
-                title="支付信息"
-                items={[
-                  { key: 'payTime', label: '支付时间', children: formatTime(detailOrder.order_detail.pay_info.pay_time) },
-                  { key: 'transactionId', label: '交易号', children: detailOrder.order_detail.pay_info.transaction_id || '-' },
-                ]}
-              />
-            )}
-          </Flex>
-        ) : (
-          <Empty description="获取订单详情失败" />
-        )}
-      </Modal>
-
-      <Modal
-        title={`管理货源${sourceProduct?.title ? ` - ${sourceProduct.title}` : ''}`}
+      <SourceManagementModal
         open={sourceModalOpen}
+        product={sourceProduct}
+        rows={sourceRows}
+        saving={sourceSaving}
+        onRowsChange={setSourceRows}
         onCancel={() => setSourceModalOpen(false)}
-        onOk={handleSaveSources}
-        okText="保存"
-        confirmLoading={sourceSaving}
-        width={780}
-        destroyOnHidden
-      >
-        <Flex vertical gap={10}>
-          {sourceRows.map(source => (
-            <Flex key={source.id} gap={8} align="center">
-              <Input
-                placeholder="货源链接"
-                value={source.url}
-                onChange={(e) => updateSourceRow(source.id, { url: e.target.value })}
-                style={{ flex: 1 }}
-              />
-              <InputNumber
-                min={1}
-                precision={0}
-                value={source.quantity}
-                onChange={(value) => updateSourceRow(source.id, { quantity: value || 1 })}
-                style={{ width: 90 }}
-                placeholder="数量"
-              />
-              <Input
-                placeholder="备注"
-                value={source.remark}
-                onChange={(e) => updateSourceRow(source.id, { remark: e.target.value })}
-                style={{ width: 160 }}
-              />
-              <Button danger type="text" icon={<DeleteOutlined />} onClick={() => handleRemoveSource(source.id)} />
-            </Flex>
-          ))}
-          <Button icon={<PlusOutlined />} onClick={handleAddSource}>
-            新增货源
-          </Button>
-        </Flex>
-      </Modal>
+        onSave={handleSaveSources}
+      />
 
-      <Modal
-        title={`选择货源${shipSourceProduct?.title ? ` - ${shipSourceProduct.title}` : ''}`}
+      <ShippingSourceModal
         open={shipSourceModalOpen}
+        product={shipSourceProduct}
+        sources={shipSourceProduct ? productSources[shipSourceProduct.product_id] || [] : []}
         onCancel={() => setShipSourceModalOpen(false)}
-        footer={null}
-        width={760}
-        destroyOnHidden
-      >
-        <Flex vertical gap={8}>
-          {(shipSourceProduct ? productSources[shipSourceProduct.product_id] || [] : []).map(source => (
-            <Flex key={source.id} gap={8} align="center" style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <Text ellipsis style={{ display: 'block' }} title={source.url}>{source.url}</Text>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  数量: {source.quantity}{source.remark ? ` ｜ ${source.remark}` : ''}
-                </Text>
-              </div>
-              <Button
-                size="small"
-                type="primary"
-                icon={<SendOutlined />}
-                onClick={() => openExternal(source.url)}
-              >
-                打开链接
-              </Button>
-            </Flex>
-          ))}
-          {shipSourceProduct && (productSources[shipSourceProduct.product_id] || []).length === 0 && (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无可用货源" />
-          )}
-        </Flex>
-      </Modal>
+        onOpenShipping={handleOpenShippingSession}
+      />
     </div>
   );
 };

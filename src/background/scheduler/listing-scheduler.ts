@@ -1,15 +1,12 @@
+import { getAccount, getAccounts } from '../store/account-repository';
+import { createScopedAddLog } from '../store/log-repository';
+import { getBlacklistRules, getSkipKeywords, getStatusRules } from '../store/rule-repository';
 import {
-  createScopedAddLog,
-  getAccount,
-  getAccounts,
-  getBlacklistRules,
   getGlobalSchedulers,
   getSchedulers,
-  getSkipKeywords,
-  getStatusRules,
   updateGlobalSchedulerAccountStat,
   updateScheduler,
-} from '../store';
+} from '../store/scheduler-repository';
 import type { GlobalScheduledTask, ScheduledTask } from '../../shared/types';
 import { runTaskCycle } from '../modules/task-cycle';
 import { getClient } from '../wxshop/client-registry';

@@ -1,5 +1,5 @@
 import { createWxShopClient, WxShopClient } from './client';
-import { getConfig } from '../store';
+import { getConfig } from '../store/account-repository';
 
 const clients = new Map<string, WxShopClient>();
 

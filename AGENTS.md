@@ -6,12 +6,61 @@ This is a WXT Chrome Manifest V3 extension built with React, TypeScript, and Ant
 
 - `entrypoints/background.ts` registers the extension background entrypoint.
 - `entrypoints/dashboard/` contains dashboard HTML and React bootstrapping.
+- `entrypoints/taobao-shipping.content.tsx` registers the Taobao/Tmall content script for the order shipping assistant.
 - `src/App.tsx`, `src/main.tsx`, and `src/index.css` provide the app shell and global styles.
 - `src/components/` contains shared UI such as layout, statistic cards, and account modals.
 - `src/pages/` contains feature pages, grouped by domain: `orders`, `settings`, `store-management`, `violation`, and `common-functions`.
-- `src/background/` contains extension state, message handlers, schedulers, task modules, and WeChat shop client code.
+- `src/pages/orders/` is split by responsibility: `OrdersPage.tsx` owns page state and actions, `components/` owns table columns, toolbar, detail modal, and source modals, and `order-display.ts` owns order display helpers.
+- `src/background/` contains background runtime wiring, feature handlers, schedulers, task modules, services, repositories, and WeChat shop client code.
+- `src/background/handlers.ts` should stay a thin runtime message transport. Add new IPC behavior through `src/background/router/`, `src/background/runtime-handlers/`, and `src/background/services/`.
+- `src/background/store/` contains storage repositories. Keep `src/background/store.ts` as a compatibility export layer; new background code should import specific repositories directly.
+- `src/content/taobao/` contains Taobao/Tmall page adapters and injected UI for the shipping assistant.
 - `src/hooks/`, `src/contexts/`, and `src/shared/` hold reusable hooks, providers, shared types, errors, and IPC helpers.
+- `src/shared/runtime-channels.ts` is the source of truth for runtime IPC channel argument and result types.
 - `public/` and `assets/` store static extension assets and icons.
+
+## Architecture Guidelines
+
+Background code is layered as:
+
+1. `src/background/handlers.ts`: runtime message listener only.
+2. `src/background/router/`: channel registration, feature gates, and dispatch.
+3. `src/background/runtime-handlers/`: IPC argument adaptation and feature-level entrypoints.
+4. `src/background/services/`: business workflows such as draft fetching, order queries, task runs, and violation scans.
+5. `src/background/modules/`: lower-level task algorithms.
+6. `src/background/store/`, `src/background/wxshop/`, and `src/background/global-logs/`: infrastructure.
+
+Do not add new switch cases to `handlers.ts`. Add a typed channel in `src/shared/runtime-channels.ts`, expose it through `src/shared/extension-api.ts`, then register a runtime handler in `src/background/router/create-background-router.ts`.
+
+Runtime IPC must stay typed. Every new channel must be added to `RuntimeChannels` with explicit `args` and `result` types. Frontend code should call IPC through `extensionApi`, not raw `chrome.runtime.sendMessage`, except for low-level event listeners already wrapped by shared helpers.
+
+Storage uses `chrome.storage.local` with versioned migrations. Keep data migrations in `src/background/store/migrations.ts` and bump `CURRENT_STORAGE_VERSION` in `src/background/store/core.ts` when changing persisted schema. Do not silently reshape persisted account data inside UI components or unrelated services.
+
+`wxt.config.ts` host permissions should remain grouped in `HOST_PERMISSIONS` with comments explaining the user-facing purpose of each domain. Prefer convenience for merchant workflows, but avoid unexplained broad permissions.
+
+## Shipping Assistant Guidelines
+
+The order shipping flow is session-based:
+
+- Dashboard order actions create a short-lived `ShippingSession` through background IPC.
+- Background opens the Taobao/Tmall tab and binds `tabId` to the session.
+- The content script requests the session from background and mounts the toolbar.
+- Content scripts must not read WeChat credentials or call WeChat APIs directly.
+
+Taobao/Tmall DOM access belongs behind adapters in `src/content/taobao/`. Keep selectors and page-detection logic out of toolbar components. Future automation should add stable adapter methods such as `detect`, `read`, `fill`, and `validate` before changing UI code.
+
+## Licensing Guidelines
+
+Licensing structure exists but enforcement is intentionally disabled until the service backend is ready.
+
+- Shared license types live in `src/shared/types.ts`.
+- Local license persistence lives in `src/background/store/license-repository.ts`.
+- License business logic lives in `src/background/licensing/licensing-service.ts`.
+- License IPC lives in `src/background/runtime-handlers/license-handlers.ts`.
+- Router-level feature gates live in `src/background/router/create-background-router.ts` and `src/background/router/runtime-router.ts`.
+- The settings page has an authorization status panel, but `enforcementEnabled` defaults to `false`.
+
+Do not block user workflows with license checks until the backend is implemented and the project owner explicitly enables enforcement. New paid-capable features should still be mapped to a `LicensedFeature` in the router feature map so enforcement can be turned on later without reworking every module.
 
 ## Build, Test, and Development Commands
 

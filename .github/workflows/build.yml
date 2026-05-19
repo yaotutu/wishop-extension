@@ -44,7 +44,7 @@ jobs:
           npm run zip
           mkdir -p release
           VERSION=$(node -p "require('./package.json').version")
-          cp .output/*.zip "release/wishop-extension-v${VERSION}.zip"
+          cp output/*.zip "release/wishop-extension-v${VERSION}.zip"
           echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
           echo "ZIP_PATH=release/wishop-extension-v${VERSION}.zip" >> "$GITHUB_ENV"
 
@@ -52,7 +52,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: chrome-mv3-build
-          path: .output/chrome-mv3
+          path: output/chrome-mv3
           if-no-files-found: error
 
       - name: Upload release package artifact
