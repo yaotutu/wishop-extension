@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Table, Tag, Button, Input, Select, Modal, Descriptions, Image, Spin, Empty, Alert, Flex, Typography, Space, message } from 'antd';
-import { ReloadOutlined, EyeOutlined, SendOutlined, LoginOutlined } from '@ant-design/icons';
+import { Table, Tag, Button, Input, InputNumber, Select, Modal, Descriptions, Image, Spin, Empty, Alert, Flex, Typography, Space, message } from 'antd';
+import { ReloadOutlined, EyeOutlined, SendOutlined, PlusOutlined, DeleteOutlined, LinkOutlined, ShoppingCartOutlined, CopyOutlined, PictureOutlined } from '@ant-design/icons';
 import { useOrders } from '../../hooks/useIpc';
-import type { Order, OrderStatus, OrderProductInfo, OrderSearchParams, OrderAddressInfo } from '../../shared/types';
+import { extensionApi } from '../../shared/extension-api';
+import type { Order, OrderStatus, OrderProductInfo, OrderSearchParams, OrderAddressInfo, ProductSourceItem } from '../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../shared/types';
 
 const { Text } = Typography;
@@ -59,6 +60,38 @@ const firstProduct = (order: Order): OrderProductInfo | undefined =>
 const canDecodeAddress = (status: OrderStatus): boolean =>
   [OrderStatusEnum.PendingShipment, OrderStatusEnum.PartialShipment, OrderStatusEnum.PendingReceipt].includes(status);
 
+const createEmptySource = (): ProductSourceItem => ({
+  id: crypto.randomUUID(),
+  url: '',
+  quantity: 1,
+  remark: '',
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
+});
+
+function normalizeUrl(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) return trimmed;
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
+async function convertImageBlobToPng(blob: Blob): Promise<Blob> {
+  const bitmap = await createImageBitmap(blob);
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('无法读取图片');
+  ctx.drawImage(bitmap, 0, 0);
+  bitmap.close();
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(result => {
+      if (result) resolve(result);
+      else reject(new Error('图片转换失败'));
+    }, 'image/png');
+  });
+}
+
 const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const { orders, hasMore, loading, error, clearError, fetchOrders, fetchOrderDetail, searchOrders, decodeAddress } = useOrders(accountId);
   const [activeStatus, setActiveStatus] = useState<OrderStatus | undefined>(undefined);
@@ -69,13 +102,18 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [decodedAddresses, setDecodedAddresses] = useState<Record<string, OrderAddressInfo>>({});
   const [decodingOrderIds, setDecodingOrderIds] = useState<Set<string>>(new Set());
-  const [shipModalOpen, setShipModalOpen] = useState(false);
-  const [shipUrl, setShipUrl] = useState('');
+  const [productSources, setProductSourcesState] = useState<Record<string, ProductSourceItem[]>>({});
+  const [sourceModalOpen, setSourceModalOpen] = useState(false);
+  const [sourceProduct, setSourceProduct] = useState<OrderProductInfo | null>(null);
+  const [sourceRows, setSourceRows] = useState<ProductSourceItem[]>([]);
+  const [sourceSaving, setSourceSaving] = useState(false);
+  const [shipSourceModalOpen, setShipSourceModalOpen] = useState(false);
+  const [shipSourceProduct, setShipSourceProduct] = useState<OrderProductInfo | null>(null);
   const tableAreaRef = useRef<HTMLDivElement>(null);
   const [scrollY, setScrollY] = useState(400);
 
   const openExternal = useCallback(async (url: string) => {
-    await chrome.tabs.create({ url });
+    await chrome.tabs.create({ url: normalizeUrl(url) });
   }, []);
 
   useEffect(() => {
@@ -94,7 +132,13 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   useEffect(() => {
     if (accountId) {
       setActiveStatus(undefined);
+      setProductSourcesState({});
       fetchOrders();
+      extensionApi.productSources.list(accountId)
+        .then(bindings => {
+          setProductSourcesState(Object.fromEntries(bindings.map(binding => [binding.productId, binding.sources])));
+        })
+        .catch((err: Error) => message.error(`加载货源失败: ${err.message}`));
     }
   }, [accountId, fetchOrders]);
 
@@ -143,6 +187,86 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     navigator.clipboard.writeText(text).then(() => message.success('地址已复制')).catch(() => {});
   }, []);
 
+  const handleCopyText = useCallback((text: string | undefined, label: string) => {
+    const value = text?.trim();
+    if (!value) {
+      message.warning(`暂无${label}`);
+      return;
+    }
+    navigator.clipboard.writeText(value).then(() => message.success(`${label}已复制`)).catch(() => message.error(`复制${label}失败`));
+  }, []);
+
+  const handleCopyImage = useCallback(async (imageUrl?: string) => {
+    const url = imageUrl?.trim();
+    if (!url) {
+      message.warning('暂无商品图片');
+      return;
+    }
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`图片下载失败: ${response.status}`);
+      const blob = await response.blob();
+      const pngBlob = blob.type === 'image/png' ? blob : await convertImageBlobToPng(blob);
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
+      message.success('图片已复制');
+    } catch {
+      await navigator.clipboard.writeText(url);
+      message.warning('图片复制受限，已复制图片链接');
+    }
+  }, []);
+
+  const syncProductSources = useCallback((productId: string, sources: ProductSourceItem[]) => {
+    setProductSourcesState(prev => {
+      const next = { ...prev };
+      if (sources.length > 0) next[productId] = sources;
+      else delete next[productId];
+      return next;
+    });
+  }, []);
+
+  const openSourceManager = useCallback((product: OrderProductInfo) => {
+    setSourceProduct(product);
+    const sources = (productSources[product.product_id] || []).map(source => ({ ...source }));
+    setSourceRows(sources.length > 0 ? sources : [createEmptySource()]);
+    setSourceModalOpen(true);
+  }, [productSources]);
+
+  const openShipSources = useCallback((product: OrderProductInfo) => {
+    setShipSourceProduct(product);
+    setShipSourceModalOpen(true);
+  }, []);
+
+  const updateSourceRow = useCallback((sourceId: string, patch: Partial<ProductSourceItem>) => {
+    setSourceRows(prev => prev.map(source => source.id === sourceId ? { ...source, ...patch, updatedAt: Date.now() } : source));
+  }, []);
+
+  const handleAddSource = useCallback(() => {
+    setSourceRows(prev => [...prev, createEmptySource()]);
+  }, []);
+
+  const handleRemoveSource = useCallback((sourceId: string) => {
+    setSourceRows(prev => {
+      const next = prev.filter(source => source.id !== sourceId);
+      return next.length > 0 ? next : [createEmptySource()];
+    });
+  }, []);
+
+  const handleSaveSources = useCallback(async () => {
+    if (!sourceProduct) return;
+    const sourcesToSave = sourceRows.filter(source => source.url.trim());
+    setSourceSaving(true);
+    try {
+      const binding = await extensionApi.productSources.set(accountId, sourceProduct.product_id, sourcesToSave);
+      syncProductSources(sourceProduct.product_id, binding.sources);
+      setSourceModalOpen(false);
+      message.success('货源已保存');
+    } catch (err: any) {
+      message.error(`保存货源失败: ${err.message}`);
+    } finally {
+      setSourceSaving(false);
+    }
+  }, [accountId, sourceProduct, sourceRows, syncProductSources]);
+
   const columns = [
     {
       title: '订单信息',
@@ -156,9 +280,66 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
               <Image src={product.thumb_img} width={50} height={50} alt={product.title || '商品图片'} style={{ borderRadius: 4, objectFit: 'cover', flexShrink: 0 }} preview={false} />
             )}
             <div style={{ minWidth: 0, flex: 1 }}>
-              <Text type="secondary" style={{ fontSize: 12 }}>{record.order_id}</Text>
+              <Space size={4} align="center">
+                <Text
+                  type="secondary"
+                  onClick={() => handleCopyText(record.order_id, '订单号')}
+                  style={{ fontSize: 12, cursor: 'pointer' }}
+                >
+                  {record.order_id}
+                </Text>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<CopyOutlined />}
+                  onClick={() => handleCopyText(record.order_id, '订单号')}
+                  style={{ width: 18, height: 18, minWidth: 18, padding: 0 }}
+                />
+              </Space>
               <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{product?.title || '-'}</div>
-              {product?.sku_code && <Text type="secondary" style={{ fontSize: 12 }}>编码: {product.sku_code}</Text>}
+              <Space size={4} style={{ marginTop: 2 }}>
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<PictureOutlined />}
+                  disabled={!product?.thumb_img}
+                  onClick={() => handleCopyImage(product?.thumb_img)}
+                  style={{ padding: 0, height: 20, fontSize: 12 }}
+                >
+                  复制图片
+                </Button>
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<CopyOutlined />}
+                  disabled={!product?.title}
+                  onClick={() => handleCopyText(product?.title, '标题')}
+                  style={{ padding: 0, height: 20, fontSize: 12 }}
+                >
+                  复制标题
+                </Button>
+              </Space>
+              <br />
+              {product?.sku_code && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
+                  <Text
+                    type="secondary"
+                    onClick={() => handleCopyText(product.sku_code, 'SKU')}
+                    style={{ fontSize: 12, cursor: 'pointer', maxWidth: 145 }}
+                    ellipsis
+                    title={`编码: ${product.sku_code}`}
+                  >
+                    编码: {product.sku_code}
+                  </Text>
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<CopyOutlined />}
+                    onClick={() => handleCopyText(product.sku_code, 'SKU')}
+                    style={{ width: 18, height: 18, minWidth: 18, padding: 0, flexShrink: 0 }}
+                  />
+                </span>
+              )}
               <br />
               <Text type="secondary" style={{ fontSize: 12 }}>下单: {formatTime(record.create_time)}</Text>
             </div>
@@ -176,7 +357,25 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         const specs = product.sku_attrs?.map(a => a.attr_value).join(', ') || '-';
         return (
           <div>
-            <div style={{ fontSize: 12, color: '#333' }}>{specs}</div>
+            <Flex align="center" gap={4}>
+              <Text
+                onClick={() => handleCopyText(specs === '-' ? undefined : specs, 'SKU')}
+                style={{ fontSize: 12, color: '#333', cursor: specs === '-' ? 'default' : 'pointer', maxWidth: 105 }}
+                ellipsis
+                title={specs}
+              >
+                {specs}
+              </Text>
+              {specs !== '-' && (
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<CopyOutlined />}
+                  onClick={() => handleCopyText(specs, 'SKU')}
+                  style={{ width: 18, height: 18, minWidth: 18, padding: 0, flexShrink: 0 }}
+                />
+              )}
+            </Flex>
             <Text type="secondary" style={{ fontSize: 12 }}>x{product.sku_cnt}</Text>
           </div>
         );
@@ -225,14 +424,6 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
               <div style={{ fontSize: 12, color: '#fa8c16' }}>
                 发货时限: {formatTime(product.delivery_deadline)}
               </div>
-            )}
-            {record.status === OrderStatusEnum.PendingShipment && (
-              <Button size="small" type="primary" icon={<SendOutlined />} style={{ marginTop: 4, fontSize: 12 }} onClick={() => {
-                setShipModalOpen(true);
-                setShipUrl('');
-              }}>
-                淘宝发货
-              </Button>
             )}
             {(record.status === OrderStatusEnum.PendingReceipt || record.status === OrderStatusEnum.Completed) && deliveryInfos?.length > 0 && (
               <>
@@ -316,12 +507,32 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     {
       title: '操作',
       key: 'action',
-      width: 70,
-      render: (_: unknown, record: Order) => (
-        <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record.order_id)}>
-          详情
-        </Button>
-      ),
+      width: 120,
+      render: (_: unknown, record: Order) => {
+        const product = firstProduct(record);
+        const sources = product?.product_id ? productSources[product.product_id] || [] : [];
+        return (
+          <Flex vertical align="flex-start">
+            <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record.order_id)}>
+              详情
+            </Button>
+            <Button
+              type="link"
+              size="small"
+              icon={<LinkOutlined />}
+              disabled={!product?.product_id}
+              onClick={() => product && openSourceManager(product)}
+            >
+              管理货源
+            </Button>
+            {product?.product_id && sources.length > 0 && (
+              <Button type="link" size="small" icon={<ShoppingCartOutlined />} onClick={() => openShipSources(product)}>
+                去发货
+              </Button>
+            )}
+          </Flex>
+        );
+      },
     },
   ];
 
@@ -348,8 +559,6 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
             />
           </Space.Compact>
           <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={() => fetchOrders(activeStatus)}>刷新</Button>
-          <Button size="small" icon={<LoginOutlined />} onClick={() => openExternal('https://member1.taobao.com/member/fresh/account_security.htm')}>淘宝登录</Button>
-          <Button size="small" icon={<SendOutlined />} onClick={() => openExternal('https://detail.tmall.com/item.htm?id=771068071648')}>发货测试</Button>
           <Text type="secondary" style={{ fontSize: 12 }}>仅显示近7天订单</Text>
         </Flex>
         {error && (
@@ -516,30 +725,78 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       </Modal>
 
       <Modal
-        title="淘宝发货"
-        open={shipModalOpen}
-        onCancel={() => setShipModalOpen(false)}
-        onOk={() => {
-          if (shipUrl.trim()) {
-            openExternal(shipUrl.trim());
-            setShipModalOpen(false);
-          }
-        }}
-        okText="去发货"
-        okButtonProps={{ disabled: !shipUrl.trim() }}
+        title={`管理货源${sourceProduct?.title ? ` - ${sourceProduct.title}` : ''}`}
+        open={sourceModalOpen}
+        onCancel={() => setSourceModalOpen(false)}
+        onOk={handleSaveSources}
+        okText="保存"
+        confirmLoading={sourceSaving}
+        width={780}
         destroyOnHidden
       >
-        <Input
-          placeholder="粘贴淘宝商品链接"
-          value={shipUrl}
-          onChange={(e) => setShipUrl(e.target.value)}
-          onPressEnter={() => {
-            if (shipUrl.trim()) {
-              openExternal(shipUrl.trim());
-              setShipModalOpen(false);
-            }
-          }}
-        />
+        <Flex vertical gap={10}>
+          {sourceRows.map(source => (
+            <Flex key={source.id} gap={8} align="center">
+              <Input
+                placeholder="货源链接"
+                value={source.url}
+                onChange={(e) => updateSourceRow(source.id, { url: e.target.value })}
+                style={{ flex: 1 }}
+              />
+              <InputNumber
+                min={1}
+                precision={0}
+                value={source.quantity}
+                onChange={(value) => updateSourceRow(source.id, { quantity: value || 1 })}
+                style={{ width: 90 }}
+                placeholder="数量"
+              />
+              <Input
+                placeholder="备注"
+                value={source.remark}
+                onChange={(e) => updateSourceRow(source.id, { remark: e.target.value })}
+                style={{ width: 160 }}
+              />
+              <Button danger type="text" icon={<DeleteOutlined />} onClick={() => handleRemoveSource(source.id)} />
+            </Flex>
+          ))}
+          <Button icon={<PlusOutlined />} onClick={handleAddSource}>
+            新增货源
+          </Button>
+        </Flex>
+      </Modal>
+
+      <Modal
+        title={`选择货源${shipSourceProduct?.title ? ` - ${shipSourceProduct.title}` : ''}`}
+        open={shipSourceModalOpen}
+        onCancel={() => setShipSourceModalOpen(false)}
+        footer={null}
+        width={760}
+        destroyOnHidden
+      >
+        <Flex vertical gap={8}>
+          {(shipSourceProduct ? productSources[shipSourceProduct.product_id] || [] : []).map(source => (
+            <Flex key={source.id} gap={8} align="center" style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Text ellipsis style={{ display: 'block' }} title={source.url}>{source.url}</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  数量: {source.quantity}{source.remark ? ` ｜ ${source.remark}` : ''}
+                </Text>
+              </div>
+              <Button
+                size="small"
+                type="primary"
+                icon={<SendOutlined />}
+                onClick={() => openExternal(source.url)}
+              >
+                打开链接
+              </Button>
+            </Flex>
+          ))}
+          {shipSourceProduct && (productSources[shipSourceProduct.product_id] || []).length === 0 && (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无可用货源" />
+          )}
+        </Flex>
       </Modal>
     </div>
   );

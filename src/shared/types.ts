@@ -90,6 +90,20 @@ export interface Account {
 
 export type AddLogFn = (log: Omit<LogEntry, 'id' | 'timestamp'>) => void;
 
+export interface ProductSourceItem {
+  id: string;
+  url: string;
+  quantity: number;
+  remark: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ProductSourceBinding {
+  productId: string;
+  sources: ProductSourceItem[];
+}
+
 // Order types
 
 export enum OrderStatus {
@@ -249,5 +263,6 @@ export interface FullAccount {
   taskConfig: TaskConfig;
   logs: LogEntry[];
   violationWords: string[];
+  productSources: ProductSourceBinding[];
   createdAt: number;
 }

@@ -7,6 +7,7 @@ import type {
   Order,
   OrderAddressInfo,
   OrderListParams,
+  ProductSourceItem,
   OrderSearchParams,
   OrderStatus,
   ScheduledTask,
@@ -31,6 +32,7 @@ import {
   getDefaultStatusRules,
   getGlobalSchedulers,
   getLogs,
+  getProductSources,
   getSchedulers,
   getSkipKeywords,
   getStatusRules,
@@ -38,10 +40,12 @@ import {
   getViolationWords,
   removeAccount,
   removeGlobalScheduler,
+  removeProductSource,
   removeScheduler,
   setActiveAccountId,
   setBlacklistRules,
   setConfig,
+  setProductSources,
   setSkipKeywords,
   setStatusRules,
   setTaskConfig,
@@ -145,6 +149,13 @@ async function handleMessage(channel: string, args: unknown[]): Promise<unknown>
       return searchOrders(args[0] as string, args[1] as OrderSearchParams);
     case 'orders:decodeAddress':
       return (await getClient(args[0] as string)).decodeOrderSensitiveInfo(args[1] as string);
+
+    case 'productSources:list':
+      return getProductSources(args[0] as string);
+    case 'productSources:set':
+      return setProductSources(args[0] as string, args[1] as string, args[2] as ProductSourceItem[]);
+    case 'productSources:remove':
+      return removeProductSource(args[0] as string, args[1] as string, args[2] as string);
 
     case 'quota:get':
       return (await getClient(args[0] as string)).getAuditQuota();

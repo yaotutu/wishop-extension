@@ -4,9 +4,11 @@ import packageJson from './package.json';
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
+  outDir: 'output',
   webExt: {
     chromiumProfile: '.wxt/chrome-profile',
     keepProfileChanges: true,
+    chromiumArgs: ['--user-data-dir=./wxt-chrome-data'],
   },
   manifest: {
     name: '微店管家',

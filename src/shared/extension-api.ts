@@ -9,6 +9,8 @@ import type {
   OrderAddressInfo,
   OrderSearchParams,
   OrderStatus,
+  ProductSourceBinding,
+  ProductSourceItem,
   QuotaResult,
   ScheduledTask,
   StatusRule,
@@ -59,6 +61,11 @@ export const extensionApi = {
     detail: (accountId: string, orderId: string): Promise<Order> => invoke('orders:detail', accountId, orderId),
     search: (accountId: string, params: OrderSearchParams): Promise<{ orders: Order[]; hasMore: boolean }> => invoke('orders:search', accountId, params),
     decodeAddress: (accountId: string, orderId: string): Promise<OrderAddressInfo> => invoke('orders:decodeAddress', accountId, orderId),
+  },
+  productSources: {
+    list: (accountId: string): Promise<ProductSourceBinding[]> => invoke('productSources:list', accountId),
+    set: (accountId: string, productId: string, sources: ProductSourceItem[]): Promise<ProductSourceBinding> => invoke('productSources:set', accountId, productId, sources),
+    remove: (accountId: string, productId: string, sourceId: string): Promise<ProductSourceBinding> => invoke('productSources:remove', accountId, productId, sourceId),
   },
   quota: {
     get: (accountId: string): Promise<QuotaResult> => invoke('quota:get', accountId),
