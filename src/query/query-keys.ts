@@ -45,9 +45,10 @@ export const queryKeys = {
     list: ['notifications'] as const,
     preference: ['notifications', 'preference'] as const,
   },
-  scheduler: {
-    list: (accountId: string) => ['scheduler', accountId] as const,
-    globalList: ['globalScheduler'] as const,
+  scheduledJobs: {
+    list: ['scheduledJobs'] as const,
+    accountListing: (accountId: string) => ['scheduledJobs', 'listing', 'account', accountId] as const,
+    globalListing: ['scheduledJobs', 'listing', 'global'] as const,
   },
   taskConfig: {
     item: (accountId: string) => ['taskConfig', accountId] as const,

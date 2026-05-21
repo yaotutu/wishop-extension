@@ -5,7 +5,6 @@ import type {
   CreateShippingSessionInput,
   DeliveryCompanyOption,
   DraftProduct,
-  GlobalScheduledTask,
   LicenseActivationInput,
   LicenseState,
   LogEntry,
@@ -23,7 +22,7 @@ import type {
   ProductSourceItem,
   PurchaseLookupSession,
   QuotaResult,
-  ScheduledTask,
+  ScheduledJob,
   ShippingSession,
   StatusRule,
   TaobaoWorkspaceRole,
@@ -163,17 +162,12 @@ export const extensionApi = {
     onPreferenceChanged: (callback: (preference: NotificationPreference) => void) =>
       onRuntimeEvent('notification:preferenceChanged', callback),
   },
-  scheduler: {
-    list: (accountId: string): Promise<ScheduledTask[]> => invoke('scheduler:list', accountId),
-    add: (accountId: string, task: Omit<ScheduledTask, 'id' | 'lastRunDate' | 'todayListedCount'>): Promise<ScheduledTask> => invoke('scheduler:add', accountId, task),
-    update: (accountId: string, taskId: string, patch: Partial<ScheduledTask>): Promise<void> => invoke('scheduler:update', accountId, taskId, patch),
-    remove: (accountId: string, taskId: string): Promise<void> => invoke('scheduler:remove', accountId, taskId),
-  },
-  globalScheduler: {
-    list: (): Promise<GlobalScheduledTask[]> => invoke('globalScheduler:list'),
-    add: (task: Omit<GlobalScheduledTask, 'id' | 'accountStats'>): Promise<GlobalScheduledTask> => invoke('globalScheduler:add', task),
-    update: (taskId: string, patch: Partial<GlobalScheduledTask>): Promise<void> => invoke('globalScheduler:update', taskId, patch),
-    remove: (taskId: string): Promise<void> => invoke('globalScheduler:remove', taskId),
+  scheduledJobs: {
+    list: (): Promise<ScheduledJob[]> => invoke('scheduledJobs:list'),
+    add: (job: Omit<ScheduledJob, 'id' | 'stats' | 'createdAt' | 'updatedAt'>): Promise<ScheduledJob> =>
+      invoke('scheduledJobs:add', job),
+    update: (jobId: string, patch: Partial<ScheduledJob>): Promise<void> => invoke('scheduledJobs:update', jobId, patch),
+    remove: (jobId: string): Promise<void> => invoke('scheduledJobs:remove', jobId),
   },
   taskConfig: {
     get: (accountId: string): Promise<TaskConfig> => invoke('taskConfig:get', accountId),

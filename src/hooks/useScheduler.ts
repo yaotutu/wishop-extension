@@ -1,8 +1,12 @@
 import { useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { extensionApi } from '../shared/extension-api';
-import type { GlobalScheduledTask, ScheduledTask, TaskConfig } from '../shared/types';
+import type { ScheduledJob, TaskConfig } from '../shared/types';
 import { queryKeys } from '../query/query-keys';
+
+export type ListingScheduledJob = ScheduledJob<TaskConfig>;
+
+type ListingJobInput = Omit<ListingScheduledJob, 'id' | 'stats' | 'createdAt' | 'updatedAt'>;
 
 const defaultTaskConfig: TaskConfig = {
   listUnreviewed: true,
@@ -10,54 +14,63 @@ const defaultTaskConfig: TaskConfig = {
   autoDeleteFailed: true,
 };
 
+function isListingJob(job: ScheduledJob): job is ListingScheduledJob {
+  return job.jobType === 'listing.submitDrafts';
+}
+
 export function useSchedulers(accountId: string) {
   const queryClient = useQueryClient();
   const query = useQuery({
-    queryKey: queryKeys.scheduler.list(accountId),
+    queryKey: queryKeys.scheduledJobs.accountListing(accountId),
     enabled: !!accountId,
-    queryFn: () => extensionApi.scheduler.list(accountId),
+    queryFn: async () => (await extensionApi.scheduledJobs.list())
+      .filter(isListingJob)
+      .filter(job => job.scope === 'account' && job.accountId === accountId),
   });
 
   const fetchTasks = useCallback(async () => {
     if (!accountId) return [];
     return queryClient.fetchQuery({
-      queryKey: queryKeys.scheduler.list(accountId),
-      queryFn: () => extensionApi.scheduler.list(accountId),
+      queryKey: queryKeys.scheduledJobs.accountListing(accountId),
+      queryFn: async () => (await extensionApi.scheduledJobs.list())
+        .filter(isListingJob)
+        .filter(job => job.scope === 'account' && job.accountId === accountId),
     });
   }, [accountId, queryClient]);
 
   const addMutation = useMutation({
-    mutationFn: (task: { name: string; enabled: boolean; cronExpression: string; dailyLimit: number; taskConfig: TaskConfig }) =>
-      extensionApi.scheduler.add(accountId, task),
-    onSuccess: (newTask) => {
-      queryClient.setQueryData<ScheduledTask[]>(queryKeys.scheduler.list(accountId), (current = []) => [...current, newTask]);
+    mutationFn: (job: ListingJobInput) => extensionApi.scheduledJobs.add(job),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.list });
+      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.accountListing(accountId) });
     },
   });
   const updateMutation = useMutation({
-    mutationFn: ({ taskId, patch }: { taskId: string; patch: Partial<ScheduledTask> }) => extensionApi.scheduler.update(accountId, taskId, patch),
-    onSuccess: (_result, { taskId, patch }) => {
-      queryClient.setQueryData<ScheduledTask[]>(queryKeys.scheduler.list(accountId), (current = []) =>
-        current.map(t => t.id === taskId ? { ...t, ...patch } : t),
-      );
+    mutationFn: ({ jobId, patch }: { jobId: string; patch: Partial<ListingScheduledJob> }) =>
+      extensionApi.scheduledJobs.update(jobId, patch as Partial<ScheduledJob>),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.list });
+      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.accountListing(accountId) });
     },
   });
   const removeMutation = useMutation({
-    mutationFn: (taskId: string) => extensionApi.scheduler.remove(accountId, taskId),
-    onSuccess: (_result, taskId) => {
-      queryClient.setQueryData<ScheduledTask[]>(queryKeys.scheduler.list(accountId), (current = []) => current.filter(t => t.id !== taskId));
+    mutationFn: (jobId: string) => extensionApi.scheduledJobs.remove(jobId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.list });
+      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.accountListing(accountId) });
     },
   });
 
-  const addTask = useCallback(async (task: { name: string; enabled: boolean; cronExpression: string; dailyLimit: number; taskConfig: TaskConfig }): Promise<ScheduledTask> => {
-    return addMutation.mutateAsync(task);
+  const addTask = useCallback(async (job: ListingJobInput): Promise<ScheduledJob> => {
+    return addMutation.mutateAsync(job);
   }, [addMutation]);
 
-  const updateTask = useCallback(async (taskId: string, patch: Partial<ScheduledTask>) => {
-    await updateMutation.mutateAsync({ taskId, patch });
+  const updateTask = useCallback(async (jobId: string, patch: Partial<ListingScheduledJob>) => {
+    await updateMutation.mutateAsync({ jobId, patch });
   }, [updateMutation]);
 
-  const removeTask = useCallback(async (taskId: string) => {
-    await removeMutation.mutateAsync(taskId);
+  const removeTask = useCallback(async (jobId: string) => {
+    await removeMutation.mutateAsync(jobId);
   }, [removeMutation]);
 
   return { tasks: query.data ?? [], loading: query.isLoading, fetchTasks, addTask, updateTask, removeTask, defaultTaskConfig };
@@ -66,46 +79,52 @@ export function useSchedulers(accountId: string) {
 export function useGlobalSchedulers() {
   const queryClient = useQueryClient();
   const query = useQuery({
-    queryKey: queryKeys.scheduler.globalList,
-    queryFn: () => extensionApi.globalScheduler.list(),
+    queryKey: queryKeys.scheduledJobs.globalListing,
+    queryFn: async () => (await extensionApi.scheduledJobs.list())
+      .filter(isListingJob)
+      .filter(job => job.scope === 'global'),
   });
 
   const fetchTasks = useCallback(async () => queryClient.fetchQuery({
-    queryKey: queryKeys.scheduler.globalList,
-    queryFn: () => extensionApi.globalScheduler.list(),
+    queryKey: queryKeys.scheduledJobs.globalListing,
+    queryFn: async () => (await extensionApi.scheduledJobs.list())
+      .filter(isListingJob)
+      .filter(job => job.scope === 'global'),
   }), [queryClient]);
 
   const addMutation = useMutation({
-    mutationFn: (task: Omit<GlobalScheduledTask, 'id' | 'accountStats'>) => extensionApi.globalScheduler.add(task),
-    onSuccess: (newTask) => {
-      queryClient.setQueryData<GlobalScheduledTask[]>(queryKeys.scheduler.globalList, (current = []) => [...current, newTask]);
+    mutationFn: (job: ListingJobInput) => extensionApi.scheduledJobs.add(job),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.list });
+      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.globalListing });
     },
   });
   const updateMutation = useMutation({
-    mutationFn: ({ taskId, patch }: { taskId: string; patch: Partial<GlobalScheduledTask> }) => extensionApi.globalScheduler.update(taskId, patch),
-    onSuccess: (_result, { taskId, patch }) => {
-      queryClient.setQueryData<GlobalScheduledTask[]>(queryKeys.scheduler.globalList, (current = []) =>
-        current.map(t => t.id === taskId ? { ...t, ...patch } : t),
-      );
+    mutationFn: ({ jobId, patch }: { jobId: string; patch: Partial<ListingScheduledJob> }) =>
+      extensionApi.scheduledJobs.update(jobId, patch as Partial<ScheduledJob>),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.list });
+      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.globalListing });
     },
   });
   const removeMutation = useMutation({
-    mutationFn: (taskId: string) => extensionApi.globalScheduler.remove(taskId),
-    onSuccess: (_result, taskId) => {
-      queryClient.setQueryData<GlobalScheduledTask[]>(queryKeys.scheduler.globalList, (current = []) => current.filter(t => t.id !== taskId));
+    mutationFn: (jobId: string) => extensionApi.scheduledJobs.remove(jobId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.list });
+      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.globalListing });
     },
   });
 
-  const addTask = useCallback(async (task: Omit<GlobalScheduledTask, 'id' | 'accountStats'>): Promise<GlobalScheduledTask> => {
-    return addMutation.mutateAsync(task);
+  const addTask = useCallback(async (job: ListingJobInput): Promise<ScheduledJob> => {
+    return addMutation.mutateAsync(job);
   }, [addMutation]);
 
-  const updateTask = useCallback(async (taskId: string, patch: Partial<GlobalScheduledTask>) => {
-    await updateMutation.mutateAsync({ taskId, patch });
+  const updateTask = useCallback(async (jobId: string, patch: Partial<ListingScheduledJob>) => {
+    await updateMutation.mutateAsync({ jobId, patch });
   }, [updateMutation]);
 
-  const removeTask = useCallback(async (taskId: string) => {
-    await removeMutation.mutateAsync(taskId);
+  const removeTask = useCallback(async (jobId: string) => {
+    await removeMutation.mutateAsync(jobId);
   }, [removeMutation]);
 
   return { tasks: query.data ?? [], loading: query.isLoading, fetchTasks, addTask, updateTask, removeTask };

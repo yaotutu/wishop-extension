@@ -6,7 +6,7 @@ import { useTaskConfig, useLogs, useQuota, useSchedulers, useGlobalSchedulers } 
 import { useBlacklistRules } from '../../hooks/useBlacklistRules';
 import { useSkipKeywords } from '../../hooks/useSkipKeywords';
 import { useStatusRules } from '../../hooks/useStatusRules';
-import type { Account, TaskConfig, TaskCycleResult, LogEntry, ScheduledTask, GlobalScheduledTask, BlacklistRule, ErrorCodeSummary, StatusRule } from '../../shared/types';
+import type { Account, TaskConfig, TaskCycleResult, LogEntry, ScheduledJob, BlacklistRule, StatusRule } from '../../shared/types';
 import {
   cronPresets,
   cronToLabel,
@@ -33,6 +33,18 @@ const defaultGlobalTaskConfig: TaskConfig = {
   autoDeleteFailed: true,
 };
 
+type ListingScheduledJob = ScheduledJob<TaskConfig>;
+
+interface ListingJobFormData {
+  name: string;
+  cronExpression: string;
+  dailyLimit?: number;
+  staggerMinutes?: number;
+  enabled: boolean;
+  excludedAccountIds: string[];
+  taskConfig: TaskConfig;
+}
+
 const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account' }) => {
   const { taskConfig, fetchTaskConfig, saveTaskConfig } = useTaskConfig(accountId);
   const { logs, fetchLogs, clearLogs } = useLogs(accountId);
@@ -47,9 +59,9 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
   const [localListedCountsByAccountId, setLocalListedCountsByAccountId] = useState<Record<string, number>>({});
   const [schedulerOpen, setSchedulerOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState<ScheduledTask | null>(null);
+  const [editingTask, setEditingTask] = useState<ListingScheduledJob | null>(null);
   const [globalEditModalOpen, setGlobalEditModalOpen] = useState(false);
-  const [editingGlobalTask, setEditingGlobalTask] = useState<GlobalScheduledTask | null>(null);
+  const [editingGlobalTask, setEditingGlobalTask] = useState<ListingScheduledJob | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     cronExpression: '0 9 * * *',
@@ -57,7 +69,7 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
     enabled: true,
     taskConfig: { ...defaultTaskConfig },
   });
-  const [globalFormData, setGlobalFormData] = useState<Omit<GlobalScheduledTask, 'id' | 'accountStats'>>({
+  const [globalFormData, setGlobalFormData] = useState<ListingJobFormData>({
     name: '每日全账号提审',
     cronExpression: '0 9 * * *',
     staggerMinutes: 3,
@@ -201,7 +213,7 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
     setGlobalEditModalOpen(true);
   };
 
-  const openEditGlobalModal = (task: GlobalScheduledTask) => {
+  const openEditGlobalModal = (task: ListingScheduledJob) => {
     setEditingGlobalTask(task);
     setGlobalTimeInput(cronToTimeInput(task.cronExpression));
     setGlobalFormData({
@@ -212,20 +224,21 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
       excludedAccountIds: task.excludedAccountIds || [],
       taskConfig: {
         ...defaultGlobalTaskConfig,
-        listUnreviewedQuantity: task.taskConfig?.listUnreviewedQuantity || defaultGlobalTaskConfig.listUnreviewedQuantity,
+        ...task.payload,
+        listUnreviewedQuantity: task.payload?.listUnreviewedQuantity || defaultGlobalTaskConfig.listUnreviewedQuantity,
       },
     });
     setGlobalEditModalOpen(true);
   };
 
-  const openEditModal = (task: ScheduledTask) => {
+  const openEditModal = (task: ListingScheduledJob) => {
     setEditingTask(task);
     setFormData({
       name: task.name,
       cronExpression: task.cronExpression,
-      dailyLimit: task.dailyLimit,
+      dailyLimit: task.dailyLimit || 0,
       enabled: task.enabled,
-      taskConfig: { ...task.taskConfig },
+      taskConfig: { ...task.payload },
     });
     setEditModalOpen(true);
   };
@@ -241,11 +254,21 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
         cronExpression: formData.cronExpression,
         dailyLimit: formData.dailyLimit,
         enabled: formData.enabled,
-        taskConfig: formData.taskConfig,
+        payload: formData.taskConfig,
       });
       message.success('任务已更新');
     } else {
-      await addTask(formData);
+      await addTask({
+        name: formData.name,
+        enabled: formData.enabled,
+        module: 'listing',
+        jobType: 'listing.submitDrafts',
+        scope: 'account',
+        accountId,
+        cronExpression: formData.cronExpression,
+        dailyLimit: formData.dailyLimit,
+        payload: formData.taskConfig,
+      });
       message.success('任务已创建');
     }
     setEditModalOpen(false);
@@ -277,10 +300,28 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
       },
     };
     if (editingGlobalTask) {
-      await updateGlobalTask(editingGlobalTask.id, normalizedTask);
+      await updateGlobalTask(editingGlobalTask.id, {
+        name: normalizedTask.name,
+        enabled: normalizedTask.enabled,
+        cronExpression: normalizedTask.cronExpression,
+        staggerMinutes: normalizedTask.staggerMinutes,
+        excludedAccountIds: normalizedTask.excludedAccountIds,
+        payload: normalizedTask.taskConfig,
+      });
       message.success('全账号任务已更新');
     } else {
-      await addGlobalTask(normalizedTask);
+      await addGlobalTask({
+        name: normalizedTask.name,
+        enabled: normalizedTask.enabled,
+        module: 'listing',
+        jobType: 'listing.submitDrafts',
+        scope: 'global',
+        cronExpression: normalizedTask.cronExpression,
+        staggerMinutes: normalizedTask.staggerMinutes,
+        excludedAccountIds: normalizedTask.excludedAccountIds,
+        payload: normalizedTask.taskConfig,
+        accountStats: {},
+      });
       message.success('全账号任务已创建');
     }
     setGlobalEditModalOpen(false);
@@ -749,7 +790,7 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 {globalTasks.map(task => {
-                  const includedCount = accounts.filter(account => !task.excludedAccountIds.includes(account.id)).length;
+                  const includedCount = accounts.filter(account => !(task.excludedAccountIds || []).includes(account.id)).length;
                   return (
                     <div key={task.id} style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: 16, borderBottom: '1px solid #f5f5f5' }}>
                       <Switch checked={task.enabled} onChange={checked => updateGlobalTask(task.id, { enabled: checked })} />
@@ -758,7 +799,7 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
                           <span style={{ fontWeight: 600 }}>{task.name}</span>
                           <Tag color={task.enabled ? 'green' : 'default'}>{task.enabled ? '已启用' : '已停用'}</Tag>
                           <Tag color="blue">{cronToLabel(task.cronExpression)}</Tag>
-                          <Tag>错峰 {task.staggerMinutes} 分钟/账号</Tag>
+                          <Tag>错峰 {task.staggerMinutes || 0} 分钟/账号</Tag>
                         </Space>
                         <div style={{ marginTop: 8, color: '#666', fontSize: 13 }}>
                           覆盖 {includedCount}/{accounts.length} 个账号，预计 {getGlobalTaskWindowLabel(task, includedCount)} 依次启动
@@ -927,7 +968,7 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
                 <span style={{ fontWeight: 500, fontSize: 14, minWidth: 100 }}>{task.name}</span>
                 <Tag color={task.enabled ? 'blue' : 'default'}>{cronToLabel(task.cronExpression)}</Tag>
                 <span style={{ color: '#999', fontSize: 13 }}>
-                  今日 {task.todayListedCount}{task.dailyLimit > 0 ? `/${task.dailyLimit}` : ''}
+                  今日 {task.stats.todayRunCount}{(task.dailyLimit || 0) > 0 ? `/${task.dailyLimit}` : ''}
                 </span>
                 <span style={{ flex: 1 }} />
                 <Button type="text" icon={<EditOutlined />} onClick={() => openEditModal(task)}>编辑</Button>

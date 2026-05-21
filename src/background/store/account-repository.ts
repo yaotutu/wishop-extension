@@ -19,7 +19,6 @@ export async function addAccount(name: string, config: Config): Promise<FullAcco
     id: uuidv4(),
     name,
     config,
-    schedulers: [],
     taskConfig: DEFAULT_TASK_CONFIG,
     violationWords: [],
     logs: [],

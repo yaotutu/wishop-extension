@@ -1,7 +1,6 @@
 import type {
   BlacklistRule,
   FullAccount,
-  GlobalScheduledTask,
   ScheduledJob,
   StatusRule,
   TaskConfig,
@@ -12,7 +11,6 @@ export interface StoreSchema {
   storageVersion: number;
   accounts: FullAccount[];
   activeAccountId: string;
-  globalSchedulers?: GlobalScheduledTask[];
   scheduledJobs?: ScheduledJob[];
   skipKeywords?: string[];
   blacklistRules?: BlacklistRule[];
@@ -53,7 +51,6 @@ export async function readStore(): Promise<StoreSchema> {
     'storageVersion',
     'accounts',
     'activeAccountId',
-    'globalSchedulers',
     'scheduledJobs',
     'skipKeywords',
     'blacklistRules',
@@ -64,7 +61,6 @@ export async function readStore(): Promise<StoreSchema> {
     storageVersion: typeof data.storageVersion === 'number' ? data.storageVersion : 0,
     accounts: Array.isArray(data.accounts) ? data.accounts : [],
     activeAccountId: typeof data.activeAccountId === 'string' ? data.activeAccountId : '',
-    globalSchedulers: Array.isArray(data.globalSchedulers) ? data.globalSchedulers : [],
     scheduledJobs: Array.isArray(data.scheduledJobs) ? data.scheduledJobs : [],
     skipKeywords: Array.isArray(data.skipKeywords) ? data.skipKeywords : [],
     blacklistRules: Array.isArray(data.blacklistRules) ? data.blacklistRules : undefined,
@@ -82,7 +78,6 @@ export async function writeStore(patch: Partial<StoreSchema>): Promise<void> {
 export function normalizeAccount(account: FullAccount): FullAccount {
   return {
     ...account,
-    schedulers: account.schedulers || [],
     taskConfig: account.taskConfig || DEFAULT_TASK_CONFIG,
     violationWords: account.violationWords || [],
     logs: account.logs || [],

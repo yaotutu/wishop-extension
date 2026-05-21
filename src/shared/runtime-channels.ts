@@ -7,7 +7,6 @@ import type {
   CreateShippingSessionInput,
   DeliveryCompanyOption,
   DraftProduct,
-  GlobalScheduledTask,
   LicenseActivationInput,
   LicenseState,
   LogEntry,
@@ -25,7 +24,7 @@ import type {
   ProductSourceItem,
   PurchaseLookupSession,
   QuotaResult,
-  ScheduledTask,
+  ScheduledJob,
   ShippingSession,
   StatusRule,
   TaobaoWorkspaceRole,
@@ -103,15 +102,10 @@ export interface RuntimeChannels {
   'notifications:getPreference': { args: []; result: NotificationPreference };
   'notifications:updatePreference': { args: [patch: Partial<NotificationPreference>]; result: NotificationPreference };
 
-  'scheduler:list': { args: [accountId: string]; result: ScheduledTask[] };
-  'scheduler:add': { args: [accountId: string, task: Omit<ScheduledTask, 'id' | 'lastRunDate' | 'todayListedCount'>]; result: ScheduledTask };
-  'scheduler:update': { args: [accountId: string, taskId: string, patch: Partial<ScheduledTask>]; result: void };
-  'scheduler:remove': { args: [accountId: string, taskId: string]; result: void };
-
-  'globalScheduler:list': { args: []; result: GlobalScheduledTask[] };
-  'globalScheduler:add': { args: [task: Omit<GlobalScheduledTask, 'id' | 'accountStats'>]; result: GlobalScheduledTask };
-  'globalScheduler:update': { args: [taskId: string, patch: Partial<GlobalScheduledTask>]; result: void };
-  'globalScheduler:remove': { args: [taskId: string]; result: void };
+  'scheduledJobs:list': { args: []; result: ScheduledJob[] };
+  'scheduledJobs:add': { args: [job: Omit<ScheduledJob, 'id' | 'stats' | 'createdAt' | 'updatedAt'>]; result: ScheduledJob };
+  'scheduledJobs:update': { args: [jobId: string, patch: Partial<ScheduledJob>]; result: void };
+  'scheduledJobs:remove': { args: [jobId: string]; result: void };
 
   'taskConfig:get': { args: [accountId: string]; result: TaskConfig };
   'taskConfig:set': { args: [accountId: string, config: TaskConfig]; result: void };

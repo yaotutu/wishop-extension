@@ -1,4 +1,4 @@
-export type { Config, GlobalScheduledTask, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, TaskCycleResult, Account, Order, OrderStatus, OrderSearchParams } from '../shared/types';
+export type { Config, ScheduledJob, LogEntry, DraftProduct, QuotaResult, TaskConfig, TaskCycleResult, Account, Order, OrderStatus, OrderSearchParams } from '../shared/types';
 export type { GlobalLogEntry } from '../shared/global-log';
 export type { NotificationEntry, NotificationPreference } from '../shared/notification';
 export { useAccounts } from './useAccounts';

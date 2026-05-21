@@ -35,18 +35,6 @@ export {
 } from './store/log-repository';
 
 export {
-  addGlobalScheduler,
-  addScheduler,
-  getGlobalSchedulers,
-  getSchedulers,
-  removeGlobalScheduler,
-  removeScheduler,
-  updateGlobalScheduler,
-  updateGlobalSchedulerAccountStat,
-  updateScheduler,
-} from './store/scheduler-repository';
-
-export {
   getTaskConfig,
   setTaskConfig,
 } from './store/task-config-repository';
