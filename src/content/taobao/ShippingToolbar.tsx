@@ -68,6 +68,17 @@ function formatPurchaseAssociationStatus(status?: string): string {
   return '等待付款完成';
 }
 
+function createInactiveSession(session: ShippingSession): ShippingSession {
+  const message = '当前发货流程已失效，请从订单管理页重新点击去发货';
+  return {
+    ...session,
+    status: 'failed',
+    lastError: message,
+    purchaseAssociationStatus: 'failed',
+    purchaseAssociationMessage: message,
+  };
+}
+
 function clampPosition(position: ShippingToolbarPosition, width = 380): ShippingToolbarPosition {
   const maxLeft = Math.max(8, window.innerWidth - Math.min(width, window.innerWidth - 16) - 8);
   const maxTop = Math.max(8, window.innerHeight - 80);
@@ -119,7 +130,15 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
     const timer = window.setInterval(() => {
       extensionApi.shipping.getCurrentTabSession()
         .then(latest => {
-          if (latest) setCurrentSession(latest);
+          if (latest) {
+            setCurrentSession(latest);
+            return;
+          }
+          setCurrentSession(previous => (
+            previous.purchaseAssociationStatus === 'failed'
+              ? previous
+              : createInactiveSession(previous)
+          ));
         })
         .catch(() => {});
     }, 1000);

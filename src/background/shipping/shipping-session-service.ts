@@ -5,6 +5,10 @@ import { getOrderAssociations, setOrderAssociation } from '../store/order-associ
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 const sessions = new Map<string, ShippingSession>();
 const sessionIdByTabId = new Map<number, string>();
+let activeShippingSessionId: string | undefined;
+let activeShippingTabId: number | undefined;
+
+const SESSION_REPLACED_MESSAGE = '当前发货流程已被新的去发货操作替换，请从订单管理页重新点击去发货';
 
 function now(): number {
   return Date.now();
@@ -16,6 +20,10 @@ function pruneExpiredSessions(): void {
     if (session.expiresAt > current) continue;
     sessions.delete(sessionId);
     if (session.tabId !== undefined) sessionIdByTabId.delete(session.tabId);
+    if (activeShippingSessionId === sessionId) {
+      activeShippingSessionId = undefined;
+      activeShippingTabId = undefined;
+    }
   }
 }
 
@@ -26,6 +34,43 @@ function getFreshSession(sessionId: string): ShippingSession | undefined {
 
 function emitShippingEvent(event: string, payload: unknown): void {
   chrome.runtime.sendMessage({ type: 'event', event, payload }).catch(() => {});
+}
+
+function markSessionInactive(session: ShippingSession, message: string): ShippingSession {
+  const next: ShippingSession = {
+    ...session,
+    status: 'failed',
+    lastError: message,
+    purchaseAssociationStatus: 'failed',
+    purchaseAssociationMessage: message,
+    updatedAt: now(),
+  };
+  sessions.set(session.id, next);
+  emitShippingEvent('shipping:purchaseAssociationFailed', next);
+  return next;
+}
+
+function clearActiveShippingSession(message = SESSION_REPLACED_MESSAGE): void {
+  if (activeShippingSessionId) {
+    const session = sessions.get(activeShippingSessionId);
+    if (session && session.status !== 'completed' && session.status !== 'failed') {
+      markSessionInactive(session, message);
+    }
+  }
+  if (activeShippingTabId !== undefined) {
+    sessionIdByTabId.delete(activeShippingTabId);
+  }
+  activeShippingSessionId = undefined;
+  activeShippingTabId = undefined;
+}
+
+function assertActiveSession(session: ShippingSession): void {
+  if (session.id !== activeShippingSessionId) {
+    throw new Error(SESSION_REPLACED_MESSAGE);
+  }
+  if (session.tabId !== undefined && session.tabId !== activeShippingTabId) {
+    throw new Error(SESSION_REPLACED_MESSAGE);
+  }
 }
 
 function readPaySuccessOrderId(url?: string): string {
@@ -115,6 +160,7 @@ async function handleShippingTabUrlChange(tabId: number, url?: string): Promise<
  */
 export async function createShippingSession(input: CreateShippingSessionInput): Promise<ShippingSession> {
   pruneExpiredSessions();
+  clearActiveShippingSession();
   const timestamp = now();
   const session: ShippingSession = {
     id: uuidv4(),
@@ -136,21 +182,32 @@ export async function createShippingSession(input: CreateShippingSessionInput): 
     expiresAt: timestamp + SESSION_TTL_MS,
   };
   sessions.set(session.id, session);
+  activeShippingSessionId = session.id;
   return session;
 }
 
 export async function bindShippingSessionToTab(sessionId: string, tabId: number): Promise<ShippingSession> {
   const session = getFreshSession(sessionId);
   if (!session) throw new Error('发货会话已过期，请从订单页重新打开');
+  if (activeShippingSessionId && activeShippingSessionId !== sessionId) {
+    clearActiveShippingSession();
+  }
+  if (activeShippingTabId !== undefined && activeShippingTabId !== tabId) {
+    sessionIdByTabId.delete(activeShippingTabId);
+  }
   const next = { ...session, tabId, status: 'opened' as const, updatedAt: now() };
   sessions.set(sessionId, next);
   sessionIdByTabId.set(tabId, sessionId);
+  activeShippingSessionId = sessionId;
+  activeShippingTabId = tabId;
   return next;
 }
 
 export async function getShippingSessionByTab(tabId: number): Promise<ShippingSession | null> {
+  if (tabId !== activeShippingTabId) return null;
   const sessionId = sessionIdByTabId.get(tabId);
   if (!sessionId) return null;
+  if (sessionId !== activeShippingSessionId) return null;
   return getFreshSession(sessionId) || null;
 }
 
@@ -161,6 +218,7 @@ export async function updateShippingSessionStatus(
 ): Promise<ShippingSession> {
   const session = getFreshSession(sessionId);
   if (!session) throw new Error('发货会话已过期，请从订单页重新打开');
+  assertActiveSession(session);
   const next: ShippingSession = {
     ...session,
     status,
@@ -183,6 +241,10 @@ export function installShippingTabCleanup(): void {
     const sessionId = sessionIdByTabId.get(tabId);
     if (!sessionId) return;
     sessionIdByTabId.delete(tabId);
+    if (activeShippingTabId === tabId) {
+      activeShippingSessionId = undefined;
+      activeShippingTabId = undefined;
+    }
     const session = sessions.get(sessionId);
     if (session) sessions.set(sessionId, { ...session, tabId: undefined, updatedAt: now() });
   });
