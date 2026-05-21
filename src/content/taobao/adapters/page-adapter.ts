@@ -19,25 +19,47 @@ export function detectTaobaoPageType(url = location.href): TaobaoPageSnapshot['p
 }
 
 function parsePriceCents(text: string): number | undefined {
-  const match = text.replace(/,/g, '').match(/(?:¥|￥)?\s*(\d+(?:\.\d{1,2})?)/u);
+  const normalized = text
+    .replace(/,/g, '')
+    .replace(/\s*([.．])\s*/g, '.');
+  const match = normalized.match(/(?:¥|￥)?\s*(\d+(?:\.\d{1,2})?)/u);
   if (!match) return undefined;
   return Math.round(Number(match[1]) * 100);
 }
 
-function readCheckoutPayAmount(): { text: string; cents?: number } {
-  const candidates = Array.from(document.querySelectorAll<HTMLElement>('span, strong, em, div, p'))
-    .map(element => ({
-      text: element.textContent?.trim() || '',
-      rect: element.getBoundingClientRect(),
-    }))
-    .filter(item => item.text && item.rect.width > 0 && item.rect.height > 0)
-    .filter(item => /实付款|应付|合计|订单总价|实付|需付款/u.test(item.text))
-    .map(item => item.text)
-    .filter(text => /(?:¥|￥)?\s*\d+(?:\.\d{1,2})?/u.test(text));
+function textOfVisibleElement(selector: string): string {
+  const element = document.querySelector<HTMLElement>(selector);
+  if (!element) return '';
+  const rect = element.getBoundingClientRect();
+  const style = window.getComputedStyle(element);
+  if (rect.width <= 0 || rect.height <= 0 || style.visibility === 'hidden' || style.display === 'none') return '';
+  return element.textContent?.trim() || '';
+}
 
-  const preferred = candidates.find(text => /实付款|应付|需付款/u.test(text)) || candidates[0] || '';
-  const priceMatch = preferred.match(/(?:¥|￥)?\s*\d+(?:\.\d{1,2})?/u)?.[0]?.trim() || '';
-  const text = priceMatch || preferred;
+function extractPriceByLabel(text: string, labels: string[]): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  for (const label of labels) {
+    const index = normalized.indexOf(label);
+    if (index < 0) continue;
+    const tail = normalized.slice(index + label.length);
+    const match = tail.match(/(?:¥|￥)\s*\d+(?:\s*[.．]\s*\d{1,2})?|\d+(?:\s*[.．]\s*\d{1,2})?/u);
+    if (match) return match[0].trim();
+  }
+  return '';
+}
+
+function readCheckoutPayAmount(): { text: string; cents?: number } {
+  const submitText = textOfVisibleElement('#submitOrder')
+    || textOfVisibleElement('[class*="trade-container-submitOrder"]')
+    || textOfVisibleElement('[class*="trade-buy-btn-submit"]');
+  const submitPrice = extractPriceByLabel(submitText, ['立即支付']);
+  if (submitPrice) return { text: submitPrice, cents: parsePriceCents(submitPrice) };
+
+  const totalText = textOfVisibleElement('[class*="cartSettlementTotalDiscount"]')
+    || textOfVisibleElement('#settlementPanelContainer')
+    || textOfVisibleElement('#settlementContainer');
+  const totalPrice = extractPriceByLabel(totalText, ['合计', '实付款', '应付', '需付款']);
+  const text = totalPrice || '';
   return { text, cents: text ? parsePriceCents(text) : undefined };
 }
 
