@@ -262,6 +262,8 @@ export enum OrderStatus {
   CancelledByUser = 250,
 }
 
+export type OrderTimeScope = 'all' | '7d' | '30d' | '90d';
+
 export interface OrderSkuAttr {
   attr_key: string;
   attr_value: string;

@@ -1,27 +1,41 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useCallback } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { extensionApi } from '../shared/extension-api';
 import type { BlacklistRule } from '../shared/types';
-import { useIpcFetch } from './useIpcFetch';
+import { queryKeys } from '../query/query-keys';
 
 export function useBlacklistRules() {
-  const { data: rules, loading, fetch: fetchRules, setData: setRules } = useIpcFetch<BlacklistRule[]>(
-    'global',
-    useCallback(() => extensionApi.blacklistRules.get(), []),
-    [],
-  );
+  const queryClient = useQueryClient();
+  const rulesQuery = useQuery({
+    queryKey: queryKeys.rules.blacklist,
+    queryFn: () => extensionApi.blacklistRules.get(),
+  });
+  const defaultCodesQuery = useQuery({
+    queryKey: queryKeys.rules.blacklistDefaultCodes,
+    queryFn: () => extensionApi.blacklistRules.getDefaultCodes(),
+    select: codes => new Set(codes),
+  });
+  const saveMutation = useMutation({
+    mutationFn: (newRules: BlacklistRule[]) => extensionApi.blacklistRules.set(newRules),
+    onSuccess: (_result, newRules) => {
+      queryClient.setQueryData(queryKeys.rules.blacklist, newRules);
+    },
+  });
 
-  const [defaultCodes, setDefaultCodes] = useState<Set<number>>(new Set());
-
-  useEffect(() => {
-    extensionApi.blacklistRules.getDefaultCodes().then((codes: number[]) => {
-      setDefaultCodes(new Set(codes));
-    });
-  }, []);
+  const fetchRules = useCallback(async () => queryClient.fetchQuery({
+    queryKey: queryKeys.rules.blacklist,
+    queryFn: () => extensionApi.blacklistRules.get(),
+  }), [queryClient]);
 
   const saveRules = useCallback(async (newRules: BlacklistRule[]): Promise<void> => {
-    await extensionApi.blacklistRules.set(newRules);
-    setRules(newRules);
-  }, [setRules]);
+    await saveMutation.mutateAsync(newRules);
+  }, [saveMutation]);
 
-  return { rules, loading, fetchRules, saveRules, defaultCodes };
+  return {
+    rules: rulesQuery.data ?? [],
+    loading: rulesQuery.isLoading || defaultCodesQuery.isLoading,
+    fetchRules,
+    saveRules,
+    defaultCodes: defaultCodesQuery.data ?? new Set<number>(),
+  };
 }

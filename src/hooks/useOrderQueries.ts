@@ -7,6 +7,7 @@ import type {
   OrderRealAddressCache,
   OrderSearchParams,
   OrderStatus,
+  OrderTimeScope,
   ProductSourceBinding,
   ProductSourceItem,
 } from '../shared/types';
@@ -24,10 +25,11 @@ export function useOrdersQuery(
   accountId: string,
   status?: OrderStatus,
   search?: OrderSearchParams | null,
+  timeScope: OrderTimeScope = 'all',
 ) {
   const reportError = useReportQueryError();
   const query = useInfiniteQuery({
-    queryKey: queryKeys.orders.list(accountId, status, search),
+    queryKey: queryKeys.orders.list(accountId, status, search, timeScope),
     enabled: !!accountId,
     initialPageParam: true,
     queryFn: async ({ pageParam }) => {
@@ -35,7 +37,7 @@ export function useOrdersQuery(
         if (search?.keyword?.trim()) {
           return await extensionApi.orders.search(accountId, search);
         }
-        return await extensionApi.orders.list(accountId, status, undefined, pageParam);
+        return await extensionApi.orders.list(accountId, status, 50, pageParam, timeScope);
       } catch (error) {
         reportError(error);
         throw error;

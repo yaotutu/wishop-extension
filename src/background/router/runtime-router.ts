@@ -5,7 +5,7 @@ export type RuntimeChannelHandler = (args: unknown[], sender?: chrome.runtime.Me
 
 export type RuntimeHandlerMap = Partial<Record<RuntimeChannel, RuntimeChannelHandler>>;
 
-export type RuntimeFeatureMap = Partial<Record<RuntimeChannel, LicensedFeature>>;
+export type RuntimeFeatureMap = Record<RuntimeChannel, LicensedFeature | null>;
 
 export interface RuntimeRouter {
   resolve(channel: string): RuntimeChannelHandler | undefined;

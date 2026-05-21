@@ -16,6 +16,7 @@ import type {
   OrderRealAddressCache,
   OrderSearchParams,
   OrderStatus,
+  OrderTimeScope,
   CreatePurchaseLookupSessionInput,
   ProductSourceBinding,
   ProductSourceItem,
@@ -47,7 +48,7 @@ export interface RuntimeChannels {
   'drafts:list': { args: [accountId: string, productId: string]; result: { success: boolean; error?: string } };
 
   'orders:list': {
-    args: [accountId: string, status?: OrderStatus, pageSize?: number, reset?: boolean];
+    args: [accountId: string, status?: OrderStatus, pageSize?: number, reset?: boolean, timeScope?: OrderTimeScope];
     result: { orders: Order[]; hasMore: boolean };
   };
   'orders:detail': { args: [accountId: string, orderId: string]; result: Order };

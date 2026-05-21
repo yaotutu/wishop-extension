@@ -1,11 +1,22 @@
-import type { OrderSearchParams, OrderStatus } from '../shared/types';
+import type { OrderSearchParams, OrderStatus, OrderTimeScope } from '../shared/types';
 
 export const queryKeys = {
+  accounts: {
+    list: ['accounts'] as const,
+    active: ['accounts', 'active'] as const,
+  },
+  config: {
+    item: (accountId: string) => ['config', accountId] as const,
+  },
+  drafts: {
+    list: (accountId: string) => ['drafts', accountId] as const,
+  },
   orders: {
-    list: (accountId: string, status?: OrderStatus, search?: OrderSearchParams | null) => [
+    list: (accountId: string, status?: OrderStatus, search?: OrderSearchParams | null, timeScope?: OrderTimeScope) => [
       'orders',
       accountId,
       status ?? 'all',
+      timeScope ?? 'all',
       search?.search_type ?? '',
       search?.keyword ?? '',
     ] as const,
@@ -20,5 +31,31 @@ export const queryKeys = {
   realAddresses: {
     list: (accountId: string) => ['orderRealAddresses', accountId] as const,
     item: (accountId: string, orderId: string) => ['orderRealAddresses', accountId, orderId] as const,
+  },
+  quota: {
+    item: (accountId: string) => ['quota', accountId] as const,
+  },
+  logs: {
+    list: (accountId: string) => ['logs', accountId] as const,
+  },
+  globalLogs: {
+    list: ['globalLogs'] as const,
+  },
+  notifications: {
+    list: ['notifications'] as const,
+    preference: ['notifications', 'preference'] as const,
+  },
+  scheduler: {
+    list: (accountId: string) => ['scheduler', accountId] as const,
+    globalList: ['globalScheduler'] as const,
+  },
+  taskConfig: {
+    item: (accountId: string) => ['taskConfig', accountId] as const,
+  },
+  rules: {
+    blacklist: ['rules', 'blacklist'] as const,
+    blacklistDefaultCodes: ['rules', 'blacklist', 'defaultCodes'] as const,
+    skipKeywords: ['rules', 'skipKeywords'] as const,
+    status: ['rules', 'status'] as const,
   },
 };

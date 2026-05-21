@@ -1,23 +1,35 @@
 import { useCallback, useEffect } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { extensionApi } from '../shared/extension-api';
 import type { GlobalLogEntry } from '../shared/global-log';
-import { useIpcFetch } from './useIpcFetch';
+import { queryKeys } from '../query/query-keys';
 
 export function useGlobalLogs() {
-  const { data: logs, loading, fetch: fetchLogs, setData: setLogs } = useIpcFetch<GlobalLogEntry[]>(
-    'globalLogs',
-    useCallback(async () => extensionApi.globalLogs.list(), []),
-    [],
-  );
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: queryKeys.globalLogs.list,
+    queryFn: () => extensionApi.globalLogs.list(),
+  });
 
   useEffect(() => extensionApi.globalLogs.onAdded((log) => {
-    setLogs(prev => [...prev, log].slice(-500));
-  }), [setLogs]);
+    queryClient.setQueryData<GlobalLogEntry[]>(queryKeys.globalLogs.list, (current = []) => [...current, log].slice(-500));
+  }), [queryClient]);
+
+  const clearMutation = useMutation({
+    mutationFn: () => extensionApi.globalLogs.clear(),
+    onSuccess: () => {
+      queryClient.setQueryData<GlobalLogEntry[]>(queryKeys.globalLogs.list, []);
+    },
+  });
+
+  const fetchLogs = useCallback(async () => queryClient.fetchQuery({
+    queryKey: queryKeys.globalLogs.list,
+    queryFn: () => extensionApi.globalLogs.list(),
+  }), [queryClient]);
 
   const clearLogs = useCallback(async () => {
-    await extensionApi.globalLogs.clear();
-    setLogs([]);
-  }, [setLogs]);
+    await clearMutation.mutateAsync();
+  }, [clearMutation]);
 
-  return { logs, loading, fetchLogs, clearLogs };
+  return { logs: query.data ?? [], loading: query.isLoading, fetchLogs, clearLogs };
 }

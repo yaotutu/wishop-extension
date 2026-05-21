@@ -1,20 +1,36 @@
 import { useCallback } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { extensionApi } from '../shared/extension-api';
 import type { LogEntry } from '../shared/types';
-import { useIpcFetch } from './useIpcFetch';
+import { queryKeys } from '../query/query-keys';
 
 export function useLogs(accountId: string) {
-  const { data: logs, loading, fetch: fetchLogs, setData: setLogs } = useIpcFetch<LogEntry[]>(
-    accountId,
-    useCallback(async () => extensionApi.logs.get(accountId), [accountId]),
-    [],
-  );
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: queryKeys.logs.list(accountId),
+    enabled: !!accountId,
+    queryFn: () => extensionApi.logs.get(accountId),
+  });
+
+  const clearMutation = useMutation({
+    mutationFn: () => extensionApi.logs.clear(accountId),
+    onSuccess: () => {
+      queryClient.setQueryData<LogEntry[]>(queryKeys.logs.list(accountId), []);
+    },
+  });
+
+  const fetchLogs = useCallback(async () => {
+    if (!accountId) return [];
+    return queryClient.fetchQuery({
+      queryKey: queryKeys.logs.list(accountId),
+      queryFn: () => extensionApi.logs.get(accountId),
+    });
+  }, [accountId, queryClient]);
 
   const clearLogs = useCallback(async () => {
     if (!accountId) return;
-    await extensionApi.logs.clear(accountId);
-    setLogs([]);
-  }, [accountId, setLogs]);
+    await clearMutation.mutateAsync();
+  }, [accountId, clearMutation]);
 
-  return { logs, loading, fetchLogs, clearLogs };
+  return { logs: query.data ?? [], loading: query.isLoading, fetchLogs, clearLogs };
 }

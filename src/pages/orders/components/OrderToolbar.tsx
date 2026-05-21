@@ -1,7 +1,7 @@
 import React from 'react';
 import { Alert, Button, Flex, Input, Select, Space, Tag, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
-import type { OrderSearchParams, OrderStatus } from '../../../shared/types';
+import type { OrderSearchParams, OrderStatus, OrderTimeScope } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
 
 const { Text } = Typography;
@@ -22,13 +22,23 @@ export const SEARCH_TYPE_OPTIONS = [
   { value: 'customer_notes', label: '买家备注' },
 ];
 
+export const TIME_SCOPE_OPTIONS: { value: OrderTimeScope; label: string }[] = [
+  { value: 'all', label: '全部时间' },
+  { value: '7d', label: '近7天' },
+  { value: '30d', label: '近30天' },
+  { value: '90d', label: '近90天' },
+];
+
 interface Props {
   activeStatus: OrderStatus | undefined;
+  timeScope: OrderTimeScope;
+  searchActive: boolean;
   searchType: OrderSearchParams['search_type'];
   searchKeyword: string;
   loading: boolean;
   error: string | null;
   onStatusChange: (value: string | number | null) => void;
+  onTimeScopeChange: (value: OrderTimeScope) => void;
   onSearchTypeChange: (value: OrderSearchParams['search_type']) => void;
   onSearchKeywordChange: (value: string) => void;
   onSearch: (value: string) => void;
@@ -38,11 +48,14 @@ interface Props {
 
 export const OrderToolbar: React.FC<Props> = ({
   activeStatus,
+  timeScope,
+  searchActive,
   searchType,
   searchKeyword,
   loading,
   error,
   onStatusChange,
+  onTimeScopeChange,
   onSearchTypeChange,
   onSearchKeywordChange,
   onSearch,
@@ -76,8 +89,16 @@ export const OrderToolbar: React.FC<Props> = ({
             enterButton="搜索"
           />
         </Space.Compact>
+        <Select
+          size="small"
+          value={timeScope}
+          onChange={onTimeScopeChange}
+          options={TIME_SCOPE_OPTIONS}
+          disabled={searchActive}
+          style={{ width: 112 }}
+        />
         <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={onRefresh}>刷新</Button>
-        <Text type="secondary" style={{ fontSize: 12 }}>仅显示近7天订单</Text>
+        <Text type="secondary" style={{ fontSize: 12 }}>列表每页加载 50 条；搜索不受时间范围限制</Text>
       </Flex>
       {error && (
         <Alert type="error" title={error} showIcon closable={{ onClose: onClearError }} />

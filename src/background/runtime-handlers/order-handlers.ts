@@ -1,9 +1,9 @@
-import type { OrderSearchParams, OrderStatus } from '../../shared/types';
+import type { OrderSearchParams, OrderStatus, OrderTimeScope } from '../../shared/types';
 import { getClient } from '../wxshop/client-registry';
 import type { RuntimeHandlerMap } from '../router/runtime-router';
 
 interface OrderHandlerDeps {
-  listOrders: (accountId: string, status?: OrderStatus, pageSize?: number, reset?: boolean) => Promise<unknown>;
+  listOrders: (accountId: string, status?: OrderStatus, pageSize?: number, reset?: boolean, timeScope?: OrderTimeScope) => Promise<unknown>;
   searchOrders: (accountId: string, params: OrderSearchParams) => Promise<unknown>;
 }
 
@@ -15,6 +15,7 @@ export function createOrderRuntimeHandlers(deps: OrderHandlerDeps): RuntimeHandl
         args[1] as OrderStatus | undefined,
         args[2] as number | undefined,
         args[3] as boolean | undefined,
+        args[4] as OrderTimeScope | undefined,
       );
     },
     async 'orders:detail'(args) {

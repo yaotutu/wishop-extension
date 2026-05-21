@@ -11,7 +11,7 @@ import {
   useSaveProductSourcesMutation,
 } from '../../hooks/useIpc';
 import { extensionApi } from '../../shared/extension-api';
-import type { Order, OrderStatus, OrderProductInfo, OrderSearchParams, OrderRealAddressCache, OrderAssociation, ProductSourceItem } from '../../shared/types';
+import type { Order, OrderStatus, OrderProductInfo, OrderSearchParams, OrderRealAddressCache, OrderAssociation, ProductSourceItem, OrderTimeScope } from '../../shared/types';
 import { formatOrderAddressForCopy } from '../../shared/address-format';
 import { newProductSourceRow, ShippingSourceModal, SourceManagementModal } from './components/ProductSourceModals';
 import { OrderDetailModal } from './components/OrderDetailModal';
@@ -45,6 +45,7 @@ async function convertImageBlobToPng(blob: Blob): Promise<Blob> {
 
 const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const [activeStatus, setActiveStatus] = useState<OrderStatus | undefined>(undefined);
+  const [timeScope, setTimeScope] = useState<OrderTimeScope>('all');
   const [searchType, setSearchType] = useState<OrderSearchParams['search_type']>('order_id');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [activeSearch, setActiveSearch] = useState<OrderSearchParams | null>(null);
@@ -63,7 +64,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const [checkingPurchaseOrderIds, setCheckingPurchaseOrderIds] = useState<Set<string>>(new Set());
   const tableAreaRef = useRef<HTMLDivElement>(null);
   const [scrollY, setScrollY] = useState(400);
-  const ordersQuery = useOrdersQuery(accountId, activeStatus, activeSearch);
+  const ordersQuery = useOrdersQuery(accountId, activeStatus, activeSearch, timeScope);
   const detailQuery = useOrderDetailQuery(accountId, detailOrderId);
   const productSourcesQuery = useProductSourcesQuery(accountId);
   const orderAssociationsQuery = useOrderAssociationsQuery(accountId);
@@ -96,6 +97,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
 
   useEffect(() => {
     setActiveStatus(undefined);
+    setTimeScope('all');
     setActiveSearch(null);
     setSearchKeyword('');
     setDetailOrderId('');
@@ -160,6 +162,11 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     setActiveStatus(status);
     setSearchKeyword('');
     setActiveSearch(null);
+    setHiddenError('');
+  }, []);
+
+  const handleTimeScopeChange = useCallback((value: OrderTimeScope) => {
+    setTimeScope(value);
     setHiddenError('');
   }, []);
 
@@ -411,11 +418,14 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <OrderToolbar
         activeStatus={activeStatus}
+        timeScope={timeScope}
+        searchActive={!!activeSearch?.keyword.trim()}
         searchType={searchType}
         searchKeyword={searchKeyword}
         loading={loading}
         error={error}
         onStatusChange={handleStatusChange}
+        onTimeScopeChange={handleTimeScopeChange}
         onSearchTypeChange={setSearchType}
         onSearchKeywordChange={setSearchKeyword}
         onSearch={handleSearch}
@@ -438,7 +448,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
           }}
           locale={{ emptyText: <Empty description="暂无订单" /> }}
           footer={() => {
-            if (loading || orders.length === 0) return null;
+            if (loading) return null;
             if (hasMore) {
               return (
                 <div style={{ textAlign: 'center', padding: '8px 0' }}>
@@ -446,6 +456,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
                 </div>
               );
             }
+            if (orders.length === 0) return null;
             return <div style={{ textAlign: 'center', color: '#bbb', fontSize: 12, padding: '8px 0' }}>— 没有更多订单 —</div>;
           }}
         />

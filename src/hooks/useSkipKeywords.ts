@@ -1,18 +1,29 @@
 import { useCallback } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { extensionApi } from '../shared/extension-api';
-import { useIpcFetch } from './useIpcFetch';
+import { queryKeys } from '../query/query-keys';
 
 export function useSkipKeywords() {
-  const { data: keywords, loading, fetch: fetchKeywords, setData: setKeywords } = useIpcFetch<string[]>(
-    'global',
-    useCallback(() => extensionApi.skipKeywords.get(), []),
-    [],
-  );
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: queryKeys.rules.skipKeywords,
+    queryFn: () => extensionApi.skipKeywords.get(),
+  });
+  const saveMutation = useMutation({
+    mutationFn: (newKeywords: string[]) => extensionApi.skipKeywords.set(newKeywords),
+    onSuccess: (_result, newKeywords) => {
+      queryClient.setQueryData(queryKeys.rules.skipKeywords, newKeywords);
+    },
+  });
+
+  const fetchKeywords = useCallback(async () => queryClient.fetchQuery({
+    queryKey: queryKeys.rules.skipKeywords,
+    queryFn: () => extensionApi.skipKeywords.get(),
+  }), [queryClient]);
 
   const saveKeywords = useCallback(async (newKeywords: string[]): Promise<void> => {
-    await extensionApi.skipKeywords.set(newKeywords);
-    setKeywords(newKeywords);
-  }, [setKeywords]);
+    await saveMutation.mutateAsync(newKeywords);
+  }, [saveMutation]);
 
-  return { keywords, loading, fetchKeywords, saveKeywords };
+  return { keywords: query.data ?? [], loading: query.isLoading, fetchKeywords, saveKeywords };
 }
