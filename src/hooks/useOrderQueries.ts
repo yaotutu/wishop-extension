@@ -1,9 +1,11 @@
+import type { InfiniteData } from '@tanstack/react-query';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { extensionApi } from '../shared/extension-api';
 import { isCredentialError } from '../shared/errors';
 import type {
   OrderAssociation,
+  Order,
   OrderRealAddressCache,
   OrderSearchParams,
   OrderStatus,
@@ -13,6 +15,15 @@ import type {
 } from '../shared/types';
 import { useCredentialError } from '../contexts/CredentialErrorContext';
 import { queryKeys } from '../query/query-keys';
+import {
+  createOrderListSnapshot,
+  getOrderListCacheKey,
+  mergeOrderListData,
+  ordersToInfiniteData,
+  readCachedOrderList,
+  writeCachedOrderList,
+  type OrderListPage,
+} from './order-list-cache';
 
 function useReportQueryError() {
   const { reportCredentialError } = useCredentialError();
@@ -28,8 +39,18 @@ export function useOrdersQuery(
   timeScope: OrderTimeScope = 'all',
 ) {
   const reportError = useReportQueryError();
+  const queryClient = useQueryClient();
+  const queryKey = useMemo(
+    () => queryKeys.orders.list(accountId, status, search, timeScope),
+    [accountId, search, status, timeScope],
+  );
+  const storageKey = useMemo(() => getOrderListCacheKey(queryKey), [queryKey]);
+  const cachedOrdersRef = useRef<Order[]>([]);
+  const lastSignatureRef = useRef('');
+  const [cacheHydrated, setCacheHydrated] = useState(false);
+  const [hasCachedData, setHasCachedData] = useState(false);
   const query = useInfiniteQuery({
-    queryKey: queryKeys.orders.list(accountId, status, search, timeScope),
+    queryKey,
     enabled: !!accountId,
     initialPageParam: true,
     queryFn: async ({ pageParam }) => {
@@ -49,6 +70,56 @@ export function useOrdersQuery(
     },
   });
 
+  useEffect(() => {
+    let cancelled = false;
+    cachedOrdersRef.current = [];
+    lastSignatureRef.current = '';
+    setCacheHydrated(false);
+    setHasCachedData(false);
+    if (!accountId) return;
+
+    readCachedOrderList(storageKey)
+      .then((cached) => {
+        if (cancelled || !cached) return;
+        cachedOrdersRef.current = cached.orders;
+        lastSignatureRef.current = cached.signature;
+        setHasCachedData(cached.orders.length > 0);
+        queryClient.setQueryData<InfiniteData<OrderListPage, unknown>>(queryKey, current => (
+          current ?? ordersToInfiniteData(cached)
+        ));
+        void queryClient.invalidateQueries({ queryKey, exact: true });
+      })
+      .finally(() => {
+        if (!cancelled) setCacheHydrated(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accountId, queryClient, queryKey, storageKey]);
+
+  useEffect(() => {
+    if (!query.data) return;
+    const mergedData = mergeOrderListData(query.data, cachedOrdersRef.current);
+    const currentSnapshot = createOrderListSnapshot(query.data);
+    const snapshot = createOrderListSnapshot(mergedData);
+
+    if (snapshot.signature === lastSignatureRef.current) {
+      if (snapshot.signature !== currentSnapshot.signature) {
+        queryClient.setQueryData(queryKey, mergedData);
+      }
+      return;
+    }
+
+    lastSignatureRef.current = snapshot.signature;
+    cachedOrdersRef.current = snapshot.orders;
+    writeCachedOrderList(storageKey, snapshot);
+
+    if (snapshot.signature !== currentSnapshot.signature) {
+      queryClient.setQueryData(queryKey, mergedData);
+    }
+  }, [query.data, queryClient, queryKey, storageKey]);
+
   const orders = useMemo(
     () => query.data?.pages.flatMap(page => page.orders) ?? [],
     [query.data],
@@ -59,7 +130,7 @@ export function useOrdersQuery(
     ...query,
     orders,
     hasMore,
-    loading: query.isLoading || query.isFetchingNextPage,
+    loading: query.isFetchingNextPage || (!hasCachedData && (!cacheHydrated || query.isLoading)),
   };
 }
 

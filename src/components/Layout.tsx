@@ -6,6 +6,12 @@ import NotificationCenter from './NotificationCenter';
 import { useAccounts } from '../hooks/useAccounts';
 import type { Account } from '../shared/types';
 import { CredentialErrorProvider } from '../contexts/CredentialErrorContext';
+import {
+  useDashboardUiPreferencesStore,
+  type DashboardModuleType,
+  type ProductReviewScope,
+  type SettingsTab,
+} from '../stores/dashboard-ui-preferences-store';
 
 const { Header, Sider, Content } = AntLayout;
 
@@ -15,12 +21,9 @@ const OrdersPage = lazy(() => import('../pages/orders/OrdersPage'));
 const ListingPage = lazy(() => import('../pages/common-functions/ListingPage'));
 const ViolationPage = lazy(() => import('../pages/violation/ViolationPage'));
 
-type ModuleType = 'orders' | 'storeManagement' | 'commonFunctions' | 'violation' | 'settings';
-type ProductReviewScope = 'global' | 'account';
-
 const ACCOUNT_MODULES = new Set<string>(['orders', 'commonFunctions', 'violation']);
 
-const MODULES: { key: ModuleType; label: string }[] = [
+const MODULES: { key: DashboardModuleType; label: string }[] = [
   { key: 'orders', label: '订单管理' },
   { key: 'storeManagement', label: '店铺管理' },
   { key: 'commonFunctions', label: '商品提审' },
@@ -38,7 +41,7 @@ const PageFallback: React.FC = () => (
 const AccountSider: React.FC<{
   accounts: Account[];
   activeAccountId: string;
-  activeModule: ModuleType;
+  activeModule: DashboardModuleType;
   productReviewScope: ProductReviewScope;
   setProductReviewScope: (scope: ProductReviewScope) => void;
   switchAccount: (id: string) => void;
@@ -97,7 +100,7 @@ const AccountSider: React.FC<{
 const AccountModuleContent: React.FC<{
   accounts: Account[];
   activeAccountId: string;
-  activeModule: ModuleType;
+  activeModule: DashboardModuleType;
   productReviewScope: ProductReviewScope;
 }> = ({ accounts, activeAccountId, activeModule, productReviewScope }) => {
   if (accounts.length === 0) {
@@ -121,13 +124,20 @@ const AccountModuleContent: React.FC<{
 };
 
 const Layout: React.FC = () => {
-  const [activeModule, setActiveModule] = useState<ModuleType>('commonFunctions');
-  const [productReviewScope, setProductReviewScope] = useState<ProductReviewScope>('account');
   const [version, setVersion] = useState('');
-  const [settingsTab, setSettingsTab] = useState<string | undefined>(undefined);
   const { accounts, activeAccountId, fetchAccounts, addAccount, removeAccount, updateAccount, switchAccount } = useAccounts();
+  const {
+    activeModule,
+    productReviewScope,
+    settingsTab,
+    hydrate,
+    setActiveModule,
+    setProductReviewScope,
+    setSettingsTab,
+  } = useDashboardUiPreferencesStore();
 
   useEffect(() => {
+    void hydrate();
     fetchAccounts();
     extensionApi.app.version().then((v: string) => setVersion(v));
   }, []);
@@ -149,7 +159,7 @@ const Layout: React.FC = () => {
         <Header style={{ padding: '0 12px', height: 48, lineHeight: '48px', background: '#fafafa', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center' }}>
           <Tabs
             activeKey={activeModule}
-            onChange={(key) => setActiveModule(key as ModuleType)}
+            onChange={(key) => setActiveModule(key as DashboardModuleType)}
             items={MODULES.map(m => ({ key: m.key, label: m.label }))}
             size="small"
             style={{ flex: 1, minWidth: 0 }}
@@ -197,7 +207,7 @@ const Layout: React.FC = () => {
               )}
               {activeModule === 'settings' && (
                 <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                  <SettingsPage defaultTab={settingsTab as 'about' | 'product' | 'contact'} />
+                  <SettingsPage defaultTab={settingsTab} onTabChange={(tab: SettingsTab) => setSettingsTab(tab)} />
                 </div>
               )}
             </Suspense>

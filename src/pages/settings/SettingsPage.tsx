@@ -10,13 +10,13 @@ import {
 import wechatQrcode from '../../assets/wechat-qrcode.png';
 import douyinQrcode from '../../assets/douyin-qrcode.png';
 import type { LicenseState } from '../../shared/types';
+import type { SettingsTab } from '../../stores/dashboard-ui-preferences-store';
 
 const { Title, Paragraph, Text } = Typography;
 
-type SettingsTab = 'about' | 'product' | 'license' | 'contact';
-
 interface SettingsPageProps {
   defaultTab?: SettingsTab;
+  onTabChange?: (tab: SettingsTab) => void;
 }
 
 const MENU_ITEMS = [
@@ -184,7 +184,7 @@ const ContactPanel: React.FC = () => (
   </Card>
 );
 
-const SettingsPage: React.FC<SettingsPageProps> = ({ defaultTab = 'about' }) => {
+const SettingsPage: React.FC<SettingsPageProps> = ({ defaultTab = 'about', onTabChange }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>(defaultTab);
 
   useEffect(() => {
@@ -196,7 +196,11 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ defaultTab = 'about' }) => 
       <Menu
         mode="inline"
         selectedKeys={[activeTab]}
-        onClick={({ key }) => setActiveTab(key as SettingsTab)}
+        onClick={({ key }) => {
+          const nextTab = key as SettingsTab;
+          setActiveTab(nextTab);
+          onTabChange?.(nextTab);
+        }}
         items={MENU_ITEMS}
         style={{ width: 160, height: '100%', borderRight: '1px solid #f0f0f0' }}
       />

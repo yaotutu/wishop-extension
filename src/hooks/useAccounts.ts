@@ -23,14 +23,12 @@ export function useAccounts() {
 
   useEffect(() => {
     const persisted = activeAccountQuery.data;
-    if (persisted && accounts.some(account => account.id === persisted)) {
-      setActiveAccountIdState(persisted);
-      return;
-    }
     setActiveAccountIdState(prev => (
       prev && accounts.some(account => account.id === prev)
         ? prev
-        : accounts[0]?.id || ''
+        : persisted && accounts.some(account => account.id === persisted)
+          ? persisted
+          : accounts[0]?.id || ''
     ));
   }, [accounts, activeAccountQuery.data]);
 
@@ -41,7 +39,11 @@ export function useAccounts() {
     ]);
     queryClient.setQueryData(queryKeys.accounts.list, list);
     queryClient.setQueryData(queryKeys.accounts.active, active);
-    setActiveAccountIdState(active || list[0]?.id || '');
+    setActiveAccountIdState(prev => (
+      prev && list.some(account => account.id === prev)
+        ? prev
+        : active || list[0]?.id || ''
+    ));
     return list;
   }, [queryClient]);
 
@@ -68,10 +70,7 @@ export function useAccounts() {
   });
   const switchMutation = useMutation({
     mutationFn: (id: string) => extensionApi.accounts.setActive(id),
-    onSuccess: (_result, id) => {
-      setActiveAccountIdState(id);
-      queryClient.setQueryData(queryKeys.accounts.active, id);
-    },
+    onSuccess: (_result, id) => queryClient.setQueryData(queryKeys.accounts.active, id),
   });
 
   const addAccount = useCallback(async (name: string, config: Config): Promise<Account> => {
@@ -88,8 +87,11 @@ export function useAccounts() {
   }, [updateMutation]);
 
   const switchAccount = useCallback(async (id: string) => {
-    await switchMutation.mutateAsync(id);
-  }, [switchMutation]);
+    setActiveAccountIdState(id);
+    queryClient.setQueryData(queryKeys.accounts.active, id);
+    void queryClient.cancelQueries({ queryKey: queryKeys.accounts.active });
+    switchMutation.mutate(id);
+  }, [queryClient, switchMutation]);
 
   return {
     accounts,
