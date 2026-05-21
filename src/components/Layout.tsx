@@ -19,6 +19,7 @@ const StoreManagement = lazy(() => import('../pages/store-management/StoreManage
 const SettingsPage = lazy(() => import('../pages/settings/SettingsPage'));
 const OrdersPage = lazy(() => import('../pages/orders/OrdersPage'));
 const ListingPage = lazy(() => import('../pages/common-functions/ListingPage'));
+const ScheduledJobsPage = lazy(() => import('../pages/scheduled-jobs/ScheduledJobsPage'));
 const ViolationPage = lazy(() => import('../pages/violation/ViolationPage'));
 
 const ACCOUNT_MODULES = new Set<string>(['orders', 'commonFunctions', 'violation']);
@@ -27,6 +28,7 @@ const MODULES: { key: DashboardModuleType; label: string }[] = [
   { key: 'orders', label: '订单管理' },
   { key: 'storeManagement', label: '店铺管理' },
   { key: 'commonFunctions', label: '商品提审' },
+  { key: 'scheduledJobs', label: '调度任务' },
   { key: 'violation', label: '违规词检测' },
   { key: 'settings', label: '设置' },
 ];
@@ -203,6 +205,11 @@ const Layout: React.FC = () => {
                     switchAccount={switchAccount}
                     activeAccountId={activeAccountId}
                   />
+                </div>
+              )}
+              {activeModule === 'scheduledJobs' && (
+                <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                  <ScheduledJobsPage accounts={accounts} />
                 </div>
               )}
               {activeModule === 'settings' && (

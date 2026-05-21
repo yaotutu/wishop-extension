@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type DashboardModuleType = 'orders' | 'storeManagement' | 'commonFunctions' | 'violation' | 'settings';
+export type DashboardModuleType = 'orders' | 'storeManagement' | 'commonFunctions' | 'scheduledJobs' | 'violation' | 'settings';
 export type ProductReviewScope = 'global' | 'account';
 export type SettingsTab = 'about' | 'product' | 'license' | 'contact';
 
@@ -24,7 +24,7 @@ const DEFAULT_PREFERENCES: DashboardUiPreferences = {
   productReviewScope: 'account',
   settingsTab: 'about',
 };
-const MODULES = new Set<DashboardModuleType>(['orders', 'storeManagement', 'commonFunctions', 'violation', 'settings']);
+const MODULES = new Set<DashboardModuleType>(['orders', 'storeManagement', 'commonFunctions', 'scheduledJobs', 'violation', 'settings']);
 const REVIEW_SCOPES = new Set<ProductReviewScope>(['global', 'account']);
 const SETTINGS_TABS = new Set<SettingsTab>(['about', 'product', 'license', 'contact']);
 
