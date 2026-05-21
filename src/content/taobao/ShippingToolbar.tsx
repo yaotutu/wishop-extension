@@ -358,39 +358,25 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
             {addressText(address) || '未获取真实地址，点击下方按钮会消耗今日额度'}
           </p>
           {fetchedAt && <small>获取时间：{fetchedAt}</small>}
-          {!address && (
+          <div className={isCheckoutPage ? 'wishop-shipping-inline-actions' : 'wishop-shipping-inline-actions wishop-shipping-inline-actions--single'}>
             <button
               type="button"
               className="wishop-shipping-inline-primary"
-              onClick={() => fetchRealAddress(false)}
+              onClick={() => fetchRealAddress(Boolean(address))}
               disabled={addressLoading}
             >
-              {addressLoading ? '获取中...' : '获取真实地址'}
+              {addressLoading ? (address ? '刷新中...' : '获取中...') : (address ? '刷新真实地址' : '获取真实地址')}
             </button>
-          )}
-          {(address || isCheckoutPage) && (
-            <div className="wishop-shipping-inline-actions">
-              {address && (
-                <button
-                  type="button"
-                  className="wishop-shipping-inline-primary"
-                  onClick={() => fetchRealAddress(true)}
-                  disabled={addressLoading}
-                >
-                  {addressLoading ? '刷新中...' : '刷新真实地址'}
-                </button>
-              )}
-              {isCheckoutPage && (
-                <button
-                  type="button"
-                  className="wishop-shipping-inline-primary"
-                  onClick={() => setCheckoutAddressDebugVisible(visible => !visible)}
-                >
-                  {checkoutAddressDebugVisible ? '隐藏地址结构' : '查看地址结构'}
-                </button>
-              )}
-            </div>
-          )}
+            {isCheckoutPage && (
+              <button
+                type="button"
+                className="wishop-shipping-inline-primary"
+                onClick={() => setCheckoutAddressDebugVisible(visible => !visible)}
+              >
+                {checkoutAddressDebugVisible ? '隐藏地址结构' : '查看地址结构'}
+              </button>
+            )}
+          </div>
         </div>
         {isCheckoutPage && checkoutAddressDebugVisible && (
           <div className="wishop-shipping-card">

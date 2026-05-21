@@ -154,6 +154,9 @@ const toolbarCss = `
   .wishop-shipping-inline-actions .wishop-shipping-inline-primary {
     margin-top: 0;
   }
+  .wishop-shipping-inline-actions--single {
+    grid-template-columns: 1fr;
+  }
   .wishop-shipping-actions {
     display: flex;
     flex-wrap: wrap;
