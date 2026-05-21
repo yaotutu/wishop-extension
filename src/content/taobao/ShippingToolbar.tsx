@@ -70,6 +70,7 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
   const [addressCache, setAddressCache] = useState<OrderRealAddressCache | null>(null);
   const [addressLoading, setAddressLoading] = useState(false);
   const [addressFilling, setAddressFilling] = useState(false);
+  const [checkoutAddressDebugVisible, setCheckoutAddressDebugVisible] = useState(false);
   const collapsed = useShippingToolbarStore(state => state.collapsed);
   const position = useShippingToolbarStore(state => state.position);
   const hydrateToolbarState = useShippingToolbarStore(state => state.hydrate);
@@ -325,8 +326,17 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
               {addressLoading ? '刷新中...' : '刷新真实地址'}
             </button>
           )}
+          {snapshot.pageType === 'checkout' && (
+            <button
+              type="button"
+              className="wishop-shipping-inline-primary"
+              onClick={() => setCheckoutAddressDebugVisible(visible => !visible)}
+            >
+              {checkoutAddressDebugVisible ? '隐藏地址结构' : '查看地址结构'}
+            </button>
+          )}
         </div>
-        {snapshot.pageType === 'checkout' && (
+        {snapshot.pageType === 'checkout' && checkoutAddressDebugVisible && (
           <div className="wishop-shipping-card">
             <label>淘宝填充地址结构</label>
             {checkoutAddressPreview ? (
