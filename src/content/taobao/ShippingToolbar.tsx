@@ -60,6 +60,14 @@ function formatFetchedAt(timestamp?: number): string {
   });
 }
 
+function formatPurchaseAssociationStatus(status?: string): string {
+  if (status === 'waiting-payment') return '等待付款完成';
+  if (status === 'detected') return '已检测到订单';
+  if (status === 'associated') return '已关联';
+  if (status === 'failed') return '关联失败';
+  return '等待付款完成';
+}
+
 function clampPosition(position: ShippingToolbarPosition, width = 380): ShippingToolbarPosition {
   const maxLeft = Math.max(8, window.innerWidth - Math.min(width, window.innerWidth - 16) - 8);
   const maxTop = Math.max(8, window.innerHeight - 80);
@@ -70,6 +78,8 @@ function clampPosition(position: ShippingToolbarPosition, width = 380): Shipping
 }
 
 export const ShippingToolbar: React.FC<Props> = ({ session }) => {
+  const [currentSession, setCurrentSession] = useState(session);
+  const activeSession = currentSession;
   const [snapshot, setSnapshot] = useState<TaobaoPageSnapshot>(() => readTaobaoPageSnapshot());
   const [notice, setNotice] = useState('');
   const [addressCache, setAddressCache] = useState<OrderRealAddressCache | null>(null);
@@ -91,6 +101,10 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
   } | null>(null);
 
   useEffect(() => {
+    setCurrentSession(session);
+  }, [session]);
+
+  useEffect(() => {
     void hydrateToolbarState().then(() => {
       const current = useShippingToolbarStore.getState().position;
       setPosition(clampPosition(current), false);
@@ -98,14 +112,25 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
   }, [hydrateToolbarState, setPosition]);
 
   useEffect(() => {
-    void extensionApi.shipping.markPageReady(session.id).catch(() => {});
-  }, [session.id]);
+    void extensionApi.shipping.markPageReady(activeSession.id).catch(() => {});
+  }, [activeSession.id]);
 
   useEffect(() => {
-    extensionApi.orderRealAddresses.get(session.accountId, session.orderId)
+    const timer = window.setInterval(() => {
+      extensionApi.shipping.getCurrentTabSession()
+        .then(latest => {
+          if (latest) setCurrentSession(latest);
+        })
+        .catch(() => {});
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    extensionApi.orderRealAddresses.get(activeSession.accountId, activeSession.orderId)
       .then(cache => setAddressCache(cache))
       .catch(() => {});
-  }, [session.accountId, session.orderId]);
+  }, [activeSession.accountId, activeSession.orderId]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -179,27 +204,27 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
   }, [position, setPosition]);
 
   const copyOrderInfo = useCallback(async () => {
-    const address = addressCache?.address || session.order.address;
+    const address = addressCache?.address || activeSession.order.address;
     const lines = [
-      `订单号：${session.orderId}`,
-      `商品：${session.order.title}`,
-      `规格：${skuText(session)}`,
-      `数量：${session.order.quantity}`,
-      `实付：${formatPrice(session.order.orderPrice)}`,
-      `预估手续费：${formatPrice(session.order.estimatedCommissionFee)}`,
-      `下单：${formatTime(session.order.createTime)}`,
-      `支付：${formatTime(session.order.payTime)}`,
-      noteText('买家备注', session.order.customerNotes),
-      noteText('商家备注', session.order.merchantNotes),
+      `订单号：${activeSession.orderId}`,
+      `商品：${activeSession.order.title}`,
+      `规格：${skuText(activeSession)}`,
+      `数量：${activeSession.order.quantity}`,
+      `实付：${formatPrice(activeSession.order.orderPrice)}`,
+      `预估手续费：${formatPrice(activeSession.order.estimatedCommissionFee)}`,
+      `下单：${formatTime(activeSession.order.createTime)}`,
+      `支付：${formatTime(activeSession.order.payTime)}`,
+      noteText('买家备注', activeSession.order.customerNotes),
+      noteText('商家备注', activeSession.order.merchantNotes),
       addressText(address) ? `地址：${addressText(address).replace('\n', ' ')}` : '',
-      session.source.remark ? `货源备注：${session.source.remark}` : '',
+      activeSession.source.remark ? `货源备注：${activeSession.source.remark}` : '',
     ].filter(Boolean);
     await copyText(lines.join('\n'));
     setNotice('订单信息已复制');
-  }, [addressCache, session]);
+  }, [addressCache, activeSession]);
 
   const copyAddress = useCallback(async () => {
-    const address = addressCache?.address || session.order.address;
+    const address = addressCache?.address || activeSession.order.address;
     const text = addressText(address);
     if (!text) {
       setNotice('当前会话没有地址信息');
@@ -207,14 +232,14 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
     }
     await copyText(text);
     setNotice('地址已复制');
-  }, [addressCache, session.order.address]);
+  }, [addressCache, activeSession.order.address]);
 
   const fetchRealAddress = useCallback(async (forceRefresh = false) => {
     setAddressLoading(true);
     try {
       const cache = forceRefresh
-        ? await extensionApi.orderRealAddresses.refresh(session.accountId, session.orderId)
-        : await extensionApi.orderRealAddresses.fetch(session.accountId, session.orderId);
+        ? await extensionApi.orderRealAddresses.refresh(activeSession.accountId, activeSession.orderId)
+        : await extensionApi.orderRealAddresses.fetch(activeSession.accountId, activeSession.orderId);
       setAddressCache(cache);
       setNotice('');
     } catch (err) {
@@ -222,14 +247,14 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
     } finally {
       setAddressLoading(false);
     }
-  }, [session.accountId, session.orderId]);
+  }, [activeSession.accountId, activeSession.orderId]);
 
   const handleFillCheckoutAddress = useCallback(async () => {
     setAddressFilling(true);
     try {
       const address = addressCache?.address
-        || session.order.address
-        || (await extensionApi.orderRealAddresses.fetch(session.accountId, session.orderId)).address;
+        || activeSession.order.address
+        || (await extensionApi.orderRealAddresses.fetch(activeSession.accountId, activeSession.orderId)).address;
       const result = await fillTaobaoCheckoutAddress(address);
       if (result.filledFields.length > 0) {
         setNotice(`已填充：${result.filledFields.join('、')}${result.warnings.length ? `；${result.warnings.join('；')}` : ''}`);
@@ -237,7 +262,7 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
         setNotice(result.warnings.join('；') || '未能填充地址');
       }
       if (!addressCache?.address) {
-        void extensionApi.orderRealAddresses.get(session.accountId, session.orderId)
+        void extensionApi.orderRealAddresses.get(activeSession.accountId, activeSession.orderId)
           .then(cache => setAddressCache(cache))
           .catch(() => {});
       }
@@ -246,18 +271,18 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
     } finally {
       setAddressFilling(false);
     }
-  }, [addressCache?.address, session.accountId, session.order.address, session.orderId]);
+  }, [addressCache?.address, activeSession.accountId, activeSession.order.address, activeSession.orderId]);
 
   const copySku = useCallback(async () => {
-    await copyText(skuText(session));
+    await copyText(skuText(activeSession));
     setNotice('SKU 已复制');
-  }, [session]);
+  }, [activeSession]);
 
   const copyNotes = useCallback(async () => {
     const text = [
-      noteText('买家备注', session.order.customerNotes),
-      noteText('商家备注', session.order.merchantNotes),
-      noteText('货源备注', session.source.remark),
+      noteText('买家备注', activeSession.order.customerNotes),
+      noteText('商家备注', activeSession.order.merchantNotes),
+      noteText('货源备注', activeSession.source.remark),
     ].filter(Boolean).join('\n');
     if (!text) {
       setNotice('当前没有备注');
@@ -265,7 +290,7 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
     }
     await copyText(text);
     setNotice('备注已复制');
-  }, [session]);
+  }, [activeSession]);
 
   if (collapsed) {
     return (
@@ -286,11 +311,11 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
     );
   }
 
-  const address = addressCache?.address || session.order.address;
+  const address = addressCache?.address || activeSession.order.address;
   const fetchedAt = formatFetchedAt(addressCache?.fetchedAt);
   const isCheckoutPage = snapshot.pageType === 'checkout';
-  const orderPrice = session.order.orderPrice;
-  const commissionFee = session.order.estimatedCommissionFee;
+  const orderPrice = activeSession.order.orderPrice;
+  const commissionFee = activeSession.order.estimatedCommissionFee;
   const purchaseCost = snapshot.checkoutPayAmountCents;
   const estimatedProfit = orderPrice !== undefined && commissionFee !== undefined && purchaseCost !== undefined
     ? orderPrice - commissionFee - purchaseCost
@@ -301,6 +326,7 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
   const checkoutAddressPreview = isCheckoutPage && address
     ? normalizeCheckoutAddress(address)
     : null;
+  const purchaseAssociationVisible = Boolean(activeSession.purchaseAssociationStatus || activeSession.linkedPlatformOrderId);
 
   return (
     <section
@@ -317,7 +343,7 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
       >
         <div className="wishop-shipping-title">
           <strong>微店管家发货助手</strong>
-          <span className="wishop-shipping-status">{session.status} · 拖动标题可调整位置</span>
+          <span className="wishop-shipping-status">{activeSession.status} · 拖动标题可调整位置</span>
         </div>
         <button
           type="button"
@@ -331,16 +357,24 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
       <div className="wishop-shipping-grid">
         <div className="wishop-shipping-card">
           <label>微信订单</label>
-          <p title={session.order.title}>{session.order.title}</p>
-          <small>订单号：{session.orderId}</small>
-          <small>实付：{formatPrice(session.order.orderPrice)} · 数量：x{session.order.quantity}</small>
-          <small>预估手续费：{formatPrice(session.order.estimatedCommissionFee)}</small>
-          <small>下单：{formatTime(session.order.createTime)} · 支付：{formatTime(session.order.payTime)}</small>
+          <p title={activeSession.order.title}>{activeSession.order.title}</p>
+          <small>订单号：{activeSession.orderId}</small>
+          <small>实付：{formatPrice(activeSession.order.orderPrice)} · 数量：x{activeSession.order.quantity}</small>
+          <small>预估手续费：{formatPrice(activeSession.order.estimatedCommissionFee)}</small>
+          <small>下单：{formatTime(activeSession.order.createTime)} · 支付：{formatTime(activeSession.order.payTime)}</small>
         </div>
+        {purchaseAssociationVisible && (
+          <div className="wishop-shipping-card">
+            <label>淘宝采购关联</label>
+            <p>{activeSession.purchaseAssociationMessage || '等待淘宝付款完成'}</p>
+            {activeSession.linkedPlatformOrderId && <small>淘宝订单号：{activeSession.linkedPlatformOrderId}</small>}
+            <small>状态：{formatPurchaseAssociationStatus(activeSession.purchaseAssociationStatus)}</small>
+          </div>
+        )}
         <div className="wishop-shipping-card">
           <label>SKU / 规格</label>
-          <p title={skuText(session)}>{skuText(session)}</p>
-          {session.order.skuCode && <small>编码：{session.order.skuCode}</small>}
+          <p title={skuText(activeSession)}>{skuText(activeSession)}</p>
+          {activeSession.order.skuCode && <small>编码：{activeSession.order.skuCode}</small>}
         </div>
         {isCheckoutPage && (
           <div className="wishop-shipping-card">
@@ -398,9 +432,9 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
         )}
         <div className="wishop-shipping-card">
           <label>备注</label>
-          <small>{session.order.customerNotes?.trim() ? `买家：${session.order.customerNotes}` : '买家：无'}</small>
-          <small>{session.order.merchantNotes?.trim() ? `商家：${session.order.merchantNotes}` : '商家：无'}</small>
-          <small>{session.source.remark?.trim() ? `货源：${session.source.remark}` : '货源：无'}</small>
+          <small>{activeSession.order.customerNotes?.trim() ? `买家：${activeSession.order.customerNotes}` : '买家：无'}</small>
+          <small>{activeSession.order.merchantNotes?.trim() ? `商家：${activeSession.order.merchantNotes}` : '商家：无'}</small>
+          <small>{activeSession.source.remark?.trim() ? `货源：${activeSession.source.remark}` : '货源：无'}</small>
         </div>
       </div>
       <div className="wishop-shipping-actions">

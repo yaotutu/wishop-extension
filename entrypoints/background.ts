@@ -1,13 +1,14 @@
 import { installRuntimeHandlers } from '../src/background/handlers';
 import { installPurchaseLookupTabCleanup } from '../src/background/purchase-lookup/purchase-lookup-session-service';
 import { installAlarmListener, startAllTasks } from '../src/background/scheduler/listing-scheduler';
-import { installShippingTabCleanup } from '../src/background/shipping/shipping-session-service';
+import { installShippingPaymentSuccessWatcher, installShippingTabCleanup } from '../src/background/shipping/shipping-session-service';
 import { migrateStore } from '../src/background/store';
 import { installTaobaoWorkTabCleanup } from '../src/background/taobao-workspace/work-tab-service';
 
 export default defineBackground(() => {
   installRuntimeHandlers();
   installShippingTabCleanup();
+  installShippingPaymentSuccessWatcher();
   installPurchaseLookupTabCleanup();
   installTaobaoWorkTabCleanup();
   installAlarmListener();

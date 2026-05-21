@@ -120,6 +120,11 @@ export const extensionApi = {
     markPageReady: (sessionId: string): Promise<ShippingSession> => invoke('shipping:markPageReady', sessionId),
     complete: (sessionId: string): Promise<ShippingSession> => invoke('shipping:complete', sessionId),
     fail: (sessionId: string, error: string): Promise<ShippingSession> => invoke('shipping:fail', sessionId, error),
+    onPurchaseDetected: (callback: (session: ShippingSession) => void) => onRuntimeEvent('shipping:purchaseDetected', callback),
+    onPurchaseAssociated: (callback: (payload: { session: ShippingSession; association: OrderAssociation }) => void) =>
+      onRuntimeEvent('shipping:purchaseAssociated', callback),
+    onPurchaseAssociationFailed: (callback: (session: ShippingSession) => void) =>
+      onRuntimeEvent('shipping:purchaseAssociationFailed', callback),
   },
   quota: {
     get: (accountId: string): Promise<QuotaResult> => invoke('quota:get', accountId),

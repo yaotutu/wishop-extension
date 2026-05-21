@@ -54,6 +54,12 @@ declare namespace chrome {
     interface Tab {
       id?: number;
       windowId?: number;
+      url?: string;
+    }
+
+    interface TabChangeInfo {
+      url?: string;
+      status?: string;
     }
 
     function query(queryInfo: { url?: string; active?: boolean; currentWindow?: boolean }): Promise<Tab[]>;
@@ -62,6 +68,10 @@ declare namespace chrome {
 
     namespace onRemoved {
       function addListener(callback: (tabId: number) => void): void;
+    }
+
+    namespace onUpdated {
+      function addListener(callback: (tabId: number, changeInfo: TabChangeInfo, tab: Tab) => void): void;
     }
   }
 

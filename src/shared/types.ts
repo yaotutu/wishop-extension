@@ -177,6 +177,7 @@ export interface OrderRealAddressCache {
 }
 
 export type ShippingSessionStatus = 'created' | 'opened' | 'page-ready' | 'completed' | 'failed';
+export type ShippingPurchaseAssociationStatus = 'waiting-payment' | 'detected' | 'associated' | 'failed';
 
 export interface ShippingOrderSnapshot {
   orderId: string;
@@ -215,6 +216,9 @@ export interface ShippingSession {
   expiresAt: number;
   tabId?: number;
   lastError?: string;
+  purchaseAssociationStatus?: ShippingPurchaseAssociationStatus;
+  purchaseAssociationMessage?: string;
+  linkedPlatformOrderId?: string;
 }
 
 export interface CreateShippingSessionInput {

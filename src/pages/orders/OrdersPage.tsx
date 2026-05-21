@@ -125,10 +125,21 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       if (payload.accountId !== accountId) return;
       message.warning(`淘宝工作页需要处理验证: ${payload.reason}`);
     });
+    const offShippingAssociated = extensionApi.shipping.onPurchaseAssociated((payload) => {
+      if (payload.session.accountId !== accountId) return;
+      void refetchOrderAssociations();
+      message.success(`淘宝订单已关联：${payload.session.linkedPlatformOrderId || '-'}`);
+    });
+    const offShippingFailed = extensionApi.shipping.onPurchaseAssociationFailed((session) => {
+      if (session.accountId !== accountId) return;
+      message.error(session.purchaseAssociationMessage || '淘宝订单自动关联失败');
+    });
     return () => {
       offCompleted();
       offFailed();
       offChallenge();
+      offShippingAssociated();
+      offShippingFailed();
     };
   }, [accountId, refetchOrderAssociations]);
 
