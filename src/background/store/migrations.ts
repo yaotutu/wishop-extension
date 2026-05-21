@@ -1,5 +1,6 @@
 import type { StoreSchema } from './core';
 import { CURRENT_STORAGE_VERSION } from './core';
+import { DEFAULT_NOTIFICATION_PREFERENCE } from '../../shared/notification';
 
 type RawStore = Partial<StoreSchema> & Record<string, unknown>;
 type Migration = (store: RawStore) => RawStore;
@@ -13,6 +14,13 @@ const migrations: Record<number, Migration> = {
       globalSchedulers: Array.isArray(store.globalSchedulers) ? store.globalSchedulers : [],
       skipKeywords: Array.isArray(store.skipKeywords) ? store.skipKeywords : [],
       storageVersion: 1,
+    };
+  },
+  2(store) {
+    return {
+      ...store,
+      notificationPreference: store.notificationPreference || DEFAULT_NOTIFICATION_PREFERENCE,
+      storageVersion: 2,
     };
   },
 };

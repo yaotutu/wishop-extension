@@ -12,6 +12,7 @@ Rules:
 - Clearing global logs must not clear account logs.
 - Business modules should call `global-log-service`, not storage or sinks directly.
 - Cloud upload is a sink. Upload failure must never block the business task.
+- Notification center consumes global logs and decides whether to create user-facing reminders. Business modules should not call notification channels directly.
 
 Current sinks:
 

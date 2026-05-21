@@ -1,4 +1,5 @@
 import type { GlobalLogEntry } from './global-log';
+import type { NotificationEntry, NotificationPreference } from './notification';
 import type {
   Account,
   BlacklistRule,
@@ -15,12 +16,16 @@ import type {
   OrderRealAddressCache,
   OrderSearchParams,
   OrderStatus,
+  CreatePurchaseLookupSessionInput,
   ProductSourceBinding,
   ProductSourceItem,
+  PurchaseLookupSession,
   QuotaResult,
   ScheduledTask,
   ShippingSession,
   StatusRule,
+  TaobaoSecurityChallengeSnapshot,
+  TaobaoPurchaseOrderSnapshot,
   TaskConfig,
   TaskCycleResult,
   ViolationMatch,
@@ -59,6 +64,14 @@ export interface RuntimeChannels {
     result: OrderAssociation;
   };
 
+  'purchaseLookup:open': { args: [input: CreatePurchaseLookupSessionInput]; result: PurchaseLookupSession };
+  'purchaseLookup:getCurrentTabSession': { args: []; result: PurchaseLookupSession | null };
+  'purchaseLookup:markPageReady': { args: [sessionId: string]; result: PurchaseLookupSession };
+  'purchaseLookup:reportChallenge': { args: [sessionId: string, snapshot: TaobaoSecurityChallengeSnapshot]; result: PurchaseLookupSession };
+  'purchaseLookup:resolveChallenge': { args: [sessionId: string]; result: PurchaseLookupSession };
+  'purchaseLookup:complete': { args: [sessionId: string, snapshot: TaobaoPurchaseOrderSnapshot]; result: OrderAssociation };
+  'purchaseLookup:fail': { args: [sessionId: string, error: string]; result: PurchaseLookupSession };
+
   'productSources:list': { args: [accountId: string]; result: ProductSourceBinding[] };
   'productSources:set': { args: [accountId: string, productId: string, sources: ProductSourceItem[]]; result: ProductSourceBinding };
   'productSources:remove': { args: [accountId: string, productId: string, sourceId: string]; result: ProductSourceBinding };
@@ -75,6 +88,12 @@ export interface RuntimeChannels {
   'logs:clear': { args: [accountId: string]; result: void };
   'globalLogs:list': { args: []; result: GlobalLogEntry[] };
   'globalLogs:clear': { args: []; result: void };
+  'notifications:list': { args: []; result: NotificationEntry[] };
+  'notifications:markRead': { args: [notificationId: string]; result: NotificationEntry[] };
+  'notifications:markAllRead': { args: []; result: NotificationEntry[] };
+  'notifications:clear': { args: []; result: void };
+  'notifications:getPreference': { args: []; result: NotificationPreference };
+  'notifications:updatePreference': { args: [patch: Partial<NotificationPreference>]; result: NotificationPreference };
 
   'scheduler:list': { args: [accountId: string]; result: ScheduledTask[] };
   'scheduler:add': { args: [accountId: string, task: Omit<ScheduledTask, 'id' | 'lastRunDate' | 'todayListedCount'>]; result: ScheduledTask };

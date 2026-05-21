@@ -5,6 +5,7 @@ import type {
   StatusRule,
   TaskConfig,
 } from '../../shared/types';
+import type { NotificationPreference } from '../../shared/notification';
 
 export interface StoreSchema {
   storageVersion: number;
@@ -14,9 +15,10 @@ export interface StoreSchema {
   skipKeywords?: string[];
   blacklistRules?: BlacklistRule[];
   statusRules?: StatusRule[];
+  notificationPreference?: NotificationPreference;
 }
 
-export const CURRENT_STORAGE_VERSION = 1;
+export const CURRENT_STORAGE_VERSION = 2;
 
 export const DEFAULT_TASK_CONFIG: TaskConfig = {
   listUnreviewed: true,
@@ -45,7 +47,16 @@ export const DEFAULT_STATUS_RULES: StatusRule[] = [
 ];
 
 export async function readStore(): Promise<StoreSchema> {
-  const data = await chrome.storage.local.get(['storageVersion', 'accounts', 'activeAccountId', 'globalSchedulers', 'skipKeywords', 'blacklistRules', 'statusRules']);
+  const data = await chrome.storage.local.get([
+    'storageVersion',
+    'accounts',
+    'activeAccountId',
+    'globalSchedulers',
+    'skipKeywords',
+    'blacklistRules',
+    'statusRules',
+    'notificationPreference',
+  ]);
   return {
     storageVersion: typeof data.storageVersion === 'number' ? data.storageVersion : 0,
     accounts: Array.isArray(data.accounts) ? data.accounts : [],
@@ -54,6 +65,9 @@ export async function readStore(): Promise<StoreSchema> {
     skipKeywords: Array.isArray(data.skipKeywords) ? data.skipKeywords : [],
     blacklistRules: Array.isArray(data.blacklistRules) ? data.blacklistRules : undefined,
     statusRules: Array.isArray(data.statusRules) ? data.statusRules : undefined,
+    notificationPreference: typeof data.notificationPreference === 'object' && data.notificationPreference !== null
+      ? data.notificationPreference as NotificationPreference
+      : undefined,
   };
 }
 

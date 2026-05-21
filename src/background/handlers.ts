@@ -1,4 +1,5 @@
 import { SessionManager } from './utils/session-manager';
+import { getPurchaseLookupSessionByTab } from './purchase-lookup/purchase-lookup-session-service';
 import { getShippingSessionByTab } from './shipping/shipping-session-service';
 import { createBackgroundRouter } from './router/create-background-router';
 import type { ScanSessionState } from './services/violation-service';
@@ -14,6 +15,7 @@ const runtimeRouter = createBackgroundRouter({
   taskSessions,
   scanSessions,
   getCurrentTabShippingSession,
+  getCurrentTabPurchaseLookupSession,
 });
 
 async function handleMessage(channel: string, args: unknown[], sender?: chrome.runtime.MessageSender): Promise<unknown> {
@@ -31,6 +33,16 @@ async function getCurrentTabShippingSession(sender?: chrome.runtime.MessageSende
   const tabId = tabs[0]?.id;
   if (tabId === undefined) return null;
   return getShippingSessionByTab(tabId);
+}
+
+async function getCurrentTabPurchaseLookupSession(sender?: chrome.runtime.MessageSender): Promise<unknown> {
+  if (sender?.tab?.id !== undefined) {
+    return getPurchaseLookupSessionByTab(sender.tab.id);
+  }
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  const tabId = tabs[0]?.id;
+  if (tabId === undefined) return null;
+  return getPurchaseLookupSessionByTab(tabId);
 }
 
 export function installRuntimeHandlers(): void {

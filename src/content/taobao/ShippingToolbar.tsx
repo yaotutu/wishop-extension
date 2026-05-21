@@ -3,7 +3,7 @@ import type { OrderAddressInfo, OrderRealAddressCache, ShippingSession } from '.
 import { extensionApi } from '../../shared/extension-api';
 import { formatOrderAddressForCopy } from '../../shared/address-format';
 import { useShippingToolbarStore, type ShippingToolbarPosition } from '../../stores/shipping-toolbar-store';
-import { readTaobaoPageSnapshot, type TaobaoPageSnapshot } from './page-adapter';
+import { readTaobaoPageSnapshot, type TaobaoPageSnapshot } from './adapters/page-adapter';
 
 interface Props {
   session: ShippingSession;

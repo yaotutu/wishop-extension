@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { extensionApi } from '../shared/extension-api';
 import { Layout as AntLayout, Tabs, Empty, Spin } from 'antd';
 import GlobalLogDrawer from './GlobalLogDrawer';
+import NotificationCenter from './NotificationCenter';
 import { useAccounts } from '../hooks/useAccounts';
 import type { Account } from '../shared/types';
 import { CredentialErrorProvider } from '../contexts/CredentialErrorContext';
@@ -202,6 +203,7 @@ const Layout: React.FC = () => {
             </Suspense>
           </Content>
         </AntLayout>
+        <NotificationCenter />
         <GlobalLogDrawer />
       </AntLayout>
     </CredentialErrorProvider>

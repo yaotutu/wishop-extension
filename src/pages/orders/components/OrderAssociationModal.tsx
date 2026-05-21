@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Form, Input, Modal, Select } from 'antd';
+import { Button, Form, Input, Modal, Select } from 'antd';
 import type { LinkedPlatformOrder, OrderAssociation } from '../../../shared/types';
 
 interface Props {
@@ -8,6 +8,7 @@ interface Props {
   saving: boolean;
   onCancel: () => void;
   onSave: (input: Pick<OrderAssociation, 'internalRemark' | 'linkedOrders'>) => void;
+  onLookupTaobaoOrder: (platformOrderId: string) => void;
 }
 
 interface FormValue {
@@ -39,7 +40,7 @@ const DEFAULT_VALUE: FormValue = {
   remark: '',
 };
 
-export const OrderAssociationModal: React.FC<Props> = ({ open, association, saving, onCancel, onSave }) => {
+export const OrderAssociationModal: React.FC<Props> = ({ open, association, saving, onCancel, onSave, onLookupTaobaoOrder }) => {
   const [form] = Form.useForm<FormValue>();
 
   useEffect(() => {
@@ -88,6 +89,16 @@ export const OrderAssociationModal: React.FC<Props> = ({ open, association, savi
     });
   };
 
+  const handleLookupTaobaoOrder = () => {
+    const platformOrderId = form.getFieldValue('platformOrderId')?.trim();
+    if (!platformOrderId) {
+      form.setFields([{ name: 'platformOrderId', errors: ['请先输入淘宝订单号'] }]);
+      return;
+    }
+    form.setFieldsValue({ platform: 'taobao' });
+    onLookupTaobaoOrder(platformOrderId);
+  };
+
   return (
     <Modal
       title="编辑采购单详情"
@@ -110,6 +121,9 @@ export const OrderAssociationModal: React.FC<Props> = ({ open, association, savi
         <Form.Item name="platformOrderId" label="采购单号">
           <Input placeholder="例如淘宝订单号" />
         </Form.Item>
+        <Button type="dashed" block onClick={handleLookupTaobaoOrder} style={{ marginBottom: 16 }}>
+          打开淘宝工作页读取订单状态
+        </Button>
         <Form.Item name="platformOrderStatus" label="采购单状态">
           <Input placeholder="例如：待发货、已发货、已完成" />
         </Form.Item>

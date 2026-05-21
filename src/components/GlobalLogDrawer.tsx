@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Button, Drawer, Empty, FloatButton, Space, Tag, Timeline, Typography } from 'antd';
 import { ClearOutlined, FileTextOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useGlobalLogs } from '../hooks/useIpc';
-import type { GlobalLogEntry, GlobalLogEventType, GlobalLogLevel, GlobalLogModule } from '../shared/global-log';
+import type { GlobalLogEntry, GlobalLogEventType, GlobalLogLevel, GlobalLogModule, GlobalLogTaskKind } from '../shared/global-log';
 
 const { Text } = Typography;
 
@@ -31,9 +31,18 @@ const timelineColors: Record<GlobalLogLevel, string> = {
 
 const eventLabels: Record<GlobalLogEventType, string> = {
   started: '开始',
+  queued: '排队',
+  waiting_user: '需处理',
   completed: '完成',
   skipped: '跳过',
   failed: '失败',
+};
+
+const taskKindLabels: Record<GlobalLogTaskKind, string> = {
+  manual: '手动',
+  scheduled: '单账号定时',
+  globalScheduled: '全部账号定时',
+  background: '后台',
 };
 
 function formatTime(timestamp: number): string {
@@ -56,6 +65,7 @@ function LogContent({ log }: { log: GlobalLogEntry }) {
         <Text type="secondary" style={{ fontSize: 12 }}>{formatTime(log.timestamp)}</Text>
         <Tag color={levelColors[log.level]} variant="filled">{moduleLabels[log.module]}</Tag>
         <Tag color={levelColors[log.level]} variant="outlined">{eventLabels[log.eventType]}</Tag>
+        {log.taskKind && <Tag>{taskKindLabels[log.taskKind]}</Tag>}
         <Tag variant="filled">{scopeLabel}</Tag>
       </Space>
       <div style={{ fontSize: 13, fontWeight: 500, color: '#1f1f1f', lineHeight: 1.5 }}>

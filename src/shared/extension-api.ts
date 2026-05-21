@@ -14,18 +14,23 @@ import type {
   OrderRealAddressCache,
   OrderSearchParams,
   OrderStatus,
+  CreatePurchaseLookupSessionInput,
   ProductSourceBinding,
   ProductSourceItem,
+  PurchaseLookupSession,
   QuotaResult,
   ScheduledTask,
   ShippingSession,
   StatusRule,
+  TaobaoSecurityChallengeSnapshot,
+  TaobaoPurchaseOrderSnapshot,
   TaskConfig,
   TaskCycleResult,
   ViolationMatch,
   ViolationScanResult,
 } from './types';
 import type { GlobalLogEntry } from './global-log';
+import type { NotificationEntry, NotificationPreference } from './notification';
 import type { RuntimeArgs, RuntimeChannel, RuntimeResult } from './runtime-channels';
 
 async function invoke<K extends RuntimeChannel>(channel: K, ...args: RuntimeArgs<K>): Promise<RuntimeResult<K>> {
@@ -82,6 +87,22 @@ export const extensionApi = {
       input: Pick<OrderAssociation, 'internalRemark' | 'linkedOrders'>,
     ): Promise<OrderAssociation> => invoke('orderAssociations:set', accountId, orderId, input),
   },
+  purchaseLookup: {
+    open: (input: CreatePurchaseLookupSessionInput): Promise<PurchaseLookupSession> => invoke('purchaseLookup:open', input),
+    getCurrentTabSession: (): Promise<PurchaseLookupSession | null> => invoke('purchaseLookup:getCurrentTabSession'),
+    markPageReady: (sessionId: string): Promise<PurchaseLookupSession> => invoke('purchaseLookup:markPageReady', sessionId),
+    reportChallenge: (sessionId: string, snapshot: TaobaoSecurityChallengeSnapshot): Promise<PurchaseLookupSession> =>
+      invoke('purchaseLookup:reportChallenge', sessionId, snapshot),
+    resolveChallenge: (sessionId: string): Promise<PurchaseLookupSession> => invoke('purchaseLookup:resolveChallenge', sessionId),
+    complete: (sessionId: string, snapshot: TaobaoPurchaseOrderSnapshot): Promise<OrderAssociation> =>
+      invoke('purchaseLookup:complete', sessionId, snapshot),
+    fail: (sessionId: string, error: string): Promise<PurchaseLookupSession> => invoke('purchaseLookup:fail', sessionId, error),
+    onCompleted: (callback: (association: OrderAssociation) => void) => onRuntimeEvent('purchaseLookup:completed', callback),
+    onFailed: (callback: (payload: { accountId: string; orderId: string; error: string }) => void) =>
+      onRuntimeEvent('purchaseLookup:failed', callback),
+    onChallenge: (callback: (payload: { accountId: string; orderId: string; reason: string }) => void) =>
+      onRuntimeEvent('purchaseLookup:challenge', callback),
+  },
   orderRealAddresses: {
     list: (accountId: string): Promise<OrderRealAddressCache[]> => invoke('orderRealAddresses:list', accountId),
     get: (accountId: string, orderId: string): Promise<OrderRealAddressCache | null> => invoke('orderRealAddresses:get', accountId, orderId),
@@ -111,6 +132,19 @@ export const extensionApi = {
     list: (): Promise<GlobalLogEntry[]> => invoke('globalLogs:list'),
     clear: (): Promise<void> => invoke('globalLogs:clear'),
     onAdded: (callback: (log: GlobalLogEntry) => void) => onRuntimeEvent('globalLog:added', callback),
+  },
+  notifications: {
+    list: (): Promise<NotificationEntry[]> => invoke('notifications:list'),
+    markRead: (notificationId: string): Promise<NotificationEntry[]> => invoke('notifications:markRead', notificationId),
+    markAllRead: (): Promise<NotificationEntry[]> => invoke('notifications:markAllRead'),
+    clear: (): Promise<void> => invoke('notifications:clear'),
+    getPreference: (): Promise<NotificationPreference> => invoke('notifications:getPreference'),
+    updatePreference: (patch: Partial<NotificationPreference>): Promise<NotificationPreference> =>
+      invoke('notifications:updatePreference', patch),
+    onAdded: (callback: (notification: NotificationEntry) => void) => onRuntimeEvent('notification:added', callback),
+    onChanged: (callback: (notifications: NotificationEntry[]) => void) => onRuntimeEvent('notification:changed', callback),
+    onPreferenceChanged: (callback: (preference: NotificationPreference) => void) =>
+      onRuntimeEvent('notification:preferenceChanged', callback),
   },
   scheduler: {
     list: (accountId: string): Promise<ScheduledTask[]> => invoke('scheduler:list', accountId),

@@ -2,8 +2,10 @@ import { createAccountRuntimeHandlers } from '../runtime-handlers/account-handle
 import { createAppRuntimeHandlers } from '../runtime-handlers/app-handlers';
 import { createDraftRuntimeHandlers } from '../runtime-handlers/draft-handlers';
 import { createLogRuntimeHandlers } from '../runtime-handlers/log-handlers';
+import { createNotificationRuntimeHandlers } from '../runtime-handlers/notification-handlers';
 import { createOrderRuntimeHandlers } from '../runtime-handlers/order-handlers';
 import { createOrderAssociationRuntimeHandlers } from '../runtime-handlers/order-association-handlers';
+import { createPurchaseLookupRuntimeHandlers } from '../runtime-handlers/purchase-lookup-handlers';
 import { createRealAddressRuntimeHandlers } from '../runtime-handlers/real-address-handlers';
 import { createProductSourceRuntimeHandlers } from '../runtime-handlers/product-source-handlers';
 import { createQuotaRuntimeHandlers } from '../runtime-handlers/quota-handlers';
@@ -32,6 +34,19 @@ const FEATURE_CHANNELS = {
   'orderRealAddresses:refresh': 'orders',
   'orderAssociations:list': 'orders',
   'orderAssociations:set': 'orders',
+  'purchaseLookup:open': 'orders',
+  'purchaseLookup:getCurrentTabSession': 'orders',
+  'purchaseLookup:markPageReady': 'orders',
+  'purchaseLookup:reportChallenge': 'orders',
+  'purchaseLookup:resolveChallenge': 'orders',
+  'purchaseLookup:complete': 'orders',
+  'purchaseLookup:fail': 'orders',
+  'notifications:list': 'orders',
+  'notifications:markRead': 'orders',
+  'notifications:markAllRead': 'orders',
+  'notifications:clear': 'orders',
+  'notifications:getPreference': 'orders',
+  'notifications:updatePreference': 'orders',
   'drafts:fetch': 'listing',
   'drafts:list': 'listing',
   'quota:get': 'listing',
@@ -54,6 +69,7 @@ interface CreateBackgroundRouterOptions {
   taskSessions: SessionManager<void>;
   scanSessions: SessionManager<ScanSessionState>;
   getCurrentTabShippingSession: (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
+  getCurrentTabPurchaseLookupSession: (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
 }
 
 /**
@@ -74,6 +90,7 @@ export function createBackgroundRouter(options: CreateBackgroundRouterOptions): 
     }),
     ...createRealAddressRuntimeHandlers(),
     ...createOrderAssociationRuntimeHandlers(),
+    ...createPurchaseLookupRuntimeHandlers(options.getCurrentTabPurchaseLookupSession),
     ...createDraftRuntimeHandlers({
       fetchDrafts,
       listDraft,
@@ -97,6 +114,7 @@ export function createBackgroundRouter(options: CreateBackgroundRouterOptions): 
     ...createRuleRuntimeHandlers(),
     ...createQuotaRuntimeHandlers(),
     ...createLogRuntimeHandlers(),
+    ...createNotificationRuntimeHandlers(),
     ...createLicenseRuntimeHandlers(),
     ...createAppRuntimeHandlers(),
   }, {

@@ -127,6 +127,48 @@ export interface OrderAssociation {
   updatedAt: number;
 }
 
+export type PurchaseLookupSessionStatus = 'created' | 'queued' | 'opened' | 'page-ready' | 'waiting-user-verification' | 'completed' | 'failed';
+
+export type TaobaoSecurityChallengeKind = 'login' | 'slider' | 'captcha' | 'access-denied' | 'unknown';
+
+export interface TaobaoSecurityChallengeSnapshot {
+  detected: boolean;
+  kind: TaobaoSecurityChallengeKind;
+  reason: string;
+  title: string;
+  url: string;
+  matchedSignals: string[];
+}
+
+export interface TaobaoPurchaseOrderSnapshot {
+  platformOrderId: string;
+  platformOrderStatus: string;
+  logisticsStatus: string;
+  logisticsCompany?: string;
+  trackingNumber?: string;
+  remark?: string;
+}
+
+export interface PurchaseLookupSession {
+  id: string;
+  accountId: string;
+  orderId: string;
+  platformOrderId: string;
+  status: PurchaseLookupSessionStatus;
+  createdAt: number;
+  updatedAt: number;
+  expiresAt: number;
+  tabId?: number;
+  lastError?: string;
+  challenge?: TaobaoSecurityChallengeSnapshot;
+}
+
+export interface CreatePurchaseLookupSessionInput {
+  accountId: string;
+  orderId: string;
+  platformOrderId: string;
+}
+
 export interface OrderRealAddressCache {
   orderId: string;
   address: OrderAddressInfo;

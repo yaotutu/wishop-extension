@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { Table, Button, Empty, message } from 'antd';
+import { Table, Button, Empty, Modal, message } from 'antd';
 import {
   useFetchRealAddressMutation,
   useOrderAssociationsQuery,
@@ -65,6 +65,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const detailQuery = useOrderDetailQuery(accountId, detailOrderId);
   const productSourcesQuery = useProductSourcesQuery(accountId);
   const orderAssociationsQuery = useOrderAssociationsQuery(accountId);
+  const refetchOrderAssociations = orderAssociationsQuery.refetch;
   const realAddressCachesQuery = useRealAddressCachesQuery(accountId);
   const saveProductSourcesMutation = useSaveProductSourcesMutation(accountId);
   const saveOrderAssociationMutation = useSaveOrderAssociationMutation(accountId);
@@ -109,6 +110,26 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       if (err instanceof Error) message.error(`${prefix}: ${err.message}`);
     });
   }, [productSourcesQuery.error, orderAssociationsQuery.error, realAddressCachesQuery.error, detailQuery.error]);
+
+  useEffect(() => {
+    const offCompleted = extensionApi.purchaseLookup.onCompleted(() => {
+      void refetchOrderAssociations();
+      message.success('淘宝订单信息已回填到采购单详情');
+    });
+    const offFailed = extensionApi.purchaseLookup.onFailed((payload) => {
+      if (payload.accountId !== accountId) return;
+      message.error(`淘宝订单读取失败: ${payload.error}`);
+    });
+    const offChallenge = extensionApi.purchaseLookup.onChallenge((payload) => {
+      if (payload.accountId !== accountId) return;
+      message.warning(`淘宝工作页需要处理验证: ${payload.reason}`);
+    });
+    return () => {
+      offCompleted();
+      offFailed();
+      offChallenge();
+    };
+  }, [accountId, refetchOrderAssociations]);
 
   const handleStatusChange = useCallback((val: string | number | null) => {
     if (val === null) return;
@@ -238,6 +259,30 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       message.error(`保存内部关联失败: ${err.message}`);
     }
   }, [associationOrder, saveOrderAssociationMutation]);
+
+  const handleLookupTaobaoOrder = useCallback((platformOrderId: string) => {
+    if (!associationOrder) return;
+    Modal.confirm({
+      title: '打开淘宝订单工作页',
+      content: '插件将使用一个专用淘宝工作标签页，在后台排队读取采购订单状态、物流公司和快递单号。遇到登录或安全验证时，会自动切到该标签页请你处理。',
+      okText: '后台读取',
+      cancelText: '取消',
+      async onOk() {
+        try {
+          const session = await extensionApi.purchaseLookup.open({
+            accountId,
+            orderId: associationOrder.order_id,
+            platformOrderId,
+          });
+          setAssociationModalOpen(false);
+          message.success(session.status === 'queued' ? '已加入淘宝工作页读取队列' : '已提交到淘宝工作标签页后台读取');
+        } catch (err: any) {
+          message.error(`打开淘宝工作页失败: ${err.message}`);
+          throw err;
+        }
+      },
+    });
+  }, [accountId, associationOrder]);
 
   const handleOpenShippingSession = useCallback(async (source: ProductSourceItem) => {
     if (!shipSourceOrder || !shipSourceProduct) return;
@@ -383,6 +428,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         saving={saveOrderAssociationMutation.isPending}
         onCancel={() => setAssociationModalOpen(false)}
         onSave={handleSaveAssociation}
+        onLookupTaobaoOrder={handleLookupTaobaoOrder}
       />
     </div>
   );

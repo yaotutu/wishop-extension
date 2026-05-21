@@ -1,7 +1,7 @@
 export type GlobalLogLevel = 'info' | 'success' | 'warning' | 'error';
 export type GlobalLogModule = 'listing' | 'violation' | 'orders' | 'store' | 'scheduler' | 'system';
 export type GlobalLogScope = 'global' | 'account';
-export type GlobalLogEventType = 'started' | 'completed' | 'skipped' | 'failed';
+export type GlobalLogEventType = 'started' | 'queued' | 'waiting_user' | 'completed' | 'skipped' | 'failed';
 export type GlobalLogTaskKind = 'manual' | 'scheduled' | 'globalScheduled' | 'background';
 
 export interface GlobalLogSummary {

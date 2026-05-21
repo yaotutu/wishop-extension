@@ -1,12 +1,10 @@
+import { textOf } from '../dom/text';
+
 export interface TaobaoPageSnapshot {
   title: string;
   url: string;
   priceText: string;
   selectedSkuText: string;
-}
-
-function textOf(selector: string): string {
-  return document.querySelector(selector)?.textContent?.trim() || '';
 }
 
 /**

@@ -1,8 +1,9 @@
 import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { createShadowRootUi } from 'wxt/utils/content-script-ui/shadow-root';
-import { extensionApi } from '../src/shared/extension-api';
+import { PurchaseLookupToolbar } from '../src/content/taobao/PurchaseLookupToolbar';
 import { ShippingToolbar } from '../src/content/taobao/ShippingToolbar';
+import { resolveTaobaoContentSessions } from '../src/content/taobao/runtime/session-resolver';
 
 const toolbarCss = `
   :host {
@@ -168,30 +169,83 @@ const toolbarCss = `
     color: #389e0d;
     font-size: 12px;
   }
-`;
-
-async function getShippingSessionWithRetry() {
-  /**
-   * chrome.tabs.create resolves as soon as the tab exists, while the page may
-   * start executing the content script almost immediately. A short retry keeps
-   * the toolbar reliable if the content script asks for its session before the
-   * background service has finished binding tabId -> sessionId.
-   */
-  for (let attempt = 0; attempt < 10; attempt++) {
-    const session = await extensionApi.shipping.getCurrentTabSession();
-    if (session) return session;
-    await new Promise(resolve => setTimeout(resolve, 200));
+  .wishop-purchase-lookup {
+    box-sizing: border-box;
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    z-index: 2147483647;
+    width: 360px;
+    max-width: calc(100vw - 48px);
+    padding: 12px;
+    border: 1px solid rgba(250, 140, 22, 0.35);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.98);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+    color: #1f1f1f;
+    font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    pointer-events: auto;
   }
-  return null;
-}
+  .wishop-purchase-lookup * {
+    box-sizing: border-box;
+  }
+  .wishop-purchase-lookup__header {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .wishop-purchase-lookup__header strong {
+    font-size: 14px;
+  }
+  .wishop-purchase-lookup__header span {
+    color: #fa8c16;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .wishop-purchase-lookup__body {
+    padding: 8px;
+    border: 1px solid #f0f0f0;
+    border-radius: 6px;
+    background: #fff7e6;
+  }
+  .wishop-purchase-lookup__body p {
+    margin: 0 0 6px;
+    font-weight: 600;
+  }
+  .wishop-purchase-lookup__body ul {
+    margin: 0;
+    padding-left: 18px;
+  }
+  .wishop-purchase-lookup__body li,
+  .wishop-purchase-lookup small {
+    overflow-wrap: anywhere;
+  }
+  .wishop-purchase-lookup__actions {
+    margin-top: 8px;
+  }
+  .wishop-purchase-lookup__actions button {
+    height: 30px;
+    padding: 0 10px;
+    border: 1px solid #fa8c16;
+    border-radius: 4px;
+    background: #fa8c16;
+    color: #fff;
+    cursor: pointer;
+  }
+  .wishop-purchase-lookup__actions button:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+  }
+`;
 
 export default defineContentScript({
   matches: ['https://*.taobao.com/*', 'https://*.tmall.com/*'],
   runAt: 'document_idle',
 
   async main(ctx) {
-    const session = await getShippingSessionWithRetry();
-    if (!session) return;
+    const { shippingSession, purchaseLookupSession } = await resolveTaobaoContentSessions();
+    if (!shippingSession && !purchaseLookupSession) return;
 
     /**
      * The toolbar is mounted in Shadow DOM so Taobao/Tmall page CSS cannot
@@ -213,7 +267,12 @@ export default defineContentScript({
         shadowHost.style.setProperty('z-index', '2147483647', 'important');
         shadowHost.style.setProperty('pointer-events', 'none', 'important');
         const root = createRoot(container);
-        root.render(<ShippingToolbar session={session} />);
+        root.render(
+          <>
+            {shippingSession && <ShippingToolbar session={shippingSession} />}
+            {purchaseLookupSession && <PurchaseLookupToolbar session={purchaseLookupSession} />}
+          </>,
+        );
         return root;
       },
       onRemove(root) {

@@ -9,11 +9,12 @@ import type {
 import { enqueueCloudGlobalLog } from './sinks/cloud-log-sink';
 import { writeLocalGlobalLog } from './sinks/local-log-sink';
 import { emitGlobalLogAdded } from './sinks/runtime-event-sink';
+import { createNotificationForGlobalLog } from '../notification-center/notification-service';
 
 function levelForEvent(eventType: GlobalLogEventType): GlobalLogLevel {
   if (eventType === 'completed') return 'success';
   if (eventType === 'failed') return 'error';
-  if (eventType === 'skipped') return 'warning';
+  if (eventType === 'skipped' || eventType === 'waiting_user') return 'warning';
   return 'info';
 }
 
@@ -43,6 +44,7 @@ export async function recordGlobalLog(input: GlobalLogInput): Promise<GlobalLogE
   await Promise.allSettled([
     writeLocalGlobalLog(entry),
     emitGlobalLogAdded(entry),
+    createNotificationForGlobalLog(entry),
     enqueueCloudGlobalLog(entry),
   ]);
 
@@ -51,6 +53,14 @@ export async function recordGlobalLog(input: GlobalLogInput): Promise<GlobalLogE
 
 export async function recordTaskStarted(input: Omit<GlobalLogInput, 'eventType' | 'level'> & { level?: GlobalLogLevel }): Promise<GlobalLogEntry> {
   return recordGlobalLog({ ...input, eventType: 'started', level: input.level || 'info' });
+}
+
+export async function recordTaskQueued(input: Omit<GlobalLogInput, 'eventType' | 'level'> & { level?: GlobalLogLevel }): Promise<GlobalLogEntry> {
+  return recordGlobalLog({ ...input, eventType: 'queued', level: input.level || 'info' });
+}
+
+export async function recordTaskWaitingUser(input: Omit<GlobalLogInput, 'eventType' | 'level'> & { level?: GlobalLogLevel }): Promise<GlobalLogEntry> {
+  return recordGlobalLog({ ...input, eventType: 'waiting_user', level: input.level || 'warning' });
 }
 
 export async function recordTaskCompleted(input: Omit<GlobalLogInput, 'eventType' | 'level'> & { level?: GlobalLogLevel }): Promise<GlobalLogEntry> {

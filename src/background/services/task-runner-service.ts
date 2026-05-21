@@ -21,8 +21,8 @@ export async function runTask(accountId: string, taskConfig: TaskConfig, taskSes
     accountName: account?.name,
     taskKind: 'manual',
     runId,
-    title: '商品提审手动执行开始',
-    detail: `账号「${account?.name || accountId}」开始执行手动提审任务`,
+    title: '单账号手动提审开始',
+    detail: `账号「${account?.name || accountId}」开始执行单账号手动提审任务`,
   });
 
   if (taskConfig.listUnreviewed) {
@@ -40,7 +40,7 @@ export async function runTask(accountId: string, taskConfig: TaskConfig, taskSes
         accountName: account?.name,
         taskKind: 'manual',
         runId,
-        title: '商品提审手动执行失败',
+        title: '单账号手动提审失败',
         error: { message: `配额检查失败: ${error.message}` },
       });
       logger.error('配额检查失败:', error);
@@ -69,7 +69,7 @@ export async function runTask(accountId: string, taskConfig: TaskConfig, taskSes
       taskKind: 'manual',
       runId,
       level: result.stopped || result.errors > 0 ? 'warning' : 'success',
-      title: '商品提审手动执行完成',
+      title: '单账号手动提审完成',
       detail: result.reason ? `原因：${result.reason}` : undefined,
       summary: {
         scanned: result.scanned,
@@ -88,7 +88,7 @@ export async function runTask(accountId: string, taskConfig: TaskConfig, taskSes
       accountName: account?.name,
       taskKind: 'manual',
       runId,
-      title: '商品提审手动执行异常',
+      title: '单账号手动提审异常',
       error: { message: error?.message || String(error) },
     });
     throw error;
