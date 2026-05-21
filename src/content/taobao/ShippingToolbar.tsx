@@ -360,11 +360,6 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
           <small>{session.order.merchantNotes?.trim() ? `商家：${session.order.merchantNotes}` : '商家：无'}</small>
           <small>{session.source.remark?.trim() ? `货源：${session.source.remark}` : '货源：无'}</small>
         </div>
-        <div className="wishop-shipping-card">
-          <label>当前淘宝页</label>
-          <p title={snapshot.title || '未识别标题'}>{snapshot.title || '未识别标题'}</p>
-          <small>{snapshot.priceText || snapshot.selectedSkuText || '页面信息待确认'}</small>
-        </div>
       </div>
       <div className="wishop-shipping-actions">
         <button type="button" onClick={copyOrderInfo}>复制订单</button>
