@@ -3,6 +3,7 @@ import type {
   BlacklistRule,
   Config,
   CreateShippingSessionInput,
+  DeliveryCompanyOption,
   DraftProduct,
   GlobalScheduledTask,
   LicenseActivationInput,
@@ -15,6 +16,8 @@ import type {
   OrderSearchParams,
   OrderStatus,
   OrderTimeScope,
+  ShipOrderFromPurchaseInput,
+  ShipOrderFromPurchaseResult,
   CreatePurchaseLookupSessionInput,
   ProductSourceBinding,
   ProductSourceItem,
@@ -81,6 +84,9 @@ export const extensionApi = {
     detail: (accountId: string, orderId: string): Promise<Order> => invoke('orders:detail', accountId, orderId),
     search: (accountId: string, params: OrderSearchParams): Promise<{ orders: Order[]; hasMore: boolean }> => invoke('orders:search', accountId, params),
     decodeAddress: (accountId: string, orderId: string): Promise<OrderAddressInfo> => invoke('orders:decodeAddress', accountId, orderId),
+    listDeliveryCompanies: (accountId: string): Promise<DeliveryCompanyOption[]> => invoke('orders:listDeliveryCompanies', accountId),
+    shipFromPurchase: (input: ShipOrderFromPurchaseInput): Promise<ShipOrderFromPurchaseResult> =>
+      invoke('orders:shipFromPurchase', input),
   },
   orderAssociations: {
     list: (accountId: string): Promise<OrderAssociation[]> => invoke('orderAssociations:list', accountId),

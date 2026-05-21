@@ -21,6 +21,25 @@ export interface ListingResult {
   errmsg: string;
 }
 
+export interface DeliveryCompany {
+  delivery_id: string;
+  delivery_name: string;
+}
+
+export interface SendOrderDeliveryPayload {
+  order_id: string;
+  delivery_list: Array<{
+    delivery_id: string;
+    waybill_id: string;
+    deliver_type: 1;
+    product_infos: Array<{
+      product_cnt: number;
+      product_id: string;
+      sku_id: string;
+    }>;
+  }>;
+}
+
 export function createWxShopClient(config: Config) {
   let tokenCache: TokenData | null = null;
 
@@ -230,6 +249,27 @@ export function createWxShopClient(config: Config) {
     };
   }
 
+  async function getDeliveryCompanyList(ewaybillOnly = false): Promise<DeliveryCompany[]> {
+    const token = await getAccessToken();
+    const url = `${BASE_URL}/channels/ec/order/deliverycompanylist/new/get?access_token=${token}`;
+    const response = await axios.post(url, { ewaybill_only: ewaybillOnly });
+    const data = response.data;
+    if (data.errcode && data.errcode !== 0) {
+      throw new Error(data.errmsg || `获取快递公司列表失败: ${data.errcode}`);
+    }
+    return data.company_list || [];
+  }
+
+  async function sendOrderDelivery(payload: SendOrderDeliveryPayload): Promise<void> {
+    const token = await getAccessToken();
+    const url = `${BASE_URL}/channels/ec/order/delivery/send?access_token=${token}`;
+    const response = await axios.post(url, payload);
+    const data = response.data;
+    if (data.errcode && data.errcode !== 0) {
+      throw new Error(data.errmsg || `提交发货失败: ${data.errcode}`);
+    }
+  }
+
   function clearTokenCache(): void {
     tokenCache = null;
   }
@@ -246,6 +286,8 @@ export function createWxShopClient(config: Config) {
     getOrderDetail,
     searchOrders,
     decodeOrderSensitiveInfo,
+    getDeliveryCompanyList,
+    sendOrderDelivery,
     clearTokenCache,
   };
 }

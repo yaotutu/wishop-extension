@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { Table, Button, Empty, Modal, message } from 'antd';
+import { Table, Button, Empty, Modal, Select, message } from 'antd';
 import {
   useFetchRealAddressMutation,
   useOrderAssociationsQuery,
@@ -9,9 +9,11 @@ import {
   useRealAddressCachesQuery,
   useSaveOrderAssociationMutation,
   useSaveProductSourcesMutation,
+  useShipOrderFromPurchaseMutation,
 } from '../../hooks/useIpc';
 import { extensionApi } from '../../shared/extension-api';
-import type { Order, OrderStatus, OrderProductInfo, OrderSearchParams, OrderRealAddressCache, OrderAssociation, ProductSourceItem, OrderTimeScope } from '../../shared/types';
+import type { DeliveryCompanyOption, Order, OrderStatus, OrderProductInfo, OrderSearchParams, OrderRealAddressCache, OrderAssociation, ProductSourceItem, OrderTimeScope } from '../../shared/types';
+import { getDeliveryCompanyUnmatchedMessage, isDeliveryCompanyUnmatchedError } from '../../shared/errors';
 import { formatOrderAddressForCopy } from '../../shared/address-format';
 import { newProductSourceRow, ShippingSourceModal, SourceManagementModal } from './components/ProductSourceModals';
 import { OrderDetailModal } from './components/OrderDetailModal';
@@ -62,6 +64,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const [shipSourceOrder, setShipSourceOrder] = useState<Order | null>(null);
   const [shipSourceProduct, setShipSourceProduct] = useState<OrderProductInfo | null>(null);
   const [checkingPurchaseOrderIds, setCheckingPurchaseOrderIds] = useState<Set<string>>(new Set());
+  const [shippingFromPurchaseOrderIds, setShippingFromPurchaseOrderIds] = useState<Set<string>>(new Set());
   const tableAreaRef = useRef<HTMLDivElement>(null);
   const [scrollY, setScrollY] = useState(400);
   const ordersQuery = useOrdersQuery(accountId, activeStatus, activeSearch, timeScope);
@@ -72,6 +75,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const realAddressCachesQuery = useRealAddressCachesQuery(accountId);
   const saveProductSourcesMutation = useSaveProductSourcesMutation(accountId);
   const saveOrderAssociationMutation = useSaveOrderAssociationMutation(accountId);
+  const shipOrderFromPurchaseMutation = useShipOrderFromPurchaseMutation(accountId);
   const fetchRealAddressMutation = useFetchRealAddressMutation(accountId);
   const orders = ordersQuery.orders;
   const hasMore = ordersQuery.hasMore;
@@ -340,6 +344,120 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     }
   }, [accountId, orderAssociations]);
 
+  const submitShipFromPurchase = useCallback(async (
+    order: Order,
+    logisticsCompany: string,
+    trackingNumber: string,
+    deliveryId?: string,
+  ) => {
+    setShippingFromPurchaseOrderIds(previous => new Set(previous).add(order.order_id));
+    try {
+      const result = await shipOrderFromPurchaseMutation.mutateAsync({
+        orderId: order.order_id,
+        logisticsCompany,
+        trackingNumber,
+        deliveryId,
+      });
+      message.success(`微信小店发货已提交：${result.deliveryName} ${result.waybillId}`);
+      void ordersQuery.refetch();
+    } finally {
+      setShippingFromPurchaseOrderIds(previous => {
+        const next = new Set(previous);
+        next.delete(order.order_id);
+        return next;
+      });
+    }
+  }, [ordersQuery, shipOrderFromPurchaseMutation]);
+
+  const openDeliveryCompanySelector = useCallback(async (
+    order: Order,
+    logisticsCompany: string,
+    trackingNumber: string,
+    reason: string,
+  ) => {
+    let selectedDeliveryId = '';
+    let companies: DeliveryCompanyOption[] = [];
+    try {
+      companies = await extensionApi.orders.listDeliveryCompanies(accountId);
+    } catch (err: any) {
+      message.error(`获取微信小店快递公司列表失败: ${err.message}`);
+      return;
+    }
+
+    Modal.confirm({
+      title: '请选择微信小店快递公司',
+      content: (
+        <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ fontSize: 13, color: '#595959' }}>{reason}</div>
+          <div style={{ fontSize: 13 }}>
+            <div>淘宝读取快递公司：{logisticsCompany || '-'}</div>
+            <div>淘宝读取快递单号：{trackingNumber || '-'}</div>
+          </div>
+          <Select
+            showSearch
+            placeholder="选择微信小店快递公司"
+            optionFilterProp="label"
+            options={companies.map(company => ({
+              value: company.deliveryId,
+              label: `${company.deliveryName}（${company.deliveryId}）`,
+            }))}
+            onChange={(value) => {
+              selectedDeliveryId = value;
+            }}
+            style={{ width: '100%' }}
+          />
+        </div>
+      ),
+      okText: '使用所选公司回填',
+      cancelText: '取消',
+      async onOk() {
+        if (!selectedDeliveryId) {
+          message.warning('请选择微信小店快递公司');
+          throw new Error('请选择微信小店快递公司');
+        }
+        try {
+          await submitShipFromPurchase(order, logisticsCompany, trackingNumber, selectedDeliveryId);
+        } catch (err: any) {
+          message.error(`回填微信小店发货失败: ${err.message}`);
+          throw err;
+        }
+      },
+    });
+  }, [accountId, submitShipFromPurchase]);
+
+  const handleShipFromPurchase = useCallback((order: Order) => {
+    const linked = orderAssociations[order.order_id]?.linkedOrders[0];
+    const logisticsCompany = linked?.logisticsCompany?.trim() || '';
+    const trackingNumber = linked?.trackingNumber?.trim() || '';
+    if (!logisticsCompany || !trackingNumber) {
+      message.warning('请先检查发货状态，读取快递公司和快递单号');
+      return;
+    }
+    Modal.confirm({
+      title: '回填微信小店发货',
+      content: `确认将 ${logisticsCompany} ${trackingNumber} 回填到微信小店订单 ${order.order_id}？`,
+      okText: '确认回填',
+      cancelText: '取消',
+      async onOk() {
+        try {
+          await submitShipFromPurchase(order, logisticsCompany, trackingNumber);
+        } catch (err: any) {
+          if (isDeliveryCompanyUnmatchedError(err)) {
+            await openDeliveryCompanySelector(
+              order,
+              logisticsCompany,
+              trackingNumber,
+              getDeliveryCompanyUnmatchedMessage(err),
+            );
+            return;
+          }
+          message.error(`回填微信小店发货失败: ${err.message}`);
+          throw err;
+        }
+      },
+    });
+  }, [openDeliveryCompanySelector, orderAssociations, submitShipFromPurchase]);
+
   const handleOpenShippingSession = useCallback(async (source: ProductSourceItem) => {
     if (!shipSourceOrder || !shipSourceProduct) return;
     const address = realAddressCaches[shipSourceOrder.order_id]?.address;
@@ -386,6 +504,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     productSources,
     orderAssociations,
     checkingPurchaseOrderIds,
+    shippingFromPurchaseOrderIds,
     onCopyText: handleCopyText,
     onCopyImage: handleCopyImage,
     onCopyAddress: handleCopyAddress,
@@ -396,12 +515,14 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     onOpenShipSources: openShipSources,
     onEditAssociation: openAssociationEditor,
     onCheckPurchaseOrder: handleCheckPurchaseOrder,
+    onShipFromPurchase: handleShipFromPurchase,
   }), [
     realAddressCaches,
     decodingOrderIds,
     productSources,
     orderAssociations,
     checkingPurchaseOrderIds,
+    shippingFromPurchaseOrderIds,
     handleCopyText,
     handleCopyImage,
     handleCopyAddress,
@@ -412,6 +533,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     openShipSources,
     openAssociationEditor,
     handleCheckPurchaseOrder,
+    handleShipFromPurchase,
   ]);
 
   return (

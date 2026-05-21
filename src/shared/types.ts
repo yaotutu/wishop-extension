@@ -170,6 +170,26 @@ export interface CreatePurchaseLookupSessionInput {
   platformOrderId: string;
 }
 
+export interface ShipOrderFromPurchaseInput {
+  accountId: string;
+  orderId: string;
+  logisticsCompany: string;
+  trackingNumber: string;
+  deliveryId?: string;
+}
+
+export interface ShipOrderFromPurchaseResult {
+  order: Order;
+  deliveryId: string;
+  deliveryName: string;
+  waybillId: string;
+}
+
+export interface DeliveryCompanyOption {
+  deliveryId: string;
+  deliveryName: string;
+}
+
 export interface OrderRealAddressCache {
   orderId: string;
   address: OrderAddressInfo;

@@ -37,6 +37,8 @@ const FEATURE_CHANNELS = {
   'orders:detail': 'orders',
   'orders:search': 'orders',
   'orders:decodeAddress': 'orders',
+  'orders:listDeliveryCompanies': 'shipping',
+  'orders:shipFromPurchase': 'shipping',
   'orderRealAddresses:list': 'orders',
   'orderRealAddresses:get': 'orders',
   'orderRealAddresses:fetch': 'orders',

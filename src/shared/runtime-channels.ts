@@ -5,6 +5,7 @@ import type {
   BlacklistRule,
   Config,
   CreateShippingSessionInput,
+  DeliveryCompanyOption,
   DraftProduct,
   GlobalScheduledTask,
   LicenseActivationInput,
@@ -17,6 +18,8 @@ import type {
   OrderSearchParams,
   OrderStatus,
   OrderTimeScope,
+  ShipOrderFromPurchaseInput,
+  ShipOrderFromPurchaseResult,
   CreatePurchaseLookupSessionInput,
   ProductSourceBinding,
   ProductSourceItem,
@@ -54,6 +57,8 @@ export interface RuntimeChannels {
   'orders:detail': { args: [accountId: string, orderId: string]; result: Order };
   'orders:search': { args: [accountId: string, params: OrderSearchParams]; result: { orders: Order[]; hasMore: boolean } };
   'orders:decodeAddress': { args: [accountId: string, orderId: string]; result: OrderAddressInfo };
+  'orders:listDeliveryCompanies': { args: [accountId: string]; result: DeliveryCompanyOption[] };
+  'orders:shipFromPurchase': { args: [input: ShipOrderFromPurchaseInput]; result: ShipOrderFromPurchaseResult };
 
   'orderRealAddresses:list': { args: [accountId: string]; result: OrderRealAddressCache[] };
   'orderRealAddresses:get': { args: [accountId: string, orderId: string]; result: OrderRealAddressCache | null };

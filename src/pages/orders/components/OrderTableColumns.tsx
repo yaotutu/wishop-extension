@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, Flex, Image, Space, Tag, Typography } from 'antd';
-import { CopyOutlined, EyeOutlined, LinkOutlined, PictureOutlined, ShoppingCartOutlined, SyncOutlined } from '@ant-design/icons';
+import { CopyOutlined, EyeOutlined, LinkOutlined, PictureOutlined, SendOutlined, ShoppingCartOutlined, SyncOutlined } from '@ant-design/icons';
 import type { Order, OrderAssociation, OrderProductInfo, OrderRealAddressCache, ProductSourceItem } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
 import { formatOrderAddressLine, getOrderPhoneDisplay } from '../../../shared/address-format';
@@ -14,6 +14,7 @@ interface CreateOrderColumnsOptions {
   productSources: Record<string, ProductSourceItem[]>;
   orderAssociations: Record<string, OrderAssociation>;
   checkingPurchaseOrderIds: Set<string>;
+  shippingFromPurchaseOrderIds: Set<string>;
   onCopyText: (text: string | undefined, label: string) => void;
   onCopyImage: (imageUrl?: string) => void;
   onCopyAddress: (cache: OrderRealAddressCache) => void;
@@ -24,6 +25,7 @@ interface CreateOrderColumnsOptions {
   onOpenShipSources: (order: Order, product: OrderProductInfo) => void;
   onEditAssociation: (order: Order) => void;
   onCheckPurchaseOrder: (order: Order) => void;
+  onShipFromPurchase: (order: Order) => void;
 }
 
 /**
@@ -265,6 +267,10 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
         const association = options.orderAssociations[record.order_id];
         const linked = association?.linkedOrders[0];
         const internalRemark = association?.internalRemark?.trim();
+        const canShipFromPurchase = record.status === OrderStatusEnum.PendingShipment
+          && !!linked?.trackingNumber
+          && !!linked?.logisticsCompany
+          && !record.order_detail?.delivery_info?.delivery_product_info?.length;
         return (
           <div style={{ display: 'grid', gap: 3 }}>
             {internalRemark && (
@@ -298,6 +304,20 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
                     style={{ padding: 0, height: 18, fontSize: 12, justifySelf: 'start' }}
                   >
                     检查发货状态
+                  </Button>
+                )}
+                {linked.trackingNumber && (
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<SendOutlined />}
+                    disabled={!canShipFromPurchase}
+                    loading={options.shippingFromPurchaseOrderIds.has(record.order_id)}
+                    onClick={() => options.onShipFromPurchase(record)}
+                    title={!canShipFromPurchase ? '仅待发货订单且已读取快递公司和快递单号时可回填' : undefined}
+                    style={{ padding: 0, height: 18, fontSize: 12, justifySelf: 'start' }}
+                  >
+                    回填发货
                   </Button>
                 )}
               </>

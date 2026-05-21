@@ -1,6 +1,7 @@
-import type { OrderSearchParams, OrderStatus, OrderTimeScope } from '../../shared/types';
+import type { OrderSearchParams, OrderStatus, OrderTimeScope, ShipOrderFromPurchaseInput } from '../../shared/types';
 import { getClient } from '../wxshop/client-registry';
 import type { RuntimeHandlerMap } from '../router/runtime-router';
+import { shipOrderFromPurchase } from '../services/order-delivery-service';
 
 interface OrderHandlerDeps {
   listOrders: (accountId: string, status?: OrderStatus, pageSize?: number, reset?: boolean, timeScope?: OrderTimeScope) => Promise<unknown>;
@@ -26,6 +27,16 @@ export function createOrderRuntimeHandlers(deps: OrderHandlerDeps): RuntimeHandl
     },
     async 'orders:decodeAddress'(args) {
       return (await getClient(args[0] as string)).decodeOrderSensitiveInfo(args[1] as string);
+    },
+    async 'orders:listDeliveryCompanies'(args) {
+      const companies = await (await getClient(args[0] as string)).getDeliveryCompanyList(false);
+      return companies.map(company => ({
+        deliveryId: company.delivery_id,
+        deliveryName: company.delivery_name,
+      }));
+    },
+    async 'orders:shipFromPurchase'(args) {
+      return shipOrderFromPurchase(args[0] as ShipOrderFromPurchaseInput);
     },
   };
 }

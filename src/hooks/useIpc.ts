@@ -19,5 +19,6 @@ export {
   useRealAddressCachesQuery,
   useSaveOrderAssociationMutation,
   useSaveProductSourcesMutation,
+  useShipOrderFromPurchaseMutation,
 } from './useOrderQueries';
 export { useTaskConfig } from './useTaskConfig';

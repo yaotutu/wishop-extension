@@ -12,6 +12,7 @@ import type {
   OrderTimeScope,
   ProductSourceBinding,
   ProductSourceItem,
+  ShipOrderFromPurchaseInput,
 } from '../shared/types';
 import { useCredentialError } from '../contexts/CredentialErrorContext';
 import { queryKeys } from '../query/query-keys';
@@ -212,6 +213,18 @@ export function useSaveOrderAssociationMutation(accountId: string) {
           return next;
         },
       );
+    },
+  });
+}
+
+export function useShipOrderFromPurchaseMutation(accountId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Omit<ShipOrderFromPurchaseInput, 'accountId'>) =>
+      extensionApi.orders.shipFromPurchase({ ...input, accountId }),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ['orders', accountId] });
+      queryClient.setQueryData(queryKeys.orders.detail(accountId, result.order.order_id), result.order);
     },
   });
 }
