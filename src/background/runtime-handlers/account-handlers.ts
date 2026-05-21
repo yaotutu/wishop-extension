@@ -9,7 +9,8 @@ import {
   setConfig,
   updateAccount,
 } from '../store/account-repository';
-import { startAllTasks, stopAllTasks } from '../scheduler/listing-scheduler';
+import { removeScheduledJobsForAccount } from '../store/scheduled-job-repository';
+import { startAllScheduledJobs, stopAllScheduledJobs } from '../scheduler/scheduler-center';
 import { removeClient } from '../wxshop/client-registry';
 import { createWxShopClient } from '../wxshop/client';
 import type { RuntimeHandlerMap } from '../router/runtime-router';
@@ -25,14 +26,15 @@ export function createAccountRuntimeHandlers(deps: AccountHandlerDeps): RuntimeH
     },
     async 'accounts:add'(args) {
       const account = await addAccount(args[0] as string, args[1] as Config);
-      await startAllTasks();
+      await startAllScheduledJobs();
       return account;
     },
     async 'accounts:remove'(args) {
       const accountId = args[0] as string;
-      await stopAllTasks();
+      await stopAllScheduledJobs();
       await removeAccount(accountId);
-      await startAllTasks();
+      await removeScheduledJobsForAccount(accountId);
+      await startAllScheduledJobs();
       removeClient(accountId);
       deps.onAccountRemoved(accountId);
       return undefined;

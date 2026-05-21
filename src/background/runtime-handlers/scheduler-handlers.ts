@@ -1,78 +1,183 @@
-import type { GlobalScheduledTask, ScheduledTask } from '../../shared/types';
+import type { GlobalScheduledTask, ScheduledJob, ScheduledTask, TaskConfig } from '../../shared/types';
 import {
-  addGlobalScheduler,
-  addScheduler,
-  getGlobalSchedulers,
-  getSchedulers,
-  removeGlobalScheduler,
-  removeScheduler,
-  updateGlobalScheduler,
-  updateScheduler,
-} from '../store/scheduler-repository';
-import { isSupportedCron, startGlobalTask, startTask, stopGlobalTask, stopTask } from '../scheduler/listing-scheduler';
+  addScheduledJob,
+  getScheduledJobs,
+  removeScheduledJob,
+  updateScheduledJob,
+} from '../store/scheduled-job-repository';
+import {
+  isSupportedJobCron,
+  startScheduledJob,
+  stopScheduledJob,
+} from '../scheduler/scheduler-center';
 import type { RuntimeHandlerMap } from '../router/runtime-router';
 
 function unsupportedCronError(cronExpression: string): Error {
   return new Error(`当前插件定时器不支持该 cron 表达式: ${cronExpression}。请改为 */N * * * *、M * * * * 或 M H * * *。`);
 }
 
+function listingJobs(jobs: ScheduledJob[]): ScheduledJob<TaskConfig>[] {
+  return jobs.filter((job): job is ScheduledJob<TaskConfig> => job.jobType === 'listing.submitDrafts');
+}
+
+function jobToScheduledTask(job: ScheduledJob<TaskConfig>): ScheduledTask {
+  return {
+    id: job.id,
+    name: job.name,
+    enabled: job.enabled,
+    cronExpression: job.cronExpression,
+    dailyLimit: job.dailyLimit || 0,
+    taskConfig: job.payload,
+    lastRunDate: job.stats.lastRunDate,
+    todayListedCount: job.stats.todayRunCount,
+  };
+}
+
+function scheduledTaskInputToJob(
+  accountId: string,
+  task: Omit<ScheduledTask, 'id' | 'lastRunDate' | 'todayListedCount'>,
+): Omit<ScheduledJob<TaskConfig>, 'id' | 'stats' | 'createdAt' | 'updatedAt'> {
+  return {
+    name: task.name,
+    enabled: task.enabled,
+    module: 'listing',
+    jobType: 'listing.submitDrafts',
+    scope: 'account',
+    accountId,
+    cronExpression: task.cronExpression,
+    dailyLimit: task.dailyLimit,
+    payload: task.taskConfig,
+  };
+}
+
+function jobToGlobalScheduledTask(job: ScheduledJob<TaskConfig>): GlobalScheduledTask {
+  return {
+    id: job.id,
+    name: job.name,
+    enabled: job.enabled,
+    cronExpression: job.cronExpression,
+    staggerMinutes: job.staggerMinutes || 0,
+    excludedAccountIds: job.excludedAccountIds || [],
+    taskConfig: job.payload,
+    accountStats: Object.fromEntries(Object.entries(job.accountStats || {}).map(([accountId, stat]) => [
+      accountId,
+      {
+        lastRunDate: stat.lastRunDate,
+        todayListedCount: stat.todayRunCount,
+      },
+    ])),
+  };
+}
+
+function globalTaskInputToJob(
+  task: Omit<GlobalScheduledTask, 'id' | 'accountStats'>,
+): Omit<ScheduledJob<TaskConfig>, 'id' | 'stats' | 'createdAt' | 'updatedAt'> {
+  return {
+    name: task.name,
+    enabled: task.enabled,
+    module: 'listing',
+    jobType: 'listing.submitDrafts',
+    scope: 'global',
+    excludedAccountIds: task.excludedAccountIds || [],
+    cronExpression: task.cronExpression,
+    staggerMinutes: task.staggerMinutes,
+    payload: task.taskConfig,
+    accountStats: {},
+  };
+}
+
 export function createSchedulerRuntimeHandlers(): RuntimeHandlerMap {
   return {
     async 'scheduler:list'(args) {
-      return getSchedulers(args[0] as string);
+      const accountId = args[0] as string;
+      return listingJobs(await getScheduledJobs())
+        .filter(job => job.scope === 'account' && job.accountId === accountId)
+        .map(jobToScheduledTask);
     },
     async 'scheduler:add'(args) {
       const [accountId, task] = args as [string, Omit<ScheduledTask, 'id' | 'lastRunDate' | 'todayListedCount'>];
-      const newTask = await addScheduler(accountId, task);
-      if (newTask.enabled) {
-        const ok = await startTask(accountId, newTask);
-        if (!ok) throw unsupportedCronError(newTask.cronExpression);
+      if (!isSupportedJobCron(task.cronExpression)) throw unsupportedCronError(task.cronExpression);
+      const job = await addScheduledJob(scheduledTaskInputToJob(accountId, task));
+      if (job.enabled) {
+        const ok = await startScheduledJob(job);
+        if (!ok) throw unsupportedCronError(job.cronExpression);
       }
-      return newTask;
+      return jobToScheduledTask(job as ScheduledJob<TaskConfig>);
     },
     async 'scheduler:update'(args) {
       const [accountId, taskId, patch] = args as [string, string, Partial<ScheduledTask>];
-      if (patch.cronExpression && !isSupportedCron(patch.cronExpression)) {
+      if (patch.cronExpression && !isSupportedJobCron(patch.cronExpression)) {
         throw unsupportedCronError(patch.cronExpression);
       }
-      await updateScheduler(accountId, taskId, patch);
-      const task = (await getSchedulers(accountId)).find(item => item.id === taskId);
-      if (patch.enabled === false) await stopTask(accountId, taskId);
-      else if (task?.enabled) await startTask(accountId, task);
+      const existing = listingJobs(await getScheduledJobs()).find(job => job.id === taskId && job.accountId === accountId);
+      if (!existing) return undefined;
+      const nextPatch: Partial<ScheduledJob<TaskConfig>> = {
+        name: patch.name,
+        enabled: patch.enabled,
+        cronExpression: patch.cronExpression,
+        dailyLimit: patch.dailyLimit,
+        payload: patch.taskConfig,
+      };
+      Object.keys(nextPatch).forEach((key) => {
+        if (nextPatch[key as keyof typeof nextPatch] === undefined) delete nextPatch[key as keyof typeof nextPatch];
+      });
+      await updateScheduledJob(taskId, nextPatch as Partial<ScheduledJob>);
+      const updated = { ...existing, ...nextPatch };
+      if (patch.enabled === false) await stopScheduledJob(taskId);
+      else if (updated.enabled) await startScheduledJob(updated);
       return undefined;
     },
     async 'scheduler:remove'(args) {
-      await stopTask(args[0] as string, args[1] as string);
-      return removeScheduler(args[0] as string, args[1] as string);
+      const accountId = args[0] as string;
+      const taskId = args[1] as string;
+      const existing = listingJobs(await getScheduledJobs()).find(job => job.id === taskId && job.accountId === accountId);
+      if (!existing) return undefined;
+      await stopScheduledJob(taskId);
+      return removeScheduledJob(taskId);
     },
     async 'globalScheduler:list'() {
-      return getGlobalSchedulers();
+      return listingJobs(await getScheduledJobs())
+        .filter(job => job.scope === 'global')
+        .map(jobToGlobalScheduledTask);
     },
     async 'globalScheduler:add'(args) {
       const task = args[0] as Omit<GlobalScheduledTask, 'id' | 'accountStats'>;
-      if (!isSupportedCron(task.cronExpression)) throw unsupportedCronError(task.cronExpression);
-      const newTask = await addGlobalScheduler(task);
-      if (newTask.enabled) {
-        const ok = await startGlobalTask(newTask);
-        if (!ok) throw unsupportedCronError(newTask.cronExpression);
+      if (!isSupportedJobCron(task.cronExpression)) throw unsupportedCronError(task.cronExpression);
+      const job = await addScheduledJob(globalTaskInputToJob(task));
+      if (job.enabled) {
+        const ok = await startScheduledJob(job);
+        if (!ok) throw unsupportedCronError(job.cronExpression);
       }
-      return newTask;
+      return jobToGlobalScheduledTask(job as ScheduledJob<TaskConfig>);
     },
     async 'globalScheduler:update'(args) {
       const [taskId, patch] = args as [string, Partial<GlobalScheduledTask>];
-      if (patch.cronExpression && !isSupportedCron(patch.cronExpression)) {
+      if (patch.cronExpression && !isSupportedJobCron(patch.cronExpression)) {
         throw unsupportedCronError(patch.cronExpression);
       }
-      await updateGlobalScheduler(taskId, patch);
-      const task = (await getGlobalSchedulers()).find(item => item.id === taskId);
-      if (patch.enabled === false) await stopGlobalTask(taskId);
-      else if (task?.enabled) await startGlobalTask(task);
+      const existing = listingJobs(await getScheduledJobs()).find(job => job.id === taskId && job.scope === 'global');
+      if (!existing) return undefined;
+      const nextPatch: Partial<ScheduledJob<TaskConfig>> = {
+        name: patch.name,
+        enabled: patch.enabled,
+        cronExpression: patch.cronExpression,
+        staggerMinutes: patch.staggerMinutes,
+        excludedAccountIds: patch.excludedAccountIds,
+        payload: patch.taskConfig,
+      };
+      Object.keys(nextPatch).forEach((key) => {
+        if (nextPatch[key as keyof typeof nextPatch] === undefined) delete nextPatch[key as keyof typeof nextPatch];
+      });
+      await updateScheduledJob(taskId, nextPatch as Partial<ScheduledJob>);
+      const updated = { ...existing, ...nextPatch };
+      if (patch.enabled === false) await stopScheduledJob(taskId);
+      else if (updated.enabled) await startScheduledJob(updated);
       return undefined;
     },
     async 'globalScheduler:remove'(args) {
       const taskId = args[0] as string;
-      await stopGlobalTask(taskId);
-      return removeGlobalScheduler(taskId);
+      await stopScheduledJob(taskId);
+      return removeScheduledJob(taskId);
     },
   };
 }

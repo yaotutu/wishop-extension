@@ -2,6 +2,7 @@ import type {
   BlacklistRule,
   FullAccount,
   GlobalScheduledTask,
+  ScheduledJob,
   StatusRule,
   TaskConfig,
 } from '../../shared/types';
@@ -12,13 +13,14 @@ export interface StoreSchema {
   accounts: FullAccount[];
   activeAccountId: string;
   globalSchedulers?: GlobalScheduledTask[];
+  scheduledJobs?: ScheduledJob[];
   skipKeywords?: string[];
   blacklistRules?: BlacklistRule[];
   statusRules?: StatusRule[];
   notificationPreference?: NotificationPreference;
 }
 
-export const CURRENT_STORAGE_VERSION = 2;
+export const CURRENT_STORAGE_VERSION = 3;
 
 export const DEFAULT_TASK_CONFIG: TaskConfig = {
   listUnreviewed: true,
@@ -52,6 +54,7 @@ export async function readStore(): Promise<StoreSchema> {
     'accounts',
     'activeAccountId',
     'globalSchedulers',
+    'scheduledJobs',
     'skipKeywords',
     'blacklistRules',
     'statusRules',
@@ -62,6 +65,7 @@ export async function readStore(): Promise<StoreSchema> {
     accounts: Array.isArray(data.accounts) ? data.accounts : [],
     activeAccountId: typeof data.activeAccountId === 'string' ? data.activeAccountId : '',
     globalSchedulers: Array.isArray(data.globalSchedulers) ? data.globalSchedulers : [],
+    scheduledJobs: Array.isArray(data.scheduledJobs) ? data.scheduledJobs : [],
     skipKeywords: Array.isArray(data.skipKeywords) ? data.skipKeywords : [],
     blacklistRules: Array.isArray(data.blacklistRules) ? data.blacklistRules : undefined,
     statusRules: Array.isArray(data.statusRules) ? data.statusRules : undefined,
