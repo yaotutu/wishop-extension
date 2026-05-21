@@ -111,8 +111,27 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, [setPosition]);
 
+  useEffect(() => {
+    let lastHref = location.href;
+    const timer = window.setInterval(() => {
+      if (location.href === lastHref) return;
+      lastHref = location.href;
+      const nextSnapshot = readTaobaoPageSnapshot();
+      setSnapshot(nextSnapshot);
+      setCheckoutAddressDebugVisible(false);
+      if (nextSnapshot.pageType !== 'checkout') {
+        setAddressFilling(false);
+      }
+    }, 500);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const refreshSnapshot = useCallback(() => {
-    setSnapshot(readTaobaoPageSnapshot());
+    const nextSnapshot = readTaobaoPageSnapshot();
+    setSnapshot(nextSnapshot);
+    if (nextSnapshot.pageType !== 'checkout') {
+      setCheckoutAddressDebugVisible(false);
+    }
     setNotice('已重新读取页面');
   }, []);
 
@@ -256,7 +275,8 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
 
   const address = addressCache?.address || session.order.address;
   const fetchedAt = formatFetchedAt(addressCache?.fetchedAt);
-  const checkoutAddressPreview = snapshot.pageType === 'checkout' && address
+  const isCheckoutPage = snapshot.pageType === 'checkout';
+  const checkoutAddressPreview = isCheckoutPage && address
     ? normalizeCheckoutAddress(address)
     : null;
 
@@ -326,7 +346,7 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
               {addressLoading ? '刷新中...' : '刷新真实地址'}
             </button>
           )}
-          {snapshot.pageType === 'checkout' && (
+          {isCheckoutPage && (
             <button
               type="button"
               className="wishop-shipping-inline-primary"
@@ -336,7 +356,7 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
             </button>
           )}
         </div>
-        {snapshot.pageType === 'checkout' && checkoutAddressDebugVisible && (
+        {isCheckoutPage && checkoutAddressDebugVisible && (
           <div className="wishop-shipping-card">
             <label>淘宝填充地址结构</label>
             {checkoutAddressPreview ? (
@@ -366,7 +386,7 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
         <button type="button" onClick={copySku}>复制SKU</button>
         <button type="button" onClick={copyAddress}>复制地址</button>
         <button type="button" onClick={copyNotes}>复制备注</button>
-        {snapshot.pageType === 'checkout' && (
+        {isCheckoutPage && (
           <button type="button" onClick={handleFillCheckoutAddress} disabled={addressFilling}>
             {addressFilling ? '填充中...' : '填充地址'}
           </button>
