@@ -179,6 +179,13 @@ const toolbarCss = `
     color: #389e0d;
     font-size: 12px;
   }
+  .wishop-shipping-profit-value {
+    font-size: 14px;
+    color: #1677ff;
+  }
+  .wishop-shipping-profit-value--negative {
+    color: #cf1322;
+  }
   .wishop-purchase-lookup {
     box-sizing: border-box;
     position: fixed;

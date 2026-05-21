@@ -27,6 +27,11 @@ function formatPrice(cents?: number): string {
   return `¥${(cents / 100).toFixed(2)}`;
 }
 
+function formatRate(rate?: number): string {
+  if (rate === undefined || Number.isNaN(rate)) return '-';
+  return `${(rate * 100).toFixed(1)}%`;
+}
+
 function formatTime(timestamp?: number): string {
   if (!timestamp) return '-';
   return new Date(timestamp * 1000).toLocaleString('zh-CN', {
@@ -113,13 +118,21 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
 
   useEffect(() => {
     let lastHref = location.href;
+    let lastSnapshotKey = '';
     const timer = window.setInterval(() => {
-      if (location.href === lastHref) return;
+      const currentSnapshot = readTaobaoPageSnapshot();
+      const snapshotKey = [
+        currentSnapshot.pageType,
+        currentSnapshot.url,
+        currentSnapshot.checkoutPayAmountText,
+        currentSnapshot.checkoutPayAmountCents,
+      ].join('|');
+      if (location.href === lastHref && snapshotKey === lastSnapshotKey) return;
       lastHref = location.href;
-      const nextSnapshot = readTaobaoPageSnapshot();
-      setSnapshot(nextSnapshot);
-      setCheckoutAddressDebugVisible(false);
-      if (nextSnapshot.pageType !== 'checkout') {
+      lastSnapshotKey = snapshotKey;
+      setSnapshot(currentSnapshot);
+      if (currentSnapshot.pageType !== 'checkout') {
+        setCheckoutAddressDebugVisible(false);
         setAddressFilling(false);
       }
     }, 500);
@@ -276,6 +289,15 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
   const address = addressCache?.address || session.order.address;
   const fetchedAt = formatFetchedAt(addressCache?.fetchedAt);
   const isCheckoutPage = snapshot.pageType === 'checkout';
+  const orderPrice = session.order.orderPrice;
+  const commissionFee = session.order.estimatedCommissionFee;
+  const purchaseCost = snapshot.checkoutPayAmountCents;
+  const estimatedProfit = orderPrice !== undefined && commissionFee !== undefined && purchaseCost !== undefined
+    ? orderPrice - commissionFee - purchaseCost
+    : undefined;
+  const estimatedProfitRate = estimatedProfit !== undefined && orderPrice
+    ? estimatedProfit / orderPrice
+    : undefined;
   const checkoutAddressPreview = isCheckoutPage && address
     ? normalizeCheckoutAddress(address)
     : null;
@@ -320,6 +342,16 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
           <p title={skuText(session)}>{skuText(session)}</p>
           {session.order.skuCode && <small>编码：{session.order.skuCode}</small>}
         </div>
+        {isCheckoutPage && (
+          <div className="wishop-shipping-card">
+            <label>利润预估</label>
+            <p className={estimatedProfit !== undefined && estimatedProfit < 0 ? 'wishop-shipping-profit-value wishop-shipping-profit-value--negative' : 'wishop-shipping-profit-value'}>
+              利润 {formatPrice(estimatedProfit)} · 利润率 {formatRate(estimatedProfitRate)}
+            </p>
+            <small>微信实付：{formatPrice(orderPrice)} · 手续费：{formatPrice(commissionFee)}</small>
+            <small>淘宝应付：{purchaseCost !== undefined ? formatPrice(purchaseCost) : snapshot.checkoutPayAmountText || '未读取到'}</small>
+          </div>
+        )}
         <div className="wishop-shipping-card">
           <label>真实收货信息</label>
           <p title={addressText(address)}>
