@@ -12,6 +12,7 @@ import { createQuotaRuntimeHandlers } from '../runtime-handlers/quota-handlers';
 import { createRuleRuntimeHandlers } from '../runtime-handlers/rule-handlers';
 import { createSchedulerRuntimeHandlers } from '../runtime-handlers/scheduler-handlers';
 import { createShippingRuntimeHandlers } from '../runtime-handlers/shipping-handlers';
+import { createTaobaoWorkspaceRuntimeHandlers } from '../runtime-handlers/taobao-workspace-handlers';
 import { createTaskRuntimeHandlers } from '../runtime-handlers/task-handlers';
 import { createViolationRuntimeHandlers } from '../runtime-handlers/violation-handlers';
 import { createLicenseRuntimeHandlers } from '../runtime-handlers/license-handlers';
@@ -63,6 +64,7 @@ const FEATURE_CHANNELS = {
   'shipping:markPageReady': 'shipping',
   'shipping:complete': 'shipping',
   'shipping:fail': 'shipping',
+  'taobaoWorkspace:getCurrentRole': 'shipping',
 } as const;
 
 interface CreateBackgroundRouterOptions {
@@ -97,6 +99,7 @@ export function createBackgroundRouter(options: CreateBackgroundRouterOptions): 
     }),
     ...createProductSourceRuntimeHandlers(),
     ...createShippingRuntimeHandlers(options.getCurrentTabShippingSession),
+    ...createTaobaoWorkspaceRuntimeHandlers(),
     ...createSchedulerRuntimeHandlers(),
     ...createTaskRuntimeHandlers({
       runTask: (accountId, config) => runTask(accountId, config, options.taskSessions),

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, Flex, Image, Space, Tag, Typography } from 'antd';
-import { CopyOutlined, EyeOutlined, LinkOutlined, PictureOutlined, ShoppingCartOutlined } from '@ant-design/icons';
+import { CopyOutlined, EyeOutlined, LinkOutlined, PictureOutlined, ShoppingCartOutlined, SyncOutlined } from '@ant-design/icons';
 import type { Order, OrderAssociation, OrderProductInfo, OrderRealAddressCache, ProductSourceItem } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
 import { formatOrderAddressLine, getOrderPhoneDisplay } from '../../../shared/address-format';
@@ -13,6 +13,7 @@ interface CreateOrderColumnsOptions {
   decodingOrderIds: Set<string>;
   productSources: Record<string, ProductSourceItem[]>;
   orderAssociations: Record<string, OrderAssociation>;
+  checkingPurchaseOrderIds: Set<string>;
   onCopyText: (text: string | undefined, label: string) => void;
   onCopyImage: (imageUrl?: string) => void;
   onCopyAddress: (cache: OrderRealAddressCache) => void;
@@ -22,6 +23,7 @@ interface CreateOrderColumnsOptions {
   onOpenSourceManager: (product: OrderProductInfo) => void;
   onOpenShipSources: (order: Order, product: OrderProductInfo) => void;
   onEditAssociation: (order: Order) => void;
+  onCheckPurchaseOrder: (order: Order) => void;
 }
 
 /**
@@ -285,6 +287,18 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
                   <Text type="secondary" style={{ fontSize: 12 }} title={linked.trackingNumber}>
                     单号：{linked.trackingNumber.length > 18 ? `${linked.trackingNumber.substring(0, 18)}...` : linked.trackingNumber}
                   </Text>
+                )}
+                {linked.platformOrderId && linked.platform === 'taobao' && (
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<SyncOutlined />}
+                    loading={options.checkingPurchaseOrderIds.has(record.order_id)}
+                    onClick={() => options.onCheckPurchaseOrder(record)}
+                    style={{ padding: 0, height: 18, fontSize: 12, justifySelf: 'start' }}
+                  >
+                    检查发货状态
+                  </Button>
                 )}
               </>
             ) : (

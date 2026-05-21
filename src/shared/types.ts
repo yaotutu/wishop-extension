@@ -128,6 +128,7 @@ export interface OrderAssociation {
 }
 
 export type PurchaseLookupSessionStatus = 'created' | 'queued' | 'opened' | 'page-ready' | 'waiting-user-verification' | 'completed' | 'failed';
+export type TaobaoWorkspaceRole = 'shipping' | 'background-task';
 
 export type TaobaoSecurityChallengeKind = 'login' | 'slider' | 'captcha' | 'access-denied' | 'unknown';
 

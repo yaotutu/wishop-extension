@@ -22,6 +22,7 @@ import type {
   ScheduledTask,
   ShippingSession,
   StatusRule,
+  TaobaoWorkspaceRole,
   TaobaoSecurityChallengeSnapshot,
   TaobaoPurchaseOrderSnapshot,
   TaskConfig,
@@ -125,6 +126,9 @@ export const extensionApi = {
       onRuntimeEvent('shipping:purchaseAssociated', callback),
     onPurchaseAssociationFailed: (callback: (session: ShippingSession) => void) =>
       onRuntimeEvent('shipping:purchaseAssociationFailed', callback),
+  },
+  taobaoWorkspace: {
+    getCurrentRole: (): Promise<TaobaoWorkspaceRole | null> => invoke('taobaoWorkspace:getCurrentRole'),
   },
   quota: {
     get: (accountId: string): Promise<QuotaResult> => invoke('quota:get', accountId),

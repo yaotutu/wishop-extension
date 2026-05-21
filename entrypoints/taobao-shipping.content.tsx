@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { createShadowRootUi } from 'wxt/utils/content-script-ui/shadow-root';
+import type { TaobaoWorkspaceRole } from '../src/shared/types';
 import { PurchaseLookupToolbar } from '../src/content/taobao/PurchaseLookupToolbar';
 import { ShippingToolbar } from '../src/content/taobao/ShippingToolbar';
 import { installCheckoutAddressFrameBridge, isTaobaoAddressFramePage } from '../src/content/taobao/adapters/checkout-address-adapter';
@@ -257,7 +258,195 @@ const toolbarCss = `
     cursor: not-allowed;
     opacity: 0.65;
   }
+  .wishop-work-tab-notice {
+    box-sizing: border-box;
+    position: fixed;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2147483647;
+    width: min(520px, calc(100vw - 32px));
+    padding: 10px 12px;
+    border: 1px solid rgba(22, 119, 255, 0.28);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.98);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+    color: #1f1f1f;
+    font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    pointer-events: auto;
+  }
+  .wishop-work-tab-notice--shipping {
+    top: 12px;
+    right: 16px;
+    left: auto;
+    transform: none;
+    width: min(360px, calc(100vw - 32px));
+    padding: 8px 10px;
+  }
+  .wishop-work-tab-notice--task {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(640px, calc(100vw - 48px));
+    padding: 28px 32px;
+    text-align: center;
+    border-color: rgba(250, 140, 22, 0.38);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.2);
+  }
+  .wishop-work-tab-notice__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .wishop-work-tab-notice strong {
+    display: block;
+    margin-bottom: 2px;
+    color: #1677ff;
+    font-size: 14px;
+  }
+  .wishop-work-tab-notice--task strong {
+    margin-bottom: 10px;
+    color: #fa8c16;
+    font-size: 22px;
+    line-height: 30px;
+  }
+  .wishop-work-tab-notice--task span {
+    font-size: 15px;
+    line-height: 24px;
+  }
+  .wishop-work-tab-notice__close {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid #d9d9d9;
+    border-radius: 4px;
+    background: #fff;
+    color: #595959;
+    cursor: pointer;
+    flex: 0 0 auto;
+    line-height: 20px;
+  }
+  .wishop-work-tab-notice__close:hover {
+    border-color: #1677ff;
+    color: #1677ff;
+  }
+  .wishop-work-tab-notice span {
+    display: block;
+    color: #595959;
+    overflow-wrap: anywhere;
+  }
+  .wishop-work-tab-notice__footer {
+    margin-top: 8px;
+  }
+  .wishop-work-tab-notice__state {
+    color: #8c8c8c;
+    font-size: 12px;
+  }
+  .wishop-work-tab-notice--task .wishop-work-tab-notice__state {
+    font-size: 13px;
+  }
 `;
+
+const SHIPPING_WORK_NOTICE_HIDDEN_KEY = 'taobaoShippingWorkNoticeHidden';
+
+function workTabTitle(role: TaobaoWorkspaceRole): string {
+  return role === 'shipping' ? '微店管家 · 下单工作页' : '微店管家 · 后台任务页';
+}
+
+function workTabDescription(role: TaobaoWorkspaceRole): string {
+  return role === 'shipping'
+    ? '这是微店管家下单工作页，用于淘宝下单、付款识别和订单关联。'
+    : '这是微店管家后台任务页，用于自动检查淘宝订单状态、物流公司和快递单号。这个页面不是给用户操作的，你不需要处理这里的内容。';
+}
+
+function faviconDataUrl(): string {
+  const svg = [
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">',
+    '<rect width="64" height="64" rx="14" fill="#1677ff"/>',
+    '<text x="32" y="42" text-anchor="middle" font-size="34" font-family="Arial, sans-serif" font-weight="700" fill="#fff">微</text>',
+    '</svg>',
+  ].join('');
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+function installWorkspaceIdentity(role: TaobaoWorkspaceRole): () => void {
+  const title = workTabTitle(role);
+  const faviconHref = faviconDataUrl();
+  let icon = document.querySelector<HTMLLinkElement>('link[data-wishop-work-icon="true"]');
+  if (!icon) {
+    icon = document.createElement('link');
+    icon.rel = 'icon';
+    icon.type = 'image/svg+xml';
+    icon.dataset.wishopWorkIcon = 'true';
+    document.head.appendChild(icon);
+  }
+  icon.href = faviconHref;
+  const timer = window.setInterval(() => {
+    if (document.title !== title) document.title = title;
+    const currentIcon = document.querySelector<HTMLLinkElement>('link[data-wishop-work-icon="true"]');
+    if (currentIcon && currentIcon.href !== faviconHref) currentIcon.href = faviconHref;
+  }, 1000);
+  document.title = title;
+  return () => window.clearInterval(timer);
+}
+
+const WorkTabNotice: React.FC<{ role: TaobaoWorkspaceRole }> = ({ role }) => {
+  const [visible, setVisible] = React.useState(true);
+  const [hydrated, setHydrated] = React.useState(role !== 'shipping');
+
+  React.useEffect(() => {
+    if (role !== 'shipping') return;
+    let mounted = true;
+    chrome.storage.local.get([SHIPPING_WORK_NOTICE_HIDDEN_KEY])
+      .then(data => {
+        if (!mounted) return;
+        setVisible(data[SHIPPING_WORK_NOTICE_HIDDEN_KEY] !== true);
+        setHydrated(true);
+      })
+      .catch(() => {
+        if (mounted) setHydrated(true);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [role]);
+
+  const hideNotice = React.useCallback(() => {
+    setVisible(false);
+    if (role === 'shipping') {
+      void chrome.storage.local.set({ [SHIPPING_WORK_NOTICE_HIDDEN_KEY]: true }).catch(() => {});
+    }
+  }, [role]);
+
+  if (!hydrated) return null;
+  if (!visible) return null;
+  return (
+    <div className={`wishop-work-tab-notice wishop-work-tab-notice--${role === 'shipping' ? 'shipping' : 'task'}`}>
+      <div className="wishop-work-tab-notice__header">
+        <strong>{workTabTitle(role)}</strong>
+        {role === 'shipping' && (
+          <button
+            type="button"
+            className="wishop-work-tab-notice__close"
+            onClick={hideNotice}
+            title="永久隐藏提示"
+          >
+            -
+          </button>
+        )}
+      </div>
+      <span>{workTabDescription(role)}</span>
+      <div className="wishop-work-tab-notice__footer">
+        <span className="wishop-work-tab-notice__state">
+          {role === 'shipping'
+            ? '隐藏后将不再自动显示；关闭工作页后，下次去发货会重新创建。'
+            : '请保持此标签页存在；插件会在这里自动排队执行后台读取任务。'}
+        </span>
+      </div>
+    </div>
+  );
+};
 
 export default defineContentScript({
   matches: ['https://*.taobao.com/*', 'https://*.tmall.com/*'],
@@ -271,8 +460,9 @@ export default defineContentScript({
     }
     if (window.top !== window) return;
 
-    const { shippingSession, purchaseLookupSession } = await resolveTaobaoContentSessions();
-    if (!shippingSession && !purchaseLookupSession) return;
+    const { shippingSession, purchaseLookupSession, workspaceRole } = await resolveTaobaoContentSessions();
+    if (!shippingSession && !purchaseLookupSession && !workspaceRole) return;
+    const cleanupIdentity = workspaceRole ? installWorkspaceIdentity(workspaceRole) : undefined;
 
     /**
      * The toolbar is mounted in Shadow DOM so Taobao/Tmall page CSS cannot
@@ -298,11 +488,13 @@ export default defineContentScript({
           <>
             {shippingSession && <ShippingToolbar session={shippingSession} />}
             {purchaseLookupSession && <PurchaseLookupToolbar session={purchaseLookupSession} />}
+            {workspaceRole && <WorkTabNotice role={workspaceRole} />}
           </>,
         );
         return root;
       },
       onRemove(root) {
+        cleanupIdentity?.();
         root?.unmount();
       },
     });

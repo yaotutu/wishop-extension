@@ -24,6 +24,7 @@ import type {
   ScheduledTask,
   ShippingSession,
   StatusRule,
+  TaobaoWorkspaceRole,
   TaobaoSecurityChallengeSnapshot,
   TaobaoPurchaseOrderSnapshot,
   TaskConfig,
@@ -81,6 +82,7 @@ export interface RuntimeChannels {
   'shipping:markPageReady': { args: [sessionId: string]; result: ShippingSession };
   'shipping:complete': { args: [sessionId: string]; result: ShippingSession };
   'shipping:fail': { args: [sessionId: string, error: string]; result: ShippingSession };
+  'taobaoWorkspace:getCurrentRole': { args: []; result: TaobaoWorkspaceRole | null };
 
   'quota:get': { args: [accountId: string]; result: QuotaResult };
 

@@ -1,4 +1,4 @@
-import type { PurchaseLookupSession, ShippingSession } from '../../../shared/types';
+import type { PurchaseLookupSession, ShippingSession, TaobaoWorkspaceRole } from '../../../shared/types';
 import { extensionApi } from '../../../shared/extension-api';
 
 const SESSION_RETRY_COUNT = 10;
@@ -22,12 +22,14 @@ async function waitForSession<T>(loader: () => Promise<T | null>): Promise<T | n
 export interface TaobaoContentSessions {
   shippingSession: ShippingSession | null;
   purchaseLookupSession: PurchaseLookupSession | null;
+  workspaceRole: TaobaoWorkspaceRole | null;
 }
 
 export async function resolveTaobaoContentSessions(): Promise<TaobaoContentSessions> {
-  const [shippingSession, purchaseLookupSession] = await Promise.all([
+  const [shippingSession, purchaseLookupSession, workspaceRole] = await Promise.all([
     waitForSession(() => extensionApi.shipping.getCurrentTabSession()),
     waitForSession(() => extensionApi.purchaseLookup.getCurrentTabSession()),
+    extensionApi.taobaoWorkspace.getCurrentRole().catch(() => null),
   ]);
-  return { shippingSession, purchaseLookupSession };
+  return { shippingSession, purchaseLookupSession, workspaceRole };
 }

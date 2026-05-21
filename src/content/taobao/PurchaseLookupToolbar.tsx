@@ -82,16 +82,6 @@ export const PurchaseLookupToolbar: React.FC<Props> = ({ session }) => {
     return () => window.clearInterval(timer);
   }, [completed, readAndComplete, waitingVerification]);
 
-  useEffect(() => {
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (completed) return;
-      event.preventDefault();
-      event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [completed]);
-
   return (
     <section className="wishop-purchase-lookup">
       <div className="wishop-purchase-lookup__header">
@@ -109,7 +99,7 @@ export const PurchaseLookupToolbar: React.FC<Props> = ({ session }) => {
           {waitingVerification ? '我已完成验证，继续读取' : '重新读取'}
         </button>
       </div>
-      <small>关闭或刷新此淘宝工作页，会中断订单状态和物流信息读取。</small>
+      <small>关闭此淘宝工作页后，插件会在下次任务需要时重新创建。</small>
     </section>
   );
 };

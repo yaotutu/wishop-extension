@@ -60,6 +60,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const [shipSourceModalOpen, setShipSourceModalOpen] = useState(false);
   const [shipSourceOrder, setShipSourceOrder] = useState<Order | null>(null);
   const [shipSourceProduct, setShipSourceProduct] = useState<OrderProductInfo | null>(null);
+  const [checkingPurchaseOrderIds, setCheckingPurchaseOrderIds] = useState<Set<string>>(new Set());
   const tableAreaRef = useRef<HTMLDivElement>(null);
   const [scrollY, setScrollY] = useState(400);
   const ordersQuery = useOrdersQuery(accountId, activeStatus, activeSearch);
@@ -113,12 +114,22 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   }, [productSourcesQuery.error, orderAssociationsQuery.error, realAddressCachesQuery.error, detailQuery.error]);
 
   useEffect(() => {
-    const offCompleted = extensionApi.purchaseLookup.onCompleted(() => {
+    const offCompleted = extensionApi.purchaseLookup.onCompleted((association) => {
+      setCheckingPurchaseOrderIds(previous => {
+        const next = new Set(previous);
+        next.delete(association.orderId);
+        return next;
+      });
       void refetchOrderAssociations();
       message.success('淘宝订单信息已回填到采购单详情');
     });
     const offFailed = extensionApi.purchaseLookup.onFailed((payload) => {
       if (payload.accountId !== accountId) return;
+      setCheckingPurchaseOrderIds(previous => {
+        const next = new Set(previous);
+        next.delete(payload.orderId);
+        return next;
+      });
       message.error(`淘宝订单读取失败: ${payload.error}`);
     });
     const offChallenge = extensionApi.purchaseLookup.onChallenge((payload) => {
@@ -296,6 +307,32 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     });
   }, [accountId, associationOrder]);
 
+  const handleCheckPurchaseOrder = useCallback(async (order: Order) => {
+    const linked = orderAssociations[order.order_id]?.linkedOrders[0];
+    const platformOrderId = linked?.platform === 'taobao' ? linked.platformOrderId?.trim() : '';
+    if (!platformOrderId) {
+      message.warning('当前订单还没有关联淘宝订单号');
+      return;
+    }
+
+    setCheckingPurchaseOrderIds(previous => new Set(previous).add(order.order_id));
+    try {
+      const session = await extensionApi.purchaseLookup.open({
+        accountId,
+        orderId: order.order_id,
+        platformOrderId,
+      });
+      message.success(session.status === 'queued' ? '已加入淘宝发货状态检查队列' : '已提交淘宝发货状态检查');
+    } catch (err: any) {
+      setCheckingPurchaseOrderIds(previous => {
+        const next = new Set(previous);
+        next.delete(order.order_id);
+        return next;
+      });
+      message.error(`检查淘宝发货状态失败: ${err.message}`);
+    }
+  }, [accountId, orderAssociations]);
+
   const handleOpenShippingSession = useCallback(async (source: ProductSourceItem) => {
     if (!shipSourceOrder || !shipSourceProduct) return;
     const address = realAddressCaches[shipSourceOrder.order_id]?.address;
@@ -341,6 +378,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     decodingOrderIds,
     productSources,
     orderAssociations,
+    checkingPurchaseOrderIds,
     onCopyText: handleCopyText,
     onCopyImage: handleCopyImage,
     onCopyAddress: handleCopyAddress,
@@ -350,11 +388,13 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     onOpenSourceManager: openSourceManager,
     onOpenShipSources: openShipSources,
     onEditAssociation: openAssociationEditor,
+    onCheckPurchaseOrder: handleCheckPurchaseOrder,
   }), [
     realAddressCaches,
     decodingOrderIds,
     productSources,
     orderAssociations,
+    checkingPurchaseOrderIds,
     handleCopyText,
     handleCopyImage,
     handleCopyAddress,
@@ -364,6 +404,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     openSourceManager,
     openShipSources,
     openAssociationEditor,
+    handleCheckPurchaseOrder,
   ]);
 
   return (

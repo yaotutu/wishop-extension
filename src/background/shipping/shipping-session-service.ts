@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { CreateShippingSessionInput, LinkedPlatformOrder, OrderAssociation, ShippingSession, ShippingSessionStatus } from '../../shared/types';
 import { getOrderAssociations, setOrderAssociation } from '../store/order-association-repository';
+import { ensureTaobaoTaskWorkTab, openTaobaoShippingWorkTab } from '../taobao-workspace/work-tab-service';
 
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 const sessions = new Map<string, ShippingSession>();
@@ -231,7 +232,8 @@ export async function updateShippingSessionStatus(
 
 export async function openShippingSessionTab(input: CreateShippingSessionInput): Promise<ShippingSession> {
   const session = await createShippingSession(input);
-  const tab = await chrome.tabs.create({ url: input.source.url });
+  await ensureTaobaoTaskWorkTab().catch(() => {});
+  const tab = await openTaobaoShippingWorkTab(input.source.url);
   if (!tab.id) return session;
   return bindShippingSessionToTab(session.id, tab.id);
 }
