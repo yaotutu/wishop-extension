@@ -4,6 +4,7 @@ import { extensionApi } from '../../shared/extension-api';
 import { formatOrderAddressForCopy } from '../../shared/address-format';
 import { useShippingToolbarStore, type ShippingToolbarPosition } from '../../stores/shipping-toolbar-store';
 import { readTaobaoPageSnapshot, type TaobaoPageSnapshot } from './adapters/page-adapter';
+import { fillTaobaoCheckoutAddress, normalizeCheckoutAddress } from './adapters/checkout-address-adapter';
 
 interface Props {
   session: ShippingSession;
@@ -68,6 +69,7 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
   const [notice, setNotice] = useState('');
   const [addressCache, setAddressCache] = useState<OrderRealAddressCache | null>(null);
   const [addressLoading, setAddressLoading] = useState(false);
+  const [addressFilling, setAddressFilling] = useState(false);
   const collapsed = useShippingToolbarStore(state => state.collapsed);
   const position = useShippingToolbarStore(state => state.position);
   const hydrateToolbarState = useShippingToolbarStore(state => state.hydrate);
@@ -151,6 +153,7 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
       `规格：${skuText(session)}`,
       `数量：${session.order.quantity}`,
       `实付：${formatPrice(session.order.orderPrice)}`,
+      `预估手续费：${formatPrice(session.order.estimatedCommissionFee)}`,
       `下单：${formatTime(session.order.createTime)}`,
       `支付：${formatTime(session.order.payTime)}`,
       noteText('买家备注', session.order.customerNotes),
@@ -187,6 +190,30 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
       setAddressLoading(false);
     }
   }, [session.accountId, session.orderId]);
+
+  const handleFillCheckoutAddress = useCallback(async () => {
+    setAddressFilling(true);
+    try {
+      const address = addressCache?.address
+        || session.order.address
+        || (await extensionApi.orderRealAddresses.fetch(session.accountId, session.orderId)).address;
+      const result = await fillTaobaoCheckoutAddress(address);
+      if (result.filledFields.length > 0) {
+        setNotice(`已填充：${result.filledFields.join('、')}${result.warnings.length ? `；${result.warnings.join('；')}` : ''}`);
+      } else {
+        setNotice(result.warnings.join('；') || '未能填充地址');
+      }
+      if (!addressCache?.address) {
+        void extensionApi.orderRealAddresses.get(session.accountId, session.orderId)
+          .then(cache => setAddressCache(cache))
+          .catch(() => {});
+      }
+    } catch (err) {
+      setNotice(`填充地址失败：${err instanceof Error ? err.message : '未知错误'}`);
+    } finally {
+      setAddressFilling(false);
+    }
+  }, [addressCache?.address, session.accountId, session.order.address, session.orderId]);
 
   const copySku = useCallback(async () => {
     await copyText(skuText(session));
@@ -228,6 +255,9 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
 
   const address = addressCache?.address || session.order.address;
   const fetchedAt = formatFetchedAt(addressCache?.fetchedAt);
+  const checkoutAddressPreview = snapshot.pageType === 'checkout' && address
+    ? normalizeCheckoutAddress(address)
+    : null;
 
   return (
     <section
@@ -261,6 +291,7 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
           <p title={session.order.title}>{session.order.title}</p>
           <small>订单号：{session.orderId}</small>
           <small>实付：{formatPrice(session.order.orderPrice)} · 数量：x{session.order.quantity}</small>
+          <small>预估手续费：{formatPrice(session.order.estimatedCommissionFee)}</small>
           <small>下单：{formatTime(session.order.createTime)} · 支付：{formatTime(session.order.payTime)}</small>
         </div>
         <div className="wishop-shipping-card">
@@ -295,6 +326,24 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
             </button>
           )}
         </div>
+        {snapshot.pageType === 'checkout' && (
+          <div className="wishop-shipping-card">
+            <label>淘宝填充地址结构</label>
+            {checkoutAddressPreview ? (
+              <>
+                <small>地区：{checkoutAddressPreview.divisions.map(item => `${item.label}=${item.value}`).join(' / ') || '-'}</small>
+                <small>详细地址：{checkoutAddressPreview.detail || '-'}</small>
+                <small>收货人：{checkoutAddressPreview.name || '-'}</small>
+                <small>手机号：{checkoutAddressPreview.phone || '-'}</small>
+                {checkoutAddressPreview.warnings.length > 0 && (
+                  <small>提示：{checkoutAddressPreview.warnings.join('；')}</small>
+                )}
+              </>
+            ) : (
+              <small>暂无地址，先获取真实地址后可查看结构化结果</small>
+            )}
+          </div>
+        )}
         <div className="wishop-shipping-card">
           <label>备注</label>
           <small>{session.order.customerNotes?.trim() ? `买家：${session.order.customerNotes}` : '买家：无'}</small>
@@ -312,6 +361,11 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
         <button type="button" onClick={copySku}>复制SKU</button>
         <button type="button" onClick={copyAddress}>复制地址</button>
         <button type="button" onClick={copyNotes}>复制备注</button>
+        {snapshot.pageType === 'checkout' && (
+          <button type="button" onClick={handleFillCheckoutAddress} disabled={addressFilling}>
+            {addressFilling ? '填充中...' : '填充地址'}
+          </button>
+        )}
         <button type="button" onClick={refreshSnapshot}>重读页面</button>
       </div>
       {notice && <div className="wishop-shipping-notice">{notice}</div>}

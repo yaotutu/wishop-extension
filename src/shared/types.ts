@@ -192,6 +192,7 @@ export interface ShippingOrderSnapshot {
   createTime?: number;
   payTime?: number;
   orderPrice?: number;
+  estimatedCommissionFee?: number;
 }
 
 export interface ShippingSourceSnapshot {
@@ -287,6 +288,11 @@ export interface OrderPriceInfo {
   merchant_receieve_price: number;
 }
 
+export interface OrderSettleInfo {
+  commission_fee?: number;
+  predict_commission_fee?: number;
+}
+
 export interface OrderAddressInfo {
   user_name: string;
   postal_code: string;
@@ -338,6 +344,7 @@ export interface OrderPayInfo {
 export interface OrderDetail {
   product_infos: OrderProductInfo[];
   price_info: OrderPriceInfo;
+  settle_info?: OrderSettleInfo;
   pay_info: OrderPayInfo;
   delivery_info: OrderDeliveryInfo;
   ext_info: OrderExtInfo;

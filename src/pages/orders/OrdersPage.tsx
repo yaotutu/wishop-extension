@@ -18,6 +18,7 @@ import { OrderDetailModal } from './components/OrderDetailModal';
 import { createOrderColumns } from './components/OrderTableColumns';
 import { OrderToolbar } from './components/OrderToolbar';
 import { OrderAssociationModal } from './components/OrderAssociationModal';
+import { getEstimatedCommissionFee } from './order-display';
 
 function normalizeUrl(url: string): string {
   const trimmed = url.trim();
@@ -317,6 +318,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         createTime: shipSourceOrder.create_time,
         payTime: shipSourceOrder.order_detail?.pay_info?.pay_time,
         orderPrice: shipSourceOrder.order_detail?.price_info?.order_price,
+        estimatedCommissionFee: getEstimatedCommissionFee(shipSourceOrder),
       },
     });
     setShipSourceModalOpen(false);

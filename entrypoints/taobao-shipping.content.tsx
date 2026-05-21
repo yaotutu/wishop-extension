@@ -3,6 +3,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { createShadowRootUi } from 'wxt/utils/content-script-ui/shadow-root';
 import { PurchaseLookupToolbar } from '../src/content/taobao/PurchaseLookupToolbar';
 import { ShippingToolbar } from '../src/content/taobao/ShippingToolbar';
+import { installCheckoutAddressFrameBridge, isTaobaoAddressFramePage } from '../src/content/taobao/adapters/checkout-address-adapter';
 import { resolveTaobaoContentSessions } from '../src/content/taobao/runtime/session-resolver';
 
 const toolbarCss = `
@@ -241,9 +242,16 @@ const toolbarCss = `
 
 export default defineContentScript({
   matches: ['https://*.taobao.com/*', 'https://*.tmall.com/*'],
+  allFrames: true,
   runAt: 'document_idle',
 
   async main(ctx) {
+    if (isTaobaoAddressFramePage()) {
+      installCheckoutAddressFrameBridge();
+      return;
+    }
+    if (window.top !== window) return;
+
     const { shippingSession, purchaseLookupSession } = await resolveTaobaoContentSessions();
     if (!shippingSession && !purchaseLookupSession) return;
 

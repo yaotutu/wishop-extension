@@ -3,6 +3,7 @@ import { Descriptions, Empty, Flex, Image, Modal, Spin, Tag, Typography } from '
 import type { Order, OrderRealAddressCache } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
 import { formatOrderAddressLine, formatOrderPhoneInline } from '../../../shared/address-format';
+import { formatPrice, getEstimatedCommissionFee } from '../order-display';
 
 const { Text } = Typography;
 
@@ -32,11 +33,6 @@ function formatTime(timestamp: number): string {
   return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
-function formatPrice(cents: number): string {
-  if (cents === undefined || cents === null) return '-';
-  return `¥${(cents / 100).toFixed(2)}`;
-}
-
 export const OrderDetailModal: React.FC<Props> = ({ open, loading, order, realAddressCache, onCancel }) => {
   const addressInfo = order
     ? realAddressCache?.address || order.order_detail?.delivery_info?.address_info
@@ -44,6 +40,7 @@ export const OrderDetailModal: React.FC<Props> = ({ open, loading, order, realAd
   const fetchedAt = realAddressCache?.fetchedAt
     ? new Date(realAddressCache.fetchedAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
     : '';
+  const estimatedCommissionFee = order ? getEstimatedCommissionFee(order) : undefined;
 
   return (
     <Modal
@@ -109,7 +106,8 @@ export const OrderDetailModal: React.FC<Props> = ({ open, loading, order, realAd
                 { key: 'orderPrice', label: '实付金额', children: formatPrice(order.order_detail.price_info.order_price) },
                 { key: 'freight', label: '运费', children: formatPrice(order.order_detail.price_info.freight) },
                 { key: 'discount', label: '优惠', children: formatPrice(order.order_detail.price_info.discounted_price) },
-                { key: 'merchantReceive', label: '商家实收', children: formatPrice(order.order_detail.price_info.merchant_receieve_price), span: 2 },
+                { key: 'estimatedCommission', label: '预估手续费', children: formatPrice(estimatedCommissionFee) },
+                { key: 'merchantReceive', label: '商家实收', children: formatPrice(order.order_detail.price_info.merchant_receieve_price) },
               ]}
             />
           )}

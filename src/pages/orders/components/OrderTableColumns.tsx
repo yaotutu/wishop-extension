@@ -4,7 +4,7 @@ import { CopyOutlined, EyeOutlined, LinkOutlined, PictureOutlined, ShoppingCartO
 import type { Order, OrderAssociation, OrderProductInfo, OrderRealAddressCache, ProductSourceItem } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
 import { formatOrderAddressLine, getOrderPhoneDisplay } from '../../../shared/address-format';
-import { firstProduct, formatPrice, formatTime, hasAddressInfo, PAYMENT_METHOD, STATUS_CONFIG } from '../order-display';
+import { firstProduct, formatPrice, formatTime, getEstimatedCommissionFee, hasAddressInfo, PAYMENT_METHOD, STATUS_CONFIG } from '../order-display';
 
 const { Text } = Typography;
 
@@ -143,6 +143,7 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
       width: 130,
       render: (_: unknown, record: Order) => {
         const pi = record.order_detail?.price_info;
+        const estimatedCommissionFee = getEstimatedCommissionFee(record);
         if (!pi) return '-';
         return (
           <div>
@@ -150,6 +151,10 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
             <Text type="secondary" style={{ fontSize: 12 }}>商品 {formatPrice(pi.product_price)}</Text>
             <br />
             <Text type="secondary" style={{ fontSize: 12 }}>运费 {formatPrice(pi.freight)}</Text>
+            <br />
+            <Text type="secondary" style={{ fontSize: 12 }} title="接口未返回手续费时，按实付金额减商家实收预估">
+              预估手续费 {formatPrice(estimatedCommissionFee)}
+            </Text>
             {pi.discounted_price > 0 && (
               <>
                 <br />
