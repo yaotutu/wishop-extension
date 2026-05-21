@@ -145,6 +145,15 @@ const toolbarCss = `
     cursor: not-allowed;
     opacity: 0.65;
   }
+  .wishop-shipping-inline-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .wishop-shipping-inline-actions .wishop-shipping-inline-primary {
+    margin-top: 0;
+  }
   .wishop-shipping-actions {
     display: flex;
     flex-wrap: wrap;

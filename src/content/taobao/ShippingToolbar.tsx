@@ -336,24 +336,28 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
               {addressLoading ? '获取中...' : '获取真实地址'}
             </button>
           )}
-          {address && (
-            <button
-              type="button"
-              className="wishop-shipping-inline-primary"
-              onClick={() => fetchRealAddress(true)}
-              disabled={addressLoading}
-            >
-              {addressLoading ? '刷新中...' : '刷新真实地址'}
-            </button>
-          )}
-          {isCheckoutPage && (
-            <button
-              type="button"
-              className="wishop-shipping-inline-primary"
-              onClick={() => setCheckoutAddressDebugVisible(visible => !visible)}
-            >
-              {checkoutAddressDebugVisible ? '隐藏地址结构' : '查看地址结构'}
-            </button>
+          {(address || isCheckoutPage) && (
+            <div className="wishop-shipping-inline-actions">
+              {address && (
+                <button
+                  type="button"
+                  className="wishop-shipping-inline-primary"
+                  onClick={() => fetchRealAddress(true)}
+                  disabled={addressLoading}
+                >
+                  {addressLoading ? '刷新中...' : '刷新真实地址'}
+                </button>
+              )}
+              {isCheckoutPage && (
+                <button
+                  type="button"
+                  className="wishop-shipping-inline-primary"
+                  onClick={() => setCheckoutAddressDebugVisible(visible => !visible)}
+                >
+                  {checkoutAddressDebugVisible ? '隐藏地址结构' : '查看地址结构'}
+                </button>
+              )}
+            </div>
           )}
         </div>
         {isCheckoutPage && checkoutAddressDebugVisible && (
