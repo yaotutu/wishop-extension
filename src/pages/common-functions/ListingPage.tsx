@@ -86,30 +86,10 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
   // 跳过关键词管理（内部 state，不再单独弹窗）
   const [newKeyword, setNewKeyword] = useState('');
 
-  // 单商品测试提审
-  const [testProductId, setTestProductId] = useState('');
-
   const [newRuleStatus, setNewRuleStatus] = useState<number | undefined>(undefined);
   const [newRuleLabel, setNewRuleLabel] = useState('');
   const [newRuleAction, setNewRuleAction] = useState<'submit' | 'delete' | 'skip'>('skip');
   const [rulesLocked, setRulesLocked] = useState(true);
-
-  const handleTestList = async () => {
-    if (!testProductId.trim()) {
-      message.warning('请输入商品ID');
-      return;
-    }
-    try {
-      const res = await extensionApi.drafts.list(accountId, testProductId.trim());
-      if (res.success) {
-        message.success(`商品 ${testProductId} 提审成功`);
-      } else {
-        message.error(`提审失败: ${res.error}`);
-      }
-    } catch (e: any) {
-      message.error(`提审异常: ${e.message}`);
-    }
-  };
 
   const currentAccountIdRef = useRef(accountId);
   const taskUnsubscribersRef = useRef(new Map<string, () => void>());
@@ -870,20 +850,6 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
                 配额 {displayQuota}/{quota.total}
               </Tag>
             )}
-            <Input
-              size="small"
-              placeholder="商品ID"
-              value={testProductId}
-              onChange={e => setTestProductId(e.target.value)}
-              style={{ width: 140 }}
-              onPressEnter={handleTestList}
-            />
-            <Button
-              size="small"
-              onClick={handleTestList}
-            >
-              测试提审
-            </Button>
             <Button
               type="primary"
               icon={<PlayCircleOutlined />}
