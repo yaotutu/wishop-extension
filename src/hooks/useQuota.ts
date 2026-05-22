@@ -15,7 +15,7 @@ export function useQuota(accountId: string) {
       return await extensionApi.quota.get(accountId);
     } catch (error: unknown) {
       if (isCredentialError(error)) reportCredentialError(error);
-      return { quota: 0, total: 0 };
+      throw error;
     }
   }, [accountId, reportCredentialError]);
 
@@ -34,5 +34,10 @@ export function useQuota(accountId: string) {
     });
   }, [accountId, fetchQuotaValue, queryClient]);
 
-  return { quota: query.data, loading: query.isLoading || query.isFetching, fetchQuota };
+  return {
+    quota: query.data,
+    loading: query.isLoading || query.isFetching,
+    error: query.error,
+    fetchQuota,
+  };
 }

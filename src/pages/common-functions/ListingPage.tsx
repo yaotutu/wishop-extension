@@ -48,7 +48,7 @@ interface ListingJobFormData {
 const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account' }) => {
   const { taskConfig, fetchTaskConfig, saveTaskConfig } = useTaskConfig(accountId);
   const { logs, fetchLogs, clearLogs } = useLogs(accountId);
-  const { quota, loading: quotaLoading, fetchQuota } = useQuota(accountId);
+  const { quota, loading: quotaLoading, error: quotaError, fetchQuota } = useQuota(accountId);
   const { tasks, fetchTasks, addTask, updateTask, removeTask } = useSchedulers(accountId);
   const { tasks: globalTasks, fetchTasks: fetchGlobalTasks, addTask: addGlobalTask, updateTask: updateGlobalTask, removeTask: removeGlobalTask } = useGlobalSchedulers();
   const { rules: blacklistRules, fetchRules: fetchBlacklistRules, saveRules: saveBlacklistRules, defaultCodes: blacklistDefaultCodes } = useBlacklistRules();
@@ -589,6 +589,15 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
   const localListedCount = localListedCountsByAccountId[accountId] || 0;
   const displayQuota = running ? quota.quota - localListedCount : quota.quota;
   const quotaExhausted = displayQuota <= 0 && quota.total > 0;
+  const quotaErrorMessage = quotaError instanceof Error ? quotaError.message : quotaError ? String(quotaError) : '';
+  const quotaTagColor = quotaError ? 'red' : quotaLoading ? 'blue' : quotaExhausted ? 'red' : quota.total > 0 ? 'green' : 'default';
+  const quotaTagText = quotaLoading
+    ? '配额 获取中'
+    : quotaError
+      ? '配额 获取失败'
+      : quota.total > 0
+        ? `配额 ${displayQuota}/${quota.total}`
+        : '配额 -/-';
   const renderRulesSection = () => (
     <div style={{ border: '1px solid #f0f0f0', borderRadius: 8, background: '#fff', opacity: rulesLocked ? 0.75 : 1 }}>
       <div style={{ padding: '14px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -845,9 +854,13 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
             >
               定时任务{tasks.length > 0 ? ` (${tasks.length})` : ''}
             </Button>
-            <Tag color={quotaExhausted ? 'red' : quota.total > 0 ? 'green' : 'default'}>
-              配额 {quotaLoading ? '获取中' : quota.total > 0 ? `${displayQuota}/${quota.total}` : '-/-'}
-            </Tag>
+            {quotaError ? (
+              <Tooltip title={quotaErrorMessage || '获取提审配额失败'}>
+                <Tag color={quotaTagColor}>{quotaTagText}</Tag>
+              </Tooltip>
+            ) : (
+              <Tag color={quotaTagColor}>{quotaTagText}</Tag>
+            )}
             <Button
               type="primary"
               icon={<PlayCircleOutlined />}
