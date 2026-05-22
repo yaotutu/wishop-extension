@@ -22,7 +22,7 @@ export async function runViolationBatchScan(
   const words = await getViolationWords(accountId);
   const account = await getAccount(accountId);
   const api = await getClient(accountId);
-  logger.info(`批量扫描开始 店铺=${account?.name || '未知'} appId=${api.config.appId} 词库=${words.length}个 上限=${limit || '全部'}`);
+  logger.info(`批量扫描开始 店铺=${account?.name || '未知'} 账号=${accountId} 词库=${words.length}个 上限=${limit || '全部'}`);
   if (words.length === 0) return { scanned: 0, violations: [], errors: 0, stopped: false, reason: '词库为空' };
 
   const signal = scanSessions.start(accountId, { generator: null, current: null, done: false });
@@ -45,7 +45,7 @@ export async function runViolationStep(
     if (words.length === 0) return { type: 'done', reason: '词库为空' };
     const api = await getClient(accountId);
     const account = await getAccount(accountId);
-    logger.info(`逐个扫描开始 店铺=${account?.name || '未知'} appId=${api.config.appId} 词库=${words.length}个`);
+    logger.info(`逐个扫描开始 店铺=${account?.name || '未知'} 账号=${accountId} 词库=${words.length}个`);
     const signal = scanSessions.start(accountId, { generator: null, current: null, done: false });
     session = scanSessions.get(accountId)!;
     session.state.generator = scanOneByOne(api, createScopedAddLog(accountId), words, Date.now().toString(), signal, accountId);

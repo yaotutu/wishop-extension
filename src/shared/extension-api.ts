@@ -163,7 +163,7 @@ export const extensionApi = {
     getCurrentRole: (): Promise<TaobaoWorkspaceRole | null> => invoke('taobaoWorkspace:getCurrentRole'),
   },
   quota: {
-    get: (accountId: string): Promise<QuotaResult> => invoke('quota:get', accountId),
+    get: (accountId: string, force = false): Promise<QuotaResult> => invoke('quota:get', accountId, force),
   },
   logs: {
     get: (accountId: string): Promise<LogEntry[]> => invoke('logs:get', accountId),

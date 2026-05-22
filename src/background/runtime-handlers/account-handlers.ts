@@ -12,7 +12,8 @@ import {
 import { removeScheduledJobsForAccount } from '../store/scheduled-job-repository';
 import { startAllScheduledJobs, stopAllScheduledJobs } from '../scheduler/scheduler-center';
 import { removeClient } from '../wxshop/client-registry';
-import { createWxShopClient } from '../wxshop/client';
+import { getAccessToken, removeAccessToken } from '../wxshop/access-token-service';
+import { clearQuotaCache } from '../services/quota-service';
 import type { RuntimeHandlerMap } from '../router/runtime-router';
 
 interface AccountHandlerDeps {
@@ -36,11 +37,20 @@ export function createAccountRuntimeHandlers(deps: AccountHandlerDeps): RuntimeH
       await removeScheduledJobsForAccount(accountId);
       await startAllScheduledJobs();
       removeClient(accountId);
+      await removeAccessToken(accountId);
+      clearQuotaCache(accountId);
       deps.onAccountRemoved(accountId);
       return undefined;
     },
     async 'accounts:update'(args) {
-      return updateAccount(args[0] as string, args[1] as Partial<{ name: string; config: Config }>);
+      const [accountId, patch] = args as [string, Partial<{ name: string; config: Config }>];
+      await updateAccount(accountId, patch);
+      if (patch.config) {
+        removeClient(accountId);
+        await removeAccessToken(accountId);
+        clearQuotaCache(accountId);
+      }
+      return undefined;
     },
     async 'accounts:getActive'() {
       return getActiveAccountId();
@@ -55,8 +65,10 @@ export function createAccountRuntimeHandlers(deps: AccountHandlerDeps): RuntimeH
       const [accountId, config] = args as [string, Config];
       await setConfig(accountId, config);
       removeClient(accountId);
+      await removeAccessToken(accountId);
+      clearQuotaCache(accountId);
       try {
-        await createWxShopClient(config).getAccessToken();
+        await getAccessToken(accountId, true);
         return { success: true };
       } catch (error: any) {
         return { success: false, error: error.message };

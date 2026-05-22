@@ -1,14 +1,10 @@
 import axios from 'axios';
-import type { Config, DraftProduct, QuotaResult, Order, OrderListParams, OrderListResult, OrderSearchParams, OrderAddressInfo } from '../../shared/types';
+import type { DraftProduct, QuotaResult, Order, OrderListParams, OrderListResult, OrderSearchParams, OrderAddressInfo } from '../../shared/types';
+import { getAccessToken, isAccessTokenInvalidError, removeAccessToken } from './access-token-service';
 
-export type { Config, DraftProduct, QuotaResult };
+export type { DraftProduct, QuotaResult };
 
 const BASE_URL = 'https://api.weixin.qq.com';
-
-interface TokenData {
-  accessToken: string;
-  expiresAt: number;
-}
 
 export interface ProductListResult {
   productIds: string[];
@@ -40,53 +36,28 @@ export interface SendOrderDeliveryPayload {
   }>;
 }
 
-export function createWxShopClient(config: Config) {
-  let tokenCache: TokenData | null = null;
-
-  async function getAccessToken(): Promise<string> {
-    const now = Date.now();
-    if (tokenCache && tokenCache.expiresAt > now + 60000) {
-      return tokenCache.accessToken;
-    }
-
-    if (!config.appId || !config.appSecret) {
-      throw new Error('[CREDENTIAL] 请先配置 AppID 和 AppSecret');
-    }
-
-    const url = `${BASE_URL}/cgi-bin/token?grant_type=client_credential&appid=${config.appId}&secret=${config.appSecret}`;
-    const response = await axios.get(url);
-    const data = response.data;
-
-    if (data.errcode) {
-      if (data.errcode === 40001 || data.errcode === 42001) {
-        tokenCache = null;
-        const msg = data.errcode === 40001
-          ? 'AppSecret 不正确或已失效，请前往店铺管理更新配置'
-          : 'access_token 已过期，请前往店铺管理更新配置';
-        throw new Error(`[CREDENTIAL] ${msg}`);
-      }
-      throw new Error(data.errmsg || `获取 token 失败: ${data.errcode}`);
-    }
-
-    tokenCache = {
-      accessToken: data.access_token,
-      expiresAt: now + (data.expires_in - 120) * 1000,
+export function createWxShopClient(accountId: string) {
+  async function request<T>(path: string, body: unknown): Promise<T> {
+    const send = async (forceRefresh = false) => {
+      const token = await getAccessToken(accountId, forceRefresh);
+      const url = `${BASE_URL}${path}?access_token=${token}`;
+      const response = await axios.post(url, body);
+      return response.data as T & { errcode?: number };
     };
 
-    return data.access_token;
+    const data = await send(false);
+    if (!isAccessTokenInvalidError(data.errcode)) return data;
+
+    await removeAccessToken(accountId);
+    return send(true);
   }
 
   async function getDraftProducts(pageSize = 30, nextKey = ''): Promise<ProductListResult> {
-    const token = await getAccessToken();
-    const url = `${BASE_URL}/channels/ec/product/list/get?access_token=${token}`;
-
-    const response = await axios.post(url, {
+    const data = await request<any>('/channels/ec/product/list/get', {
       page_size: Math.min(pageSize, 30),
       next_key: nextKey || undefined,
       status: 0,
     });
-
-    const data = response.data;
 
     if (data.errcode && data.errcode !== 0) {
       throw new Error(data.errmsg || `获取草稿列表失败: ${data.errcode}`);
@@ -102,15 +73,10 @@ export function createWxShopClient(config: Config) {
   }
 
   async function getProductDetail(productId: string): Promise<DraftProduct> {
-    const token = await getAccessToken();
-    const url = `${BASE_URL}/channels/ec/product/get?access_token=${token}`;
-
-    const response = await axios.post(url, {
+    const data = await request<any>('/channels/ec/product/get', {
       product_id: productId,
       data_type: 2,
     });
-
-    const data = response.data;
 
     if (data.errcode && data.errcode !== 0) {
       throw new Error(data.errmsg || `获取商品详情失败: ${data.errcode}`);
@@ -131,17 +97,11 @@ export function createWxShopClient(config: Config) {
   }
 
   async function listProduct(productId: string): Promise<ListingResult> {
-    const token = await getAccessToken();
-    const url = `${BASE_URL}/channels/ec/product/listing?access_token=${token}`;
-    const response = await axios.post(url, { product_id: productId });
-    return response.data;
+    return request<ListingResult>('/channels/ec/product/listing', { product_id: productId });
   }
 
   async function getAuditQuota(): Promise<QuotaResult> {
-    const token = await getAccessToken();
-    const url = `${BASE_URL}/channels/ec/product/getauditquota?access_token=${token}`;
-    const response = await axios.post(url, {});
-    const data = response.data;
+    const data = await request<any>('/channels/ec/product/getauditquota', {});
 
     if (data.errcode && data.errcode !== 0) {
       throw new Error(data.errmsg || `获取配额失败: ${data.errcode}`);
@@ -158,15 +118,10 @@ export function createWxShopClient(config: Config) {
   }
 
   async function deleteProduct(productId: string): Promise<ListingResult> {
-    const token = await getAccessToken();
-    const url = `${BASE_URL}/channels/ec/product/delete?access_token=${token}`;
-    const response = await axios.post(url, { product_id: productId });
-    return response.data;
+    return request<ListingResult>('/channels/ec/product/delete', { product_id: productId });
   }
 
   async function getOrderList(params: OrderListParams = {}): Promise<OrderListResult> {
-    const token = await getAccessToken();
-    const url = `${BASE_URL}/channels/ec/order/list/get?access_token=${token}`;
     const body: Record<string, unknown> = {
       page_size: params.page_size || 10,
     };
@@ -176,8 +131,7 @@ export function createWxShopClient(config: Config) {
     if (params.update_time_range) body.update_time_range = params.update_time_range;
     if (params.order_id) body.order_id = params.order_id;
 
-    const response = await axios.post(url, body);
-    const data = response.data;
+    const data = await request<any>('/channels/ec/order/list/get', body);
     if (data.errcode && data.errcode !== 0) {
       throw new Error(data.errmsg || `获取订单列表失败: ${data.errcode}`);
     }
@@ -189,10 +143,7 @@ export function createWxShopClient(config: Config) {
   }
 
   async function getOrderDetail(orderId: string): Promise<Order> {
-    const token = await getAccessToken();
-    const url = `${BASE_URL}/channels/ec/order/get?access_token=${token}`;
-    const response = await axios.post(url, { order_id: orderId });
-    const data = response.data;
+    const data = await request<any>('/channels/ec/order/get', { order_id: orderId });
     if (data.errcode && data.errcode !== 0) {
       throw new Error(data.errmsg || `获取订单详情失败: ${data.errcode}`);
     }
@@ -200,8 +151,6 @@ export function createWxShopClient(config: Config) {
   }
 
   async function searchOrders(params: OrderSearchParams): Promise<OrderListResult> {
-    const token = await getAccessToken();
-    const url = `${BASE_URL}/channels/ec/order/search?access_token=${token}`;
     const searchCondition: Record<string, string> = {};
     const fieldMap: Record<string, string> = {
       order_id: 'order_id',
@@ -223,8 +172,7 @@ export function createWxShopClient(config: Config) {
     };
     if (params.status !== undefined) body.status = params.status;
 
-    const response = await axios.post(url, body);
-    const data = response.data;
+    const data = await request<any>('/channels/ec/order/search', body);
     if (data.errcode && data.errcode !== 0) {
       throw new Error(data.errmsg || `搜索订单失败: ${data.errcode}`);
     }
@@ -236,10 +184,7 @@ export function createWxShopClient(config: Config) {
   }
 
   async function decodeOrderSensitiveInfo(orderId: string): Promise<OrderAddressInfo> {
-    const token = await getAccessToken();
-    const url = `${BASE_URL}/channels/ec/order/sensitiveinfo/decode?access_token=${token}`;
-    const response = await axios.post(url, { order_id: orderId });
-    const data = response.data;
+    const data = await request<any>('/channels/ec/order/sensitiveinfo/decode', { order_id: orderId });
     if (data.errcode && data.errcode !== 0) {
       throw new Error(data.errmsg || `解密收货信息失败: ${data.errcode}`);
     }
@@ -250,10 +195,7 @@ export function createWxShopClient(config: Config) {
   }
 
   async function getDeliveryCompanyList(ewaybillOnly = false): Promise<DeliveryCompany[]> {
-    const token = await getAccessToken();
-    const url = `${BASE_URL}/channels/ec/order/deliverycompanylist/new/get?access_token=${token}`;
-    const response = await axios.post(url, { ewaybill_only: ewaybillOnly });
-    const data = response.data;
+    const data = await request<any>('/channels/ec/order/deliverycompanylist/new/get', { ewaybill_only: ewaybillOnly });
     if (data.errcode && data.errcode !== 0) {
       throw new Error(data.errmsg || `获取快递公司列表失败: ${data.errcode}`);
     }
@@ -261,22 +203,13 @@ export function createWxShopClient(config: Config) {
   }
 
   async function sendOrderDelivery(payload: SendOrderDeliveryPayload): Promise<void> {
-    const token = await getAccessToken();
-    const url = `${BASE_URL}/channels/ec/order/delivery/send?access_token=${token}`;
-    const response = await axios.post(url, payload);
-    const data = response.data;
+    const data = await request<any>('/channels/ec/order/delivery/send', payload);
     if (data.errcode && data.errcode !== 0) {
       throw new Error(data.errmsg || `提交发货失败: ${data.errcode}`);
     }
   }
 
-  function clearTokenCache(): void {
-    tokenCache = null;
-  }
-
   return {
-    config,
-    getAccessToken,
     getDraftProducts,
     getProductDetail,
     listProduct,
@@ -288,7 +221,6 @@ export function createWxShopClient(config: Config) {
     decodeOrderSensitiveInfo,
     getDeliveryCompanyList,
     sendOrderDelivery,
-    clearTokenCache,
   };
 }
 

@@ -14,7 +14,7 @@ export async function deleteOne(
 ): Promise<'success' | 'failed' | 'stopped'> {
   const logger = createLogger('DeleteFailed', accountId);
   try {
-    const cacheKey = api.config.appId;
+    const cacheKey = accountId;
     const lastDeleteTime = lastDeleteTimeMap.get(cacheKey) || 0;
     const now = Date.now();
     const elapsed = now - lastDeleteTime;

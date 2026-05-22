@@ -45,6 +45,16 @@ interface ListingJobFormData {
   taskConfig: TaskConfig;
 }
 
+const formatQuotaFetchedAt = (timestamp?: number) => {
+  if (!timestamp) return '';
+  return new Date(timestamp).toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+};
+
 const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account' }) => {
   const { taskConfig, fetchTaskConfig, saveTaskConfig } = useTaskConfig(accountId);
   const { logs, fetchLogs, clearLogs } = useLogs(accountId);
@@ -159,7 +169,7 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
     try {
       const res = await extensionApi.task.run(targetAccountId, config);
       setResultsByAccountId(prev => ({ ...prev, [targetAccountId]: res }));
-      if (currentAccountIdRef.current === targetAccountId) fetchQuota();
+      if (currentAccountIdRef.current === targetAccountId) fetchQuota(true);
     } finally {
       taskUnsubscribersRef.current.get(targetAccountId)?.();
       taskUnsubscribersRef.current.delete(targetAccountId);
@@ -598,6 +608,12 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
       : quota.total > 0
         ? `配额 ${displayQuota}/${quota.total}`
         : '配额 -/-';
+  const quotaFetchedAtText = formatQuotaFetchedAt(quota.fetchedAt);
+  const quotaTooltip = quotaError
+    ? quotaErrorMessage || '获取提审配额失败'
+    : quota.fetchedAt
+      ? `来源：${quota.source === 'cache' ? '缓存' : '微信接口'}；更新时间：${quotaFetchedAtText}${typeof quota.elapsedMs === 'number' ? `；耗时：${quota.elapsedMs}ms` : ''}`
+      : '尚未获取提审配额';
   const renderRulesSection = () => (
     <div style={{ border: '1px solid #f0f0f0', borderRadius: 8, background: '#fff', opacity: rulesLocked ? 0.75 : 1 }}>
       <div style={{ padding: '14px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -854,13 +870,9 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
             >
               定时任务{tasks.length > 0 ? ` (${tasks.length})` : ''}
             </Button>
-            {quotaError ? (
-              <Tooltip title={quotaErrorMessage || '获取提审配额失败'}>
-                <Tag color={quotaTagColor}>{quotaTagText}</Tag>
-              </Tooltip>
-            ) : (
+            <Tooltip title={quotaTooltip}>
               <Tag color={quotaTagColor}>{quotaTagText}</Tag>
-            )}
+            </Tooltip>
             <Button
               type="primary"
               icon={<PlayCircleOutlined />}
@@ -967,7 +979,7 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexShrink: 0 }}>
           <span style={{ fontWeight: 500 }}>执行记录</span>
           <Space size={4}>
-            <Button size="small" type="text" icon={<ReloadOutlined />} onClick={() => { fetchLogs(); fetchQuota(); }} />
+            <Button size="small" type="text" icon={<ReloadOutlined />} onClick={() => { fetchLogs(); fetchQuota(true); }} />
             <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={clearLogs} />
           </Space>
         </div>

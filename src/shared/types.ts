@@ -70,6 +70,9 @@ export interface DraftProduct {
 export interface QuotaResult {
   quota: number;
   total: number;
+  source?: 'cache' | 'api';
+  fetchedAt?: number;
+  elapsedMs?: number;
 }
 
 export interface ErrorCodeSummary {

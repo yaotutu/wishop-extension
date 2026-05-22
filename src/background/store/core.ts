@@ -11,6 +11,7 @@ export interface StoreSchema {
   storageVersion: number;
   accounts: FullAccount[];
   activeAccountId: string;
+  wxAccessTokens?: Record<string, StoredWxAccessToken>;
   scheduledJobs?: ScheduledJob[];
   skipKeywords?: string[];
   blacklistRules?: BlacklistRule[];
@@ -18,7 +19,15 @@ export interface StoreSchema {
   notificationPreference?: NotificationPreference;
 }
 
-export const CURRENT_STORAGE_VERSION = 3;
+export interface StoredWxAccessToken {
+  accountId: string;
+  appId: string;
+  accessToken: string;
+  expiresAt: number;
+  updatedAt: number;
+}
+
+export const CURRENT_STORAGE_VERSION = 4;
 
 export const DEFAULT_TASK_CONFIG: TaskConfig = {
   listUnreviewed: true,
@@ -51,6 +60,7 @@ export async function readStore(): Promise<StoreSchema> {
     'storageVersion',
     'accounts',
     'activeAccountId',
+    'wxAccessTokens',
     'scheduledJobs',
     'skipKeywords',
     'blacklistRules',
@@ -61,6 +71,9 @@ export async function readStore(): Promise<StoreSchema> {
     storageVersion: typeof data.storageVersion === 'number' ? data.storageVersion : 0,
     accounts: Array.isArray(data.accounts) ? data.accounts : [],
     activeAccountId: typeof data.activeAccountId === 'string' ? data.activeAccountId : '',
+    wxAccessTokens: typeof data.wxAccessTokens === 'object' && data.wxAccessTokens !== null
+      ? data.wxAccessTokens as Record<string, StoredWxAccessToken>
+      : {},
     scheduledJobs: Array.isArray(data.scheduledJobs) ? data.scheduledJobs : [],
     skipKeywords: Array.isArray(data.skipKeywords) ? data.skipKeywords : [],
     blacklistRules: Array.isArray(data.blacklistRules) ? data.blacklistRules : undefined,

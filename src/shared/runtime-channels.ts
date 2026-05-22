@@ -89,7 +89,7 @@ export interface RuntimeChannels {
   'shipping:fail': { args: [sessionId: string, error: string]; result: ShippingSession };
   'taobaoWorkspace:getCurrentRole': { args: []; result: TaobaoWorkspaceRole | null };
 
-  'quota:get': { args: [accountId: string]; result: QuotaResult };
+  'quota:get': { args: [accountId: string, force?: boolean]; result: QuotaResult };
 
   'logs:get': { args: [accountId: string]; result: LogEntry[] };
   'logs:clear': { args: [accountId: string]; result: void };

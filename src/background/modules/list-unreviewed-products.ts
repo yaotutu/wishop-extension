@@ -56,9 +56,9 @@ export async function listOne(
       return 'skipped';
     }
 
-    await waitInterval(api.config.appId, signal, logger);
+    await waitInterval(accountId, signal, logger);
     const res = await api.listProduct(product.productId);
-    lastSubmitTimeMap.set(api.config.appId, Date.now());
+    lastSubmitTimeMap.set(accountId, Date.now());
 
     if (res.errcode === 0) {
       addLog({ runId, productId: product.productId, productTitle: product.title, action: 'list', status: 'success' });

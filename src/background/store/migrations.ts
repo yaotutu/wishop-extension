@@ -30,6 +30,13 @@ const migrations: Record<number, Migration> = {
       storageVersion: 3,
     };
   },
+  4(store) {
+    return {
+      ...store,
+      wxAccessTokens: typeof store.wxAccessTokens === 'object' && store.wxAccessTokens !== null ? store.wxAccessTokens : {},
+      storageVersion: 4,
+    };
+  },
 };
 
 export async function migrateStore(): Promise<void> {
