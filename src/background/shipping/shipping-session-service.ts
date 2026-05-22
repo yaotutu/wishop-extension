@@ -1,7 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { CreateShippingSessionInput, LinkedPlatformOrder, OrderAssociation, ShippingSession, ShippingSessionStatus } from '../../shared/types';
+import type { CreateShippingSessionInput, OrderAssociation, ShippingSession, ShippingSessionStatus } from '../../shared/types';
 import { getOrderAssociations, setOrderAssociation } from '../store/order-association-repository';
 import { ensureTaobaoTaskWorkTab, openTaobaoShippingWorkTab } from '../taobao-workspace/work-tab-service';
+import { openPurchaseLookupSessionTab } from '../purchase-lookup/purchase-lookup-session-service';
+import { buildPaidTaobaoLinkedOrder } from './purchase-association';
 
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 const sessions = new Map<string, ShippingSession>();
@@ -90,22 +92,19 @@ async function savePaidTaobaoOrderAssociation(session: ShippingSession, platform
   const existing = (await getOrderAssociations(session.accountId)).find(item => item.orderId === session.orderId);
   const existingLinked = existing?.linkedOrders[0];
   const timestamp = now();
-  const linkedOrder: LinkedPlatformOrder = {
-    id: existingLinked?.id || uuidv4(),
-    platform: 'taobao',
-    platformOrderId,
-    platformOrderStatus: '支付成功',
-    logisticsStatus: '待发货',
-    logisticsCompany: existingLinked?.logisticsCompany || '',
-    trackingNumber: existingLinked?.trackingNumber || '',
-    remark: existingLinked?.remark || '支付成功页自动关联',
-    createdAt: existingLinked?.createdAt || timestamp,
-    updatedAt: timestamp,
-  };
+  const linkedOrder = buildPaidTaobaoLinkedOrder(existingLinked, platformOrderId, timestamp);
 
   return setOrderAssociation(session.accountId, session.orderId, {
     internalRemark: existing?.internalRemark || '',
     linkedOrders: [linkedOrder],
+  });
+}
+
+async function startPaidTaobaoOrderStatusLookup(session: ShippingSession, platformOrderId: string): Promise<void> {
+  await openPurchaseLookupSessionTab({
+    accountId: session.accountId,
+    orderId: session.orderId,
+    platformOrderId,
   });
 }
 
@@ -130,11 +129,12 @@ async function handleShippingTabUrlChange(tabId: number, url?: string): Promise<
 
   try {
     const association = await savePaidTaobaoOrderAssociation(detected, platformOrderId);
+    await startPaidTaobaoOrderStatusLookup(detected, platformOrderId).catch(() => {});
     const associated: ShippingSession = {
       ...detected,
       status: 'completed',
       purchaseAssociationStatus: 'associated',
-      purchaseAssociationMessage: `已关联淘宝订单：${platformOrderId}`,
+      purchaseAssociationMessage: `已关联淘宝订单：${platformOrderId}，正在同步发货状态`,
       updatedAt: now(),
     };
     sessions.set(session.id, associated);

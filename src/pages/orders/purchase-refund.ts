@@ -1,5 +1,6 @@
 import type { LinkedPlatformOrder, Order } from '../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../shared/types';
+import { normalizeLinkedPurchaseOrder } from '../../shared/purchase-status';
 
 const PURCHASE_LOGISTICS_STATUS_KEYWORDS = [
   '卖家已发货',
@@ -21,19 +22,20 @@ const PURCHASE_REFUND_TERMINAL_STATUS_KEYWORDS = [
 
 export function hasLinkedPurchaseLogistics(linked?: LinkedPlatformOrder): boolean {
   if (!linked) return false;
+  const normalized = normalizeLinkedPurchaseOrder(linked);
   const logisticsFields = [
-    linked.logisticsCompany,
-    linked.trackingNumber,
-    linked.logisticsStatus,
+    normalized.logisticsCompany,
+    normalized.trackingNumber,
+    normalized.logisticsStatus,
   ].map(value => value?.trim()).filter(Boolean);
   if (logisticsFields.length > 0) return true;
 
-  const status = linked.platformOrderStatus?.trim() || '';
+  const status = normalized.platformOrderStatus?.trim() || '';
   return PURCHASE_LOGISTICS_STATUS_KEYWORDS.some(keyword => status.includes(keyword));
 }
 
 export function isLinkedPurchaseRefundFinished(linked?: LinkedPlatformOrder): boolean {
-  const status = linked?.platformOrderStatus?.trim() || '';
+  const status = linked ? normalizeLinkedPurchaseOrder(linked).platformOrderStatus?.trim() || '' : '';
   return PURCHASE_REFUND_TERMINAL_STATUS_KEYWORDS.some(keyword => status.includes(keyword));
 }
 

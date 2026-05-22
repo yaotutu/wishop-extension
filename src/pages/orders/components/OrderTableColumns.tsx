@@ -4,6 +4,7 @@ import { CopyOutlined, EyeOutlined, LinkOutlined, PictureOutlined, RollbackOutli
 import type { Order, OrderAssociation, OrderProductInfo, OrderRealAddressCache, ProductSourceItem } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
 import { formatOrderAddressLine, getOrderPhoneDisplay } from '../../../shared/address-format';
+import { normalizeLinkedPurchaseOrder } from '../../../shared/purchase-status';
 import { firstProduct, formatPrice, formatTime, getEstimatedCommissionFee, hasAddressInfo, PAYMENT_METHOD, STATUS_CONFIG } from '../order-display';
 import { canPrepareTaobaoRefund as canPrepareTaobaoRefundForOrder, isLinkedPurchaseRefundFinished } from '../purchase-refund';
 
@@ -268,7 +269,7 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
       width: 190,
       render: (_: unknown, record: Order) => {
         const association = options.orderAssociations[record.order_id];
-        const linked = association?.linkedOrders[0];
+        const linked = association?.linkedOrders[0] ? normalizeLinkedPurchaseOrder(association.linkedOrders[0]) : undefined;
         const internalRemark = association?.internalRemark?.trim();
         const canShipFromPurchase = record.status === OrderStatusEnum.PendingShipment
           && !!linked?.trackingNumber

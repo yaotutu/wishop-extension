@@ -17,7 +17,7 @@ import {
   recordTaskWaitingUser,
 } from '../global-logs/global-log-service';
 import { getOrderAssociations, setOrderAssociation } from '../store/order-association-repository';
-import { activateTaobaoWorkTab, ensureTaobaoShippingWorkTab, openTaobaoWorkTab } from '../taobao-workspace/work-tab-service';
+import { activateTaobaoWorkTab, ensureTaobaoTaskWorkTab, openTaobaoWorkTab } from '../taobao-workspace/work-tab-service';
 
 const SESSION_TTL_MS = 30 * 60 * 1000;
 const TAOBAO_ORDER_DETAIL_URL = 'https://trade.taobao.com/trade/detail/trade_order_detail.htm';
@@ -220,7 +220,7 @@ export async function updatePurchaseLookupSessionStatus(
 
 export async function openPurchaseLookupSessionTab(input: CreatePurchaseLookupSessionInput): Promise<PurchaseLookupSession> {
   const session = await createPurchaseLookupSession(input);
-  await ensureTaobaoShippingWorkTab().catch(() => {});
+  await ensureTaobaoTaskWorkTab().catch(() => {});
   if (hasActivePurchaseLookupSession()) {
     const queued: PurchaseLookupSession = { ...session, status: 'queued', updatedAt: now() };
     sessions.set(session.id, queued);

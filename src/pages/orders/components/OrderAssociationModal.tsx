@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Button, Form, Input, Modal, Select } from 'antd';
 import type { LinkedPlatformOrder, OrderAssociation } from '../../../shared/types';
+import { normalizeLinkedPurchaseOrder } from '../../../shared/purchase-status';
 
 interface Props {
   open: boolean;
@@ -44,7 +45,7 @@ export const OrderAssociationModal: React.FC<Props> = ({ open, association, savi
   const [form] = Form.useForm<FormValue>();
 
   useEffect(() => {
-    const linked = association?.linkedOrders[0];
+    const linked = association?.linkedOrders[0] ? normalizeLinkedPurchaseOrder(association.linkedOrders[0]) : undefined;
     form.setFieldsValue({
       ...DEFAULT_VALUE,
       internalRemark: association?.internalRemark || '',

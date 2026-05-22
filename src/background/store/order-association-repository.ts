@@ -1,10 +1,11 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { LinkedPlatformOrder, OrderAssociation } from '../../shared/types';
+import { normalizeLinkedPurchaseOrder } from '../../shared/purchase-status';
 import { getAccount } from './account-repository';
 import { updateAccountData } from './core';
 
 function normalizeLinkedOrder(order: Partial<LinkedPlatformOrder>, now: number): LinkedPlatformOrder {
-  return {
+  return normalizeLinkedPurchaseOrder({
     id: order.id || uuidv4(),
     platform: order.platform || 'taobao',
     platformOrderId: order.platformOrderId?.trim() || '',
@@ -15,11 +16,18 @@ function normalizeLinkedOrder(order: Partial<LinkedPlatformOrder>, now: number):
     remark: order.remark?.trim() || '',
     createdAt: order.createdAt || now,
     updatedAt: now,
+  });
+}
+
+function normalizeAssociationForRead(association: OrderAssociation): OrderAssociation {
+  return {
+    ...association,
+    linkedOrders: association.linkedOrders.map(normalizeLinkedPurchaseOrder),
   };
 }
 
 export async function getOrderAssociations(accountId: string): Promise<OrderAssociation[]> {
-  return (await getAccount(accountId))?.orderAssociations || [];
+  return ((await getAccount(accountId))?.orderAssociations || []).map(normalizeAssociationForRead);
 }
 
 export async function setOrderAssociation(
