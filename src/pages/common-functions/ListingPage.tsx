@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { extensionApi } from '../../shared/extension-api';
 import { Checkbox, InputNumber, Button, Space, Alert, Tag, Divider, Modal, Table, Switch, Input, message, Empty, Popconfirm, Select, Tooltip } from 'antd';
 import { PlayCircleOutlined, CloseCircleOutlined, WarningOutlined, DeleteOutlined, ReloadOutlined, ExclamationCircleOutlined, ClockCircleOutlined, PlusOutlined, EditOutlined, StopOutlined, QuestionCircleOutlined } from '@ant-design/icons';
-import { useTaskConfig, useLogs, useQuota, useSchedulers, useGlobalSchedulers } from '../../hooks/useIpc';
+import { useTaskConfig, useListingLogs, useQuota, useSchedulers, useGlobalSchedulers } from '../../hooks/useIpc';
 import { useBlacklistRules } from '../../hooks/useBlacklistRules';
 import { useSkipKeywords } from '../../hooks/useSkipKeywords';
 import { useStatusRules } from '../../hooks/useStatusRules';
@@ -57,7 +57,7 @@ const formatQuotaFetchedAt = (timestamp?: number) => {
 
 const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account' }) => {
   const { taskConfig, fetchTaskConfig, saveTaskConfig } = useTaskConfig(accountId);
-  const { logs, fetchLogs, clearLogs } = useLogs(accountId);
+  const { logs, fetchLogs, clearLogs } = useListingLogs(accountId);
   const { quota, loading: quotaLoading, error: quotaError, fetchQuota } = useQuota(accountId);
   const { tasks, fetchTasks, addTask, updateTask, removeTask } = useSchedulers(accountId);
   const { tasks: globalTasks, fetchTasks: fetchGlobalTasks, addTask: addGlobalTask, updateTask: updateGlobalTask, removeTask: removeGlobalTask } = useGlobalSchedulers();
@@ -156,8 +156,7 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
     setResultsByAccountId(prev => ({ ...prev, [targetAccountId]: null }));
     setLocalListedCountsByAccountId(prev => ({ ...prev, [targetAccountId]: 0 }));
     taskUnsubscribersRef.current.get(targetAccountId)?.();
-    const unsubscribe = extensionApi.task.onLog(targetAccountId, (log: LogEntry) => {
-      if (currentAccountIdRef.current === targetAccountId) fetchLogs();
+    const unsubscribe = extensionApi.listingLogs.onAdded(targetAccountId, (log: LogEntry) => {
       if (log.status === 'success' && log.action === 'list') {
         setLocalListedCountsByAccountId(prev => ({
           ...prev,

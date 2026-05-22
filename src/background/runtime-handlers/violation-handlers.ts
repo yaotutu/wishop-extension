@@ -1,5 +1,5 @@
 import type { ViolationMatch } from '../../shared/types';
-import { createScopedAddLog } from '../store/log-repository';
+import { createScopedViolationLog } from '../store/log-repository';
 import { getViolationWords, setViolationWords } from '../store/rule-repository';
 import { getClient } from '../wxshop/client-registry';
 import { batchDeleteViolations } from '../modules/violation-detect';
@@ -28,7 +28,7 @@ export function createViolationRuntimeHandlers(deps: ViolationHandlerDeps): Runt
     async 'violation:batchDelete'(args) {
       return batchDeleteViolations(
         await getClient(args[0] as string),
-        createScopedAddLog(args[0] as string),
+        createScopedViolationLog(args[0] as string),
         args[1] as ViolationMatch[],
         Date.now().toString(),
         args[0] as string,

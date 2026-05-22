@@ -2,7 +2,7 @@ import type { TaskConfig, TaskCycleResult } from '../../shared/types';
 import { recordTaskCompleted, recordTaskFailed, recordTaskStarted } from '../global-logs/global-log-service';
 import { runTaskCycle } from '../modules/task-cycle';
 import { getAccount } from '../store/account-repository';
-import { createScopedAddLog } from '../store/log-repository';
+import { createScopedListingLog } from '../store/log-repository';
 import { getBlacklistRules, getSkipKeywords, getStatusRules } from '../store/rule-repository';
 import { createLogger } from '../utils/logger';
 import type { SessionManager } from '../utils/session-manager';
@@ -11,7 +11,7 @@ import { getClient } from '../wxshop/client-registry';
 export async function runTask(accountId: string, taskConfig: TaskConfig, taskSessions: SessionManager<void>): Promise<TaskCycleResult> {
   const logger = createLogger('TaskRun', accountId);
   const runId = Date.now().toString();
-  const addLog = createScopedAddLog(accountId);
+  const addLog = createScopedListingLog(accountId);
   const account = await getAccount(accountId);
 
   await recordTaskStarted({

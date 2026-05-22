@@ -46,6 +46,8 @@ const taskKindLabels: Record<GlobalLogTaskKind, string> = {
   background: '后台',
 };
 
+const notificationModules: GlobalLogModule[] = ['listing', 'orders', 'violation', 'store', 'scheduler', 'system'];
+
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleString('zh-CN', {
     month: '2-digit',
@@ -120,6 +122,19 @@ function NotificationPreferencePanel({
           eventTypeEnabled: { ...preference.eventTypeEnabled, completed: checked },
         })}
       />
+      <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 10, display: 'grid', gap: 8 }}>
+        <Text type="secondary" style={{ fontSize: 12 }}>按模块接收</Text>
+        {notificationModules.map(module => (
+          <PreferenceRow
+            key={module}
+            label={moduleLabels[module]}
+            checked={preference.moduleEnabled[module] !== false}
+            onChange={checked => onChange({
+              moduleEnabled: { ...preference.moduleEnabled, [module]: checked },
+            })}
+          />
+        ))}
+      </div>
     </div>
   );
 }

@@ -17,6 +17,7 @@ function emitNotificationEvent(event: string, payload: unknown): void {
 function shouldNotify(log: GlobalLogEntry, preference: NotificationPreference): boolean {
   if (!preference.inAppEnabled) return false;
   if (!preference.levelEnabled[log.level]) return false;
+  if (preference.moduleEnabled[log.module] === false) return false;
   return preference.eventTypeEnabled[log.eventType] !== false;
 }
 

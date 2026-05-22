@@ -27,7 +27,7 @@ export interface StoredWxAccessToken {
   updatedAt: number;
 }
 
-export const CURRENT_STORAGE_VERSION = 4;
+export const CURRENT_STORAGE_VERSION = 5;
 
 export const DEFAULT_TASK_CONFIG: TaskConfig = {
   listUnreviewed: true,
@@ -93,7 +93,8 @@ export function normalizeAccount(account: FullAccount): FullAccount {
     ...account,
     taskConfig: account.taskConfig || DEFAULT_TASK_CONFIG,
     violationWords: account.violationWords || [],
-    logs: account.logs || [],
+    listingLogs: account.listingLogs || [],
+    violationLogs: account.violationLogs || [],
     productSources: account.productSources || [],
     orderAssociations: account.orderAssociations || [],
     realAddressCaches: account.realAddressCaches || [],

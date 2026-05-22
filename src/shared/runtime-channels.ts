@@ -91,8 +91,8 @@ export interface RuntimeChannels {
 
   'quota:get': { args: [accountId: string, force?: boolean]; result: QuotaResult };
 
-  'logs:get': { args: [accountId: string]; result: LogEntry[] };
-  'logs:clear': { args: [accountId: string]; result: void };
+  'listingLogs:get': { args: [accountId: string]; result: LogEntry[] };
+  'listingLogs:clear': { args: [accountId: string]; result: void };
   'globalLogs:list': { args: []; result: GlobalLogEntry[] };
   'globalLogs:clear': { args: []; result: void };
   'notifications:list': { args: []; result: NotificationEntry[] };

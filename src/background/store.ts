@@ -27,11 +27,15 @@ export {
 } from './store/account-repository';
 
 export {
-  addLog,
-  clearLogs,
-  createScopedAddLog,
-  getLogs,
-  onLog,
+  addModuleLog,
+  clearListingLogs,
+  clearModuleLogs,
+  createScopedListingLog,
+  createScopedModuleLog,
+  createScopedViolationLog,
+  getListingLogs,
+  getModuleLogs,
+  onModuleLog,
 } from './store/log-repository';
 
 export {

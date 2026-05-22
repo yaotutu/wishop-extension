@@ -165,9 +165,10 @@ export const extensionApi = {
   quota: {
     get: (accountId: string, force = false): Promise<QuotaResult> => invoke('quota:get', accountId, force),
   },
-  logs: {
-    get: (accountId: string): Promise<LogEntry[]> => invoke('logs:get', accountId),
-    clear: (accountId: string): Promise<void> => invoke('logs:clear', accountId),
+  listingLogs: {
+    get: (accountId: string): Promise<LogEntry[]> => invoke('listingLogs:get', accountId),
+    clear: (accountId: string): Promise<void> => invoke('listingLogs:clear', accountId),
+    onAdded: (accountId: string, callback: (log: LogEntry) => void) => onRuntimeEvent(`listingLog:added:${accountId}`, callback),
   },
   globalLogs: {
     list: (): Promise<GlobalLogEntry[]> => invoke('globalLogs:list'),
@@ -201,7 +202,6 @@ export const extensionApi = {
   task: {
     run: (accountId: string, config: TaskConfig): Promise<TaskCycleResult> => invoke('task:run', accountId, config),
     stop: (accountId: string): Promise<void> => invoke('task:stop', accountId),
-    onLog: (accountId: string, callback: (log: LogEntry) => void) => onRuntimeEvent(`log:added:${accountId}`, callback),
   },
   violation: {
     getWords: (accountId: string): Promise<string[]> => invoke('violation:getWords', accountId),
@@ -214,7 +214,7 @@ export const extensionApi = {
     > => invoke('violation:scanStep', accountId, action),
     batchDelete: (accountId: string, violations: ViolationMatch[]): Promise<{ deleted: number; errors: number; stopped: boolean }> => invoke('violation:batchDelete', accountId, violations),
     stop: (accountId: string): Promise<void> => invoke('violation:stop', accountId),
-    onLog: (accountId: string, callback: (log: LogEntry) => void) => onRuntimeEvent(`violation:log:${accountId}`, callback),
+    onLog: (accountId: string, callback: (log: LogEntry) => void) => onRuntimeEvent(`violationLog:added:${accountId}`, callback),
   },
   blacklistRules: {
     get: (): Promise<BlacklistRule[]> => invoke('blacklistRules:get'),

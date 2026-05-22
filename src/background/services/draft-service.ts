@@ -1,5 +1,5 @@
 import type { DraftProduct } from '../../shared/types';
-import { createScopedAddLog } from '../store/log-repository';
+import { createScopedListingLog } from '../store/log-repository';
 import { getClient } from '../wxshop/client-registry';
 import { createLogger } from '../utils/logger';
 
@@ -51,7 +51,7 @@ export async function fetchDrafts(accountId: string, reset?: boolean): Promise<{
 
 export async function listDraft(accountId: string, productId: string): Promise<{ success: boolean; error?: string }> {
   const logger = createLogger('Drafts', accountId);
-  const addLog = createScopedAddLog(accountId);
+  const addLog = createScopedListingLog(accountId);
   try {
     const result = await (await getClient(accountId)).listProduct(productId);
     if (result.errcode === 0) {

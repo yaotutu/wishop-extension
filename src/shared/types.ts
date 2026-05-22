@@ -455,7 +455,8 @@ export interface FullAccount {
   name: string;
   config: Config;
   taskConfig: TaskConfig;
-  logs: LogEntry[];
+  listingLogs: LogEntry[];
+  violationLogs: LogEntry[];
   violationWords: string[];
   productSources: ProductSourceBinding[];
   orderAssociations: OrderAssociation[];

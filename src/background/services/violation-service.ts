@@ -1,7 +1,7 @@
 import type { ViolationMatch, ViolationScanResult } from '../../shared/types';
 import { batchDeleteViolations, batchScan, scanOneByOne } from '../modules/violation-detect';
 import { getAccount } from '../store/account-repository';
-import { createScopedAddLog } from '../store/log-repository';
+import { createScopedViolationLog } from '../store/log-repository';
 import { getViolationWords } from '../store/rule-repository';
 import { createLogger } from '../utils/logger';
 import type { SessionManager } from '../utils/session-manager';
@@ -27,7 +27,7 @@ export async function runViolationBatchScan(
 
   const signal = scanSessions.start(accountId, { generator: null, current: null, done: false });
   try {
-    return await batchScan(api, createScopedAddLog(accountId), words, Date.now().toString(), signal, limit, accountId);
+    return await batchScan(api, createScopedViolationLog(accountId), words, Date.now().toString(), signal, limit, accountId);
   } finally {
     scanSessions.complete(accountId);
   }
@@ -48,11 +48,11 @@ export async function runViolationStep(
     logger.info(`逐个扫描开始 店铺=${account?.name || '未知'} 账号=${accountId} 词库=${words.length}个`);
     const signal = scanSessions.start(accountId, { generator: null, current: null, done: false });
     session = scanSessions.get(accountId)!;
-    session.state.generator = scanOneByOne(api, createScopedAddLog(accountId), words, Date.now().toString(), signal, accountId);
+    session.state.generator = scanOneByOne(api, createScopedViolationLog(accountId), words, Date.now().toString(), signal, accountId);
   }
 
   if (action === 'delete' && session.state.current) {
-    const result = await batchDeleteViolations(await getClient(accountId), createScopedAddLog(accountId), [session.state.current], Date.now().toString(), accountId);
+    const result = await batchDeleteViolations(await getClient(accountId), createScopedViolationLog(accountId), [session.state.current], Date.now().toString(), accountId);
     if (result.stopped) {
       session.state.done = true;
       scanSessions.stop(accountId);

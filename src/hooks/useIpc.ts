@@ -6,7 +6,7 @@ export { useConfig } from './useConfig';
 export { useGlobalSchedulers, useSchedulers } from './useScheduler';
 export { useGlobalLogs } from './useGlobalLogs';
 export { useNotifications } from './useNotifications';
-export { useLogs } from './useLogs';
+export { useListingLogs } from './useListingLogs';
 export { useQuota } from './useQuota';
 export { useDrafts } from './useDrafts';
 export { useOrders } from './useOrders';

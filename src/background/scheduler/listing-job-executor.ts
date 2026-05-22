@@ -1,6 +1,6 @@
 import type { TaskConfig } from '../../shared/types';
 import { runTaskCycle } from '../modules/task-cycle';
-import { createScopedAddLog } from '../store/log-repository';
+import { createScopedListingLog } from '../store/log-repository';
 import { getBlacklistRules, getSkipKeywords, getStatusRules } from '../store/rule-repository';
 import { getClient } from '../wxshop/client-registry';
 import { registerScheduledJobExecutor } from './scheduler-center';
@@ -26,7 +26,7 @@ export function registerListingScheduledJobs(): void {
 
     const result = await runTaskCycle(
       api,
-      createScopedAddLog(targetAccountId),
+      createScopedListingLog(targetAccountId),
       { ...configured, listUnreviewedQuantity },
       runId,
       undefined,

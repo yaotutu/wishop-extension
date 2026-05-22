@@ -37,6 +37,26 @@ const migrations: Record<number, Migration> = {
       storageVersion: 4,
     };
   },
+  5(store) {
+    const accounts = Array.isArray(store.accounts)
+      ? store.accounts.map(account => {
+        if (!account || typeof account !== 'object') return account;
+        const next = {
+          ...account,
+          listingLogs: [],
+          violationLogs: [],
+        } as Record<string, unknown>;
+        delete next.logs;
+        return next;
+      })
+      : [];
+    return {
+      ...store,
+      accounts: accounts as unknown as StoreSchema['accounts'],
+      notificationPreference: DEFAULT_NOTIFICATION_PREFERENCE,
+      storageVersion: 5,
+    };
+  },
 };
 
 export async function migrateStore(): Promise<void> {

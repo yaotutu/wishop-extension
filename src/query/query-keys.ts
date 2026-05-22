@@ -35,8 +35,8 @@ export const queryKeys = {
   quota: {
     item: (accountId: string) => ['quota', accountId] as const,
   },
-  logs: {
-    list: (accountId: string) => ['logs', accountId] as const,
+  listingLogs: {
+    list: (accountId: string) => ['listingLogs', accountId] as const,
   },
   globalLogs: {
     list: ['globalLogs'] as const,

@@ -21,6 +21,10 @@ function normalizePreference(value: unknown): NotificationPreference {
       ...DEFAULT_NOTIFICATION_PREFERENCE.levelEnabled,
       ...(input?.levelEnabled || {}),
     },
+    moduleEnabled: {
+      ...DEFAULT_NOTIFICATION_PREFERENCE.moduleEnabled,
+      ...(input?.moduleEnabled || {}),
+    },
     eventTypeEnabled: {
       ...DEFAULT_NOTIFICATION_PREFERENCE.eventTypeEnabled,
       ...(input?.eventTypeEnabled || {}),
@@ -61,6 +65,10 @@ export async function setNotificationPreference(patch: Partial<NotificationPrefe
     levelEnabled: {
       ...current.levelEnabled,
       ...(patch.levelEnabled || {}),
+    },
+    moduleEnabled: {
+      ...current.moduleEnabled,
+      ...(patch.moduleEnabled || {}),
     },
     eventTypeEnabled: {
       ...current.eventTypeEnabled,

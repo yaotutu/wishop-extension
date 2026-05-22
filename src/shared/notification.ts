@@ -26,6 +26,7 @@ export interface NotificationEntry {
 export interface NotificationPreference {
   inAppEnabled: boolean;
   levelEnabled: Record<GlobalLogLevel, boolean>;
+  moduleEnabled: Record<GlobalLogModule, boolean>;
   eventTypeEnabled: Record<GlobalLogEventType, boolean>;
 }
 
@@ -36,6 +37,14 @@ export const DEFAULT_NOTIFICATION_PREFERENCE: NotificationPreference = {
     warning: true,
     success: false,
     info: false,
+  },
+  moduleEnabled: {
+    listing: true,
+    violation: true,
+    orders: true,
+    store: true,
+    scheduler: true,
+    system: true,
   },
   eventTypeEnabled: {
     failed: true,
