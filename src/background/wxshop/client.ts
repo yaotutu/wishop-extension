@@ -36,6 +36,17 @@ export interface SendOrderDeliveryPayload {
   }>;
 }
 
+function normalizeOrder(order: Order): Order {
+  return {
+    ...order,
+    order_id: String(order.order_id || '').trim(),
+  };
+}
+
+function normalizeOrderIds(orderIds: Array<string | number> = []): string[] {
+  return orderIds.map(orderId => String(orderId).trim()).filter(Boolean);
+}
+
 export function createWxShopClient(accountId: string) {
   async function request<T>(path: string, body: unknown): Promise<T> {
     const send = async (forceRefresh = false) => {
@@ -136,7 +147,7 @@ export function createWxShopClient(accountId: string) {
       throw new Error(data.errmsg || `获取订单列表失败: ${data.errcode}`);
     }
     return {
-      order_id_list: data.order_id_list || [],
+      order_id_list: normalizeOrderIds(data.order_id_list),
       next_key: data.next_key || '',
       has_more: !!data.has_more,
     };
@@ -147,7 +158,7 @@ export function createWxShopClient(accountId: string) {
     if (data.errcode && data.errcode !== 0) {
       throw new Error(data.errmsg || `获取订单详情失败: ${data.errcode}`);
     }
-    return data.order;
+    return normalizeOrder(data.order);
   }
 
   async function searchOrders(params: OrderSearchParams): Promise<OrderListResult> {
@@ -177,7 +188,7 @@ export function createWxShopClient(accountId: string) {
       throw new Error(data.errmsg || `搜索订单失败: ${data.errcode}`);
     }
     return {
-      order_id_list: data.order_id_list || [],
+      order_id_list: normalizeOrderIds(data.order_id_list),
       next_key: data.next_key || '',
       has_more: !!data.has_more,
     };

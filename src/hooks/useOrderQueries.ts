@@ -5,7 +5,6 @@ import { extensionApi } from '../shared/extension-api';
 import { isCredentialError } from '../shared/errors';
 import type {
   OrderAssociation,
-  Order,
   OrderRealAddressCache,
   OrderSearchParams,
   OrderStatus,
@@ -19,7 +18,7 @@ import { queryKeys } from '../query/query-keys';
 import {
   createOrderListSnapshot,
   getOrderListCacheKey,
-  mergeOrderListData,
+  normalizeOrderListData,
   ordersToInfiniteData,
   readCachedOrderList,
   writeCachedOrderList,
@@ -46,7 +45,6 @@ export function useOrdersQuery(
     [accountId, search, status, timeScope],
   );
   const storageKey = useMemo(() => getOrderListCacheKey(queryKey), [queryKey]);
-  const cachedOrdersRef = useRef<Order[]>([]);
   const lastSignatureRef = useRef('');
   const [cacheHydrated, setCacheHydrated] = useState(false);
   const [hasCachedData, setHasCachedData] = useState(false);
@@ -73,7 +71,6 @@ export function useOrdersQuery(
 
   useEffect(() => {
     let cancelled = false;
-    cachedOrdersRef.current = [];
     lastSignatureRef.current = '';
     setCacheHydrated(false);
     setHasCachedData(false);
@@ -82,7 +79,6 @@ export function useOrdersQuery(
     readCachedOrderList(storageKey)
       .then((cached) => {
         if (cancelled || !cached) return;
-        cachedOrdersRef.current = cached.orders;
         lastSignatureRef.current = cached.signature;
         setHasCachedData(cached.orders.length > 0);
         queryClient.setQueryData<InfiniteData<OrderListPage, unknown>>(queryKey, current => (
@@ -101,7 +97,7 @@ export function useOrdersQuery(
 
   useEffect(() => {
     if (!query.data) return;
-    const mergedData = mergeOrderListData(query.data, cachedOrdersRef.current);
+    const mergedData = normalizeOrderListData(query.data);
     const currentSnapshot = createOrderListSnapshot(query.data);
     const snapshot = createOrderListSnapshot(mergedData);
 
@@ -113,7 +109,6 @@ export function useOrdersQuery(
     }
 
     lastSignatureRef.current = snapshot.signature;
-    cachedOrdersRef.current = snapshot.orders;
     writeCachedOrderList(storageKey, snapshot);
 
     if (snapshot.signature !== currentSnapshot.signature) {
@@ -131,7 +126,7 @@ export function useOrdersQuery(
     ...query,
     orders,
     hasMore,
-    loading: query.isFetchingNextPage || (!hasCachedData && (!cacheHydrated || query.isLoading)),
+    loading: query.isFetching || (!hasCachedData && (!cacheHydrated || query.isLoading)),
   };
 }
 

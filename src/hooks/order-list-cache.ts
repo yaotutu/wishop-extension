@@ -24,7 +24,13 @@ export async function readCachedOrderList(cacheKey: string): Promise<CachedOrder
   const data = await chrome.storage.local.get(cacheKey);
   const cached = data[cacheKey] as CachedOrderList | undefined;
   if (!cached || !Array.isArray(cached.orders) || typeof cached.signature !== 'string') return null;
-  return cached;
+  const orders = dedupeOrders(cached.orders).slice(0, MAX_CACHED_ORDERS);
+  return {
+    ...cached,
+    orders,
+    hasMore: !!cached.hasMore,
+    signature: createOrderListSignature(orders),
+  };
 }
 
 export function writeCachedOrderList(cacheKey: string, cached: CachedOrderList): void {
@@ -32,8 +38,9 @@ export function writeCachedOrderList(cacheKey: string, cached: CachedOrderList):
 }
 
 export function ordersToInfiniteData(cached: CachedOrderList): InfiniteData<OrderListPage, unknown> {
+  const orders = dedupeOrders(cached.orders).slice(0, MAX_CACHED_ORDERS);
   return {
-    pages: [{ orders: cached.orders, hasMore: cached.hasMore }],
+    pages: [{ orders, hasMore: cached.hasMore }],
     pageParams: [true],
   };
 }
@@ -48,14 +55,13 @@ export function createOrderListSnapshot(data: InfiniteData<OrderListPage, unknow
   };
 }
 
-export function mergeOrderListData(
+export function normalizeOrderListData(
   currentData: InfiniteData<OrderListPage, unknown>,
-  cachedOrders: Order[],
 ): InfiniteData<OrderListPage, unknown> {
   const freshOrders = currentData.pages.flatMap(page => page.orders);
-  const mergedOrders = dedupeOrders([...freshOrders, ...cachedOrders]).slice(0, MAX_CACHED_ORDERS);
+  const orders = dedupeOrders(freshOrders).slice(0, MAX_CACHED_ORDERS);
   return {
-    pages: [{ orders: mergedOrders, hasMore: currentData.pages.some(page => page.hasMore) }],
+    pages: [{ orders, hasMore: currentData.pages.some(page => page.hasMore) }],
     pageParams: [true],
   };
 }
@@ -64,9 +70,10 @@ function dedupeOrders(orders: Order[]): Order[] {
   const seen = new Set<string>();
   const result: Order[] = [];
   for (const order of orders) {
-    if (seen.has(order.order_id)) continue;
-    seen.add(order.order_id);
-    result.push(order);
+    const orderId = String(order.order_id || '').trim();
+    if (!orderId || seen.has(orderId)) continue;
+    seen.add(orderId);
+    result.push(order.order_id === orderId ? order : { ...order, order_id: orderId });
   }
   return result;
 }
