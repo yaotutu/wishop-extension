@@ -4,7 +4,7 @@ import type { TableProps } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { extensionApi } from '../../shared/extension-api';
-import type { Account, ScheduledJob, ScheduledJobStatus } from '../../shared/types';
+import type { Account, ScheduledJob, ScheduledJobRunStats, ScheduledJobStatus } from '../../shared/types';
 import { queryKeys } from '../../query/query-keys';
 
 interface ScheduledJobsPageProps {
@@ -66,6 +66,59 @@ function formatCron(cronExpression: string): string {
   return cronExpression;
 }
 
+function todayKey(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function statusPriority(status: ScheduledJobStatus): number {
+  switch (status) {
+    case 'running':
+      return 6;
+    case 'waiting_user':
+      return 5;
+    case 'failed':
+      return 4;
+    case 'completed':
+      return 3;
+    case 'skipped':
+      return 2;
+    case 'idle':
+    default:
+      return 1;
+  }
+}
+
+function effectiveStats(job: ScheduledJob): ScheduledJobRunStats {
+  const currentDate = todayKey();
+  if (job.scope !== 'global') {
+    return {
+      ...job.stats,
+      todayRunCount: job.stats.lastRunDate === currentDate ? job.stats.todayRunCount : 0,
+    };
+  }
+
+  const accountStats = Object.values(job.accountStats || {});
+  if (accountStats.length === 0) return job.stats;
+
+  const latestErrorStat = accountStats
+    .filter(stat => stat.lastError)
+    .sort((a, b) => (b.lastFinishedAt || b.lastRunAt || 0) - (a.lastFinishedAt || a.lastRunAt || 0))[0];
+  const lastStatus = accountStats
+    .map(stat => stat.lastStatus || 'idle')
+    .sort((a, b) => statusPriority(b) - statusPriority(a))[0];
+
+  return {
+    lastRunDate: accountStats.some(stat => stat.lastRunDate === currentDate) ? currentDate : job.stats.lastRunDate,
+    todayRunCount: accountStats
+      .filter(stat => stat.lastRunDate === currentDate)
+      .reduce((sum, stat) => sum + stat.todayRunCount, 0),
+    lastRunAt: Math.max(0, ...accountStats.map(stat => stat.lastRunAt || 0)) || undefined,
+    lastFinishedAt: Math.max(0, ...accountStats.map(stat => stat.lastFinishedAt || 0)) || undefined,
+    lastStatus,
+    lastError: latestErrorStat?.lastError,
+  };
+}
+
 const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
   const accountNameById = useMemo(
     () => new Map(accounts.map(account => [account.id, account.name])),
@@ -75,6 +128,7 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
   const { data = [], isLoading, refetch, isFetching } = useQuery({
     queryKey: queryKeys.scheduledJobs.list,
     queryFn: () => extensionApi.scheduledJobs.list(),
+    refetchInterval: 5000,
   });
 
   const rows = useMemo(
@@ -84,7 +138,7 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
 
   const enabledCount = rows.filter(job => job.enabled).length;
   const globalCount = rows.filter(job => job.scope === 'global').length;
-  const runningCount = rows.filter(job => job.stats.lastStatus === 'running').length;
+  const runningCount = rows.filter(job => effectiveStats(job).lastStatus === 'running').length;
 
   const columns: TableProps<ScheduledJob>['columns'] = [
     {
@@ -109,7 +163,7 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
       key: 'status',
       width: 130,
       render: (_, job) => {
-        const status = job.stats.lastStatus || 'idle';
+        const status = effectiveStats(job).lastStatus || 'idle';
         return (
           <Space size={4} vertical>
             <Tag color={job.enabled ? 'green' : 'default'}>{job.enabled ? '已启用' : '已停用'}</Tag>
@@ -160,7 +214,7 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
       width: 120,
       render: (_, job) => (
         <span>
-          {job.stats.todayRunCount}
+          {effectiveStats(job).todayRunCount}
           {(job.dailyLimit || 0) > 0 ? `/${job.dailyLimit}` : ''}
         </span>
       ),
@@ -169,18 +223,21 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
       title: '最近运行',
       key: 'lastRun',
       width: 180,
-      render: (_, job) => (
-        <Space size={4} vertical>
-          <span>{formatTime(job.stats.lastRunAt)}</span>
-          {job.stats.lastError && (
-            <Tooltip title={job.stats.lastError}>
-              <span style={{ maxWidth: 150, color: '#cf1322', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {job.stats.lastError}
-              </span>
-            </Tooltip>
-          )}
-        </Space>
-      ),
+      render: (_, job) => {
+        const stats = effectiveStats(job);
+        return (
+          <Space size={4} vertical>
+            <span>{formatTime(stats.lastRunAt)}</span>
+            {stats.lastError && (
+              <Tooltip title={stats.lastError}>
+                <span style={{ maxWidth: 150, color: '#cf1322', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {stats.lastError}
+                </span>
+              </Tooltip>
+            )}
+          </Space>
+        );
+      },
     },
     {
       title: '更新',
