@@ -37,10 +37,35 @@ import type { GlobalLogEntry } from './global-log';
 import type { NotificationEntry, NotificationPreference } from './notification';
 import type { RuntimeArgs, RuntimeChannel, RuntimeResult } from './runtime-channels';
 
+let devRuntimeReloadScheduled = false;
+
+function shouldAutoReloadRuntime(errorMessage: string): boolean {
+  return import.meta.env.DEV && errorMessage.startsWith('Unknown runtime channel:');
+}
+
+function scheduleDevRuntimeReload(errorMessage: string): void {
+  if (devRuntimeReloadScheduled) return;
+  devRuntimeReloadScheduled = true;
+  console.warn(`[wishop] ${errorMessage}。开发环境检测到前后台版本不一致，正在自动重新加载插件。`);
+  window.setTimeout(() => {
+    try {
+      const runtime = chrome.runtime as typeof chrome.runtime & { reload?: () => void };
+      runtime.reload?.();
+    } catch (error) {
+      console.warn('[wishop] 自动重新加载插件失败，请手动在 chrome://extensions 重新加载。', error);
+    }
+  }, 300);
+}
+
 async function invoke<K extends RuntimeChannel>(channel: K, ...args: RuntimeArgs<K>): Promise<RuntimeResult<K>> {
   const response = await chrome.runtime.sendMessage({ channel, args }) as { ok?: boolean; result?: unknown; error?: string };
   if (!response?.ok) {
-    throw new Error(response?.error || `Runtime request failed: ${channel}`);
+    const message = response?.error || `Runtime request failed: ${channel}`;
+    if (shouldAutoReloadRuntime(message)) {
+      scheduleDevRuntimeReload(message);
+      throw new Error('后台服务还是旧版本，插件已自动重新加载。请重新打开后台管理页后再试。');
+    }
+    throw new Error(message);
   }
   return response.result as RuntimeResult<K>;
 }
