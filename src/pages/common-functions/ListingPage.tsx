@@ -48,7 +48,7 @@ interface ListingJobFormData {
 const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account' }) => {
   const { taskConfig, fetchTaskConfig, saveTaskConfig } = useTaskConfig(accountId);
   const { logs, fetchLogs, clearLogs } = useLogs(accountId);
-  const { quota, fetchQuota } = useQuota(accountId);
+  const { quota, loading: quotaLoading, fetchQuota } = useQuota(accountId);
   const { tasks, fetchTasks, addTask, updateTask, removeTask } = useSchedulers(accountId);
   const { tasks: globalTasks, fetchTasks: fetchGlobalTasks, addTask: addGlobalTask, updateTask: updateGlobalTask, removeTask: removeGlobalTask } = useGlobalSchedulers();
   const { rules: blacklistRules, fetchRules: fetchBlacklistRules, saveRules: saveBlacklistRules, defaultCodes: blacklistDefaultCodes } = useBlacklistRules();
@@ -845,11 +845,9 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
             >
               定时任务{tasks.length > 0 ? ` (${tasks.length})` : ''}
             </Button>
-            {quota.total > 0 && (
-              <Tag color={quotaExhausted ? 'red' : 'green'}>
-                配额 {displayQuota}/{quota.total}
-              </Tag>
-            )}
+            <Tag color={quotaExhausted ? 'red' : quota.total > 0 ? 'green' : 'default'}>
+              配额 {quotaLoading ? '获取中' : quota.total > 0 ? `${displayQuota}/${quota.total}` : '-/-'}
+            </Tag>
             <Button
               type="primary"
               icon={<PlayCircleOutlined />}
