@@ -2,21 +2,23 @@ import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { createShadowRootUi } from 'wxt/utils/content-script-ui/shadow-root';
 import type { ContentScriptContext } from 'wxt/utils/content-script-context';
-import type { PurchaseLookupSession, ShippingSession, TaobaoWorkspaceRole } from '../../../shared/types';
+import type { PurchaseLookupSession, ShippingSession, TaobaoRefundSession, TaobaoWorkspaceRole } from '../../../shared/types';
 import { PurchaseLookupToolbar } from '../PurchaseLookupToolbar';
 import { ShippingToolbar } from '../ShippingToolbar';
+import { TaobaoRefundToolbar } from '../TaobaoRefundToolbar';
 import { toolbarCss } from './toolbar-style';
 import { installWorkspaceIdentity, WorkTabNotice } from './workspace-identity';
 
 interface MountTaobaoToolbarOptions {
   shippingSession: ShippingSession | null;
   purchaseLookupSession: PurchaseLookupSession | null;
+  taobaoRefundSession: TaobaoRefundSession | null;
   workspaceRole: TaobaoWorkspaceRole | null;
 }
 
 export async function mountTaobaoToolbar(
   ctx: ContentScriptContext,
-  { shippingSession, purchaseLookupSession, workspaceRole }: MountTaobaoToolbarOptions,
+  { shippingSession, purchaseLookupSession, taobaoRefundSession, workspaceRole }: MountTaobaoToolbarOptions,
 ): Promise<void> {
   const cleanupIdentity = workspaceRole ? installWorkspaceIdentity(workspaceRole) : undefined;
 
@@ -44,6 +46,7 @@ export async function mountTaobaoToolbar(
         <>
           {shippingSession && <ShippingToolbar session={shippingSession} />}
           {purchaseLookupSession && <PurchaseLookupToolbar session={purchaseLookupSession} />}
+          {taobaoRefundSession && <TaobaoRefundToolbar session={taobaoRefundSession} />}
           {workspaceRole && <WorkTabNotice role={workspaceRole} />}
         </>,
       );

@@ -4,6 +4,7 @@ import { registerListingScheduledJobs } from '../src/background/scheduler/listin
 import { installScheduledJobAlarmListener, startAllScheduledJobs } from '../src/background/scheduler/scheduler-center';
 import { installShippingPaymentSuccessWatcher, installShippingTabCleanup } from '../src/background/shipping/shipping-session-service';
 import { migrateStore } from '../src/background/store';
+import { installTaobaoRefundTabCleanup } from '../src/background/taobao-refund/taobao-refund-session-service';
 import { installTaobaoWorkTabCleanup } from '../src/background/taobao-workspace/work-tab-service';
 
 export default defineBackground(() => {
@@ -12,6 +13,7 @@ export default defineBackground(() => {
   installShippingTabCleanup();
   installShippingPaymentSuccessWatcher();
   installPurchaseLookupTabCleanup();
+  installTaobaoRefundTabCleanup();
   installTaobaoWorkTabCleanup();
   installScheduledJobAlarmListener();
   void migrateStore().then(() => startAllScheduledJobs());

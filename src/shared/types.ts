@@ -142,6 +142,41 @@ export interface OrderAssociation {
 export type PurchaseLookupSessionStatus = 'created' | 'queued' | 'opened' | 'page-ready' | 'waiting-user-verification' | 'completed' | 'failed';
 export type TaobaoWorkspaceRole = 'shipping' | 'background-task';
 
+export interface CreateTaobaoRefundSessionInput {
+  accountId: string;
+  orderId: string;
+  platformOrderId: string;
+  reason?: string;
+  autoSubmit?: boolean;
+}
+
+export type TaobaoRefundSessionStatus = 'created' | 'opened' | 'page-ready' | 'waiting-user-verification' | 'prepared' | 'submitted' | 'failed';
+
+export interface TaobaoRefundSession {
+  id: string;
+  accountId: string;
+  orderId: string;
+  platformOrderId: string;
+  reason: string;
+  autoSubmit: boolean;
+  status: TaobaoRefundSessionStatus;
+  tabId?: number;
+  lastError?: string;
+  challenge?: TaobaoSecurityChallengeSnapshot;
+  createdAt: number;
+  updatedAt: number;
+  expiresAt: number;
+}
+
+export interface TaobaoRefundPrepareSnapshot {
+  platformOrderId: string;
+  selectedReason: string;
+  refundAmountText: string;
+  submitReady: boolean;
+  autoSubmitted?: boolean;
+  url: string;
+}
+
 export type TaobaoSecurityChallengeKind = 'login' | 'slider' | 'captcha' | 'access-denied' | 'unknown';
 
 export interface TaobaoSecurityChallengeSnapshot {

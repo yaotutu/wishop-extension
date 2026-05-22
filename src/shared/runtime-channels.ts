@@ -20,12 +20,15 @@ import type {
   ShipOrderFromPurchaseInput,
   ShipOrderFromPurchaseResult,
   CreatePurchaseLookupSessionInput,
+  CreateTaobaoRefundSessionInput,
   ProductSourceBinding,
   ProductSourceItem,
   PurchaseLookupSession,
   QuotaResult,
   ScheduledJob,
   ShippingSession,
+  TaobaoRefundPrepareSnapshot,
+  TaobaoRefundSession,
   StatusRule,
   TaobaoWorkspaceRole,
   TaobaoSecurityChallengeSnapshot,
@@ -77,6 +80,15 @@ export interface RuntimeChannels {
   'purchaseLookup:resolveChallenge': { args: [sessionId: string]; result: PurchaseLookupSession };
   'purchaseLookup:complete': { args: [sessionId: string, snapshot: TaobaoPurchaseOrderSnapshot]; result: OrderAssociation };
   'purchaseLookup:fail': { args: [sessionId: string, error: string]; result: PurchaseLookupSession };
+
+  'taobaoRefund:open': { args: [input: CreateTaobaoRefundSessionInput]; result: TaobaoRefundSession };
+  'taobaoRefund:getCurrentTabSession': { args: []; result: TaobaoRefundSession | null };
+  'taobaoRefund:markPageReady': { args: [sessionId: string]; result: TaobaoRefundSession };
+  'taobaoRefund:reportChallenge': { args: [sessionId: string, snapshot: TaobaoSecurityChallengeSnapshot]; result: TaobaoRefundSession };
+  'taobaoRefund:resolveChallenge': { args: [sessionId: string]; result: TaobaoRefundSession };
+  'taobaoRefund:prepared': { args: [sessionId: string, snapshot: TaobaoRefundPrepareSnapshot]; result: TaobaoRefundSession };
+  'taobaoRefund:submitted': { args: [sessionId: string, snapshot: TaobaoRefundPrepareSnapshot]; result: TaobaoRefundSession };
+  'taobaoRefund:fail': { args: [sessionId: string, error: string]; result: TaobaoRefundSession };
 
   'productSources:list': { args: [accountId: string]; result: ProductSourceBinding[] };
   'productSources:set': { args: [accountId: string, productId: string, sources: ProductSourceItem[]]; result: ProductSourceBinding };

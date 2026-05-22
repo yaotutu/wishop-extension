@@ -14,11 +14,12 @@ export default defineContentScript({
     }
     if (window.top !== window) return;
 
-    const { shippingSession, purchaseLookupSession, workspaceRole } = await resolveTaobaoContentSessions();
-    if (!shippingSession && !purchaseLookupSession && !workspaceRole) return;
+    const { shippingSession, purchaseLookupSession, taobaoRefundSession, workspaceRole } = await resolveTaobaoContentSessions();
+    if (!shippingSession && !purchaseLookupSession && !taobaoRefundSession && !workspaceRole) return;
     await mountTaobaoToolbar(ctx, {
       shippingSession,
       purchaseLookupSession,
+      taobaoRefundSession,
       workspaceRole,
     });
   },

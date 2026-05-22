@@ -18,6 +18,7 @@ import type {
   ShipOrderFromPurchaseInput,
   ShipOrderFromPurchaseResult,
   CreatePurchaseLookupSessionInput,
+  CreateTaobaoRefundSessionInput,
   ProductSourceBinding,
   ProductSourceItem,
   PurchaseLookupSession,
@@ -26,6 +27,8 @@ import type {
   ShippingSession,
   StatusRule,
   TaobaoWorkspaceRole,
+  TaobaoRefundPrepareSnapshot,
+  TaobaoRefundSession,
   TaobaoSecurityChallengeSnapshot,
   TaobaoPurchaseOrderSnapshot,
   TaskConfig,
@@ -135,6 +138,25 @@ export const extensionApi = {
       onRuntimeEvent('purchaseLookup:failed', callback),
     onChallenge: (callback: (payload: { accountId: string; orderId: string; reason: string }) => void) =>
       onRuntimeEvent('purchaseLookup:challenge', callback),
+  },
+  taobaoRefund: {
+    open: (input: CreateTaobaoRefundSessionInput): Promise<TaobaoRefundSession> => invoke('taobaoRefund:open', input),
+    getCurrentTabSession: (): Promise<TaobaoRefundSession | null> => invoke('taobaoRefund:getCurrentTabSession'),
+    markPageReady: (sessionId: string): Promise<TaobaoRefundSession> => invoke('taobaoRefund:markPageReady', sessionId),
+    reportChallenge: (sessionId: string, snapshot: TaobaoSecurityChallengeSnapshot): Promise<TaobaoRefundSession> =>
+      invoke('taobaoRefund:reportChallenge', sessionId, snapshot),
+    resolveChallenge: (sessionId: string): Promise<TaobaoRefundSession> => invoke('taobaoRefund:resolveChallenge', sessionId),
+    prepared: (sessionId: string, snapshot: TaobaoRefundPrepareSnapshot): Promise<TaobaoRefundSession> =>
+      invoke('taobaoRefund:prepared', sessionId, snapshot),
+    submitted: (sessionId: string, snapshot: TaobaoRefundPrepareSnapshot): Promise<TaobaoRefundSession> =>
+      invoke('taobaoRefund:submitted', sessionId, snapshot),
+    fail: (sessionId: string, error: string): Promise<TaobaoRefundSession> => invoke('taobaoRefund:fail', sessionId, error),
+    onPrepared: (callback: (session: TaobaoRefundSession) => void) => onRuntimeEvent('taobaoRefund:prepared', callback),
+    onSubmitted: (callback: (session: TaobaoRefundSession) => void) => onRuntimeEvent('taobaoRefund:submitted', callback),
+    onFailed: (callback: (payload: { accountId: string; orderId: string; error: string }) => void) =>
+      onRuntimeEvent('taobaoRefund:failed', callback),
+    onChallenge: (callback: (payload: { accountId: string; orderId: string; reason: string }) => void) =>
+      onRuntimeEvent('taobaoRefund:challenge', callback),
   },
   orderRealAddresses: {
     list: (accountId: string): Promise<OrderRealAddressCache[]> => invoke('orderRealAddresses:list', accountId),

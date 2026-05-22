@@ -12,7 +12,8 @@ import {
   useShipOrderFromPurchaseMutation,
 } from '../../hooks/useIpc';
 import { extensionApi } from '../../shared/extension-api';
-import type { DeliveryCompanyOption, Order, OrderStatus, OrderProductInfo, OrderSearchParams, OrderRealAddressCache, OrderAssociation, ProductSourceItem, OrderTimeScope } from '../../shared/types';
+import { OrderStatus as OrderStatusEnum } from '../../shared/types';
+import type { DeliveryCompanyOption, Order, OrderStatus, OrderProductInfo, OrderSearchParams, OrderRealAddressCache, OrderAssociation, ProductSourceItem, OrderTimeScope, TaobaoRefundSession } from '../../shared/types';
 import { getDeliveryCompanyUnmatchedMessage, isDeliveryCompanyUnmatchedError } from '../../shared/errors';
 import { formatOrderAddressForCopy } from '../../shared/address-format';
 import { newProductSourceRow, ShippingSourceModal, SourceManagementModal } from './components/ProductSourceModals';
@@ -21,6 +22,7 @@ import { createOrderColumns } from './components/OrderTableColumns';
 import { OrderToolbar } from './components/OrderToolbar';
 import { OrderAssociationModal } from './components/OrderAssociationModal';
 import { getEstimatedCommissionFee } from './order-display';
+import { hasLinkedPurchaseLogistics, isLinkedPurchaseRefundFinished } from './purchase-refund';
 
 function normalizeUrl(url: string): string {
   const trimmed = url.trim();
@@ -65,7 +67,9 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const [shipSourceProduct, setShipSourceProduct] = useState<OrderProductInfo | null>(null);
   const [checkingPurchaseOrderIds, setCheckingPurchaseOrderIds] = useState<Set<string>>(new Set());
   const [shippingFromPurchaseOrderIds, setShippingFromPurchaseOrderIds] = useState<Set<string>>(new Set());
+  const [preparingTaobaoRefundOrderIds, setPreparingTaobaoRefundOrderIds] = useState<Set<string>>(new Set());
   const tableAreaRef = useRef<HTMLDivElement>(null);
+  const refundSyncTimerIdsRef = useRef<number[]>([]);
   const [scrollY, setScrollY] = useState(400);
   const ordersQuery = useOrdersQuery(accountId, activeStatus, activeSearch, timeScope);
   const detailQuery = useOrderDetailQuery(accountId, detailOrderId);
@@ -85,6 +89,30 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const realAddressCaches = realAddressCachesQuery.data || {};
   const orderError = ordersQuery.error instanceof Error ? ordersQuery.error.message : '';
   const error = orderError && orderError !== hiddenError ? orderError : null;
+
+  const scheduleTaobaoRefundStatusSync = useCallback((session: TaobaoRefundSession) => {
+    message.success('淘宝退款申请已自动提交，稍后同步淘宝订单状态');
+    const timer = window.setTimeout(() => {
+      setCheckingPurchaseOrderIds(previous => new Set(previous).add(session.orderId));
+      extensionApi.purchaseLookup.open({
+        accountId,
+        orderId: session.orderId,
+        platformOrderId: session.platformOrderId,
+      })
+        .then(syncSession => {
+          message.success(syncSession.status === 'queued' ? '淘宝订单状态同步已排队' : '已开始同步淘宝订单状态');
+        })
+        .catch((err: any) => {
+          setCheckingPurchaseOrderIds(previous => {
+            const next = new Set(previous);
+            next.delete(session.orderId);
+            return next;
+          });
+          message.error(`同步淘宝订单状态失败: ${err.message}`);
+        });
+    }, 4000);
+    refundSyncTimerIdsRef.current.push(timer);
+  }, [accountId]);
 
   useEffect(() => {
     const el = tableAreaRef.current;
@@ -142,6 +170,37 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       if (payload.accountId !== accountId) return;
       message.warning(`淘宝工作页需要处理验证: ${payload.reason}`);
     });
+    const offRefundPrepared = extensionApi.taobaoRefund.onPrepared((session) => {
+      if (session.accountId !== accountId) return;
+      setPreparingTaobaoRefundOrderIds(previous => {
+        const next = new Set(previous);
+        next.delete(session.orderId);
+        return next;
+      });
+      message.success('淘宝退款页已选择“不想要了”，请人工确认后手动提交');
+    });
+    const offRefundSubmitted = extensionApi.taobaoRefund.onSubmitted((session) => {
+      if (session.accountId !== accountId) return;
+      setPreparingTaobaoRefundOrderIds(previous => {
+        const next = new Set(previous);
+        next.delete(session.orderId);
+        return next;
+      });
+      scheduleTaobaoRefundStatusSync(session);
+    });
+    const offRefundFailed = extensionApi.taobaoRefund.onFailed((payload) => {
+      if (payload.accountId !== accountId) return;
+      setPreparingTaobaoRefundOrderIds(previous => {
+        const next = new Set(previous);
+        next.delete(payload.orderId);
+        return next;
+      });
+      message.error(`淘宝退款申请准备失败: ${payload.error}`);
+    });
+    const offRefundChallenge = extensionApi.taobaoRefund.onChallenge((payload) => {
+      if (payload.accountId !== accountId) return;
+      message.warning(`淘宝退款页需要处理验证: ${payload.reason}`);
+    });
     const offShippingAssociated = extensionApi.shipping.onPurchaseAssociated((payload) => {
       if (payload.session.accountId !== accountId) return;
       void refetchOrderAssociations();
@@ -155,10 +214,16 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       offCompleted();
       offFailed();
       offChallenge();
+      offRefundPrepared();
+      offRefundSubmitted();
+      offRefundFailed();
+      offRefundChallenge();
       offShippingAssociated();
       offShippingFailed();
+      refundSyncTimerIdsRef.current.forEach(timer => window.clearTimeout(timer));
+      refundSyncTimerIdsRef.current = [];
     };
-  }, [accountId, refetchOrderAssociations]);
+  }, [accountId, refetchOrderAssociations, scheduleTaobaoRefundStatusSync]);
 
   const handleStatusChange = useCallback((val: string | number | null) => {
     if (val === null) return;
@@ -458,6 +523,56 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     });
   }, [openDeliveryCompanySelector, orderAssociations, submitShipFromPurchase]);
 
+  const handlePrepareTaobaoRefund = useCallback((order: Order) => {
+    const linked = orderAssociations[order.order_id]?.linkedOrders[0];
+    const platformOrderId = linked?.platform === 'taobao' ? linked.platformOrderId?.trim() : '';
+    if (!platformOrderId) {
+      message.warning('当前订单还没有关联淘宝订单号');
+      return;
+    }
+    if (order.status !== OrderStatusEnum.CancelledByAfterSale) {
+      message.warning('仅售后取消订单需要申请淘宝退款');
+      return;
+    }
+    if (isLinkedPurchaseRefundFinished(linked)) {
+      message.info('淘宝采购单已显示退款结束或交易关闭，无需重复申请退款');
+      return;
+    }
+    const autoSubmit = !hasLinkedPurchaseLogistics(linked);
+
+    Modal.confirm({
+      title: autoSubmit ? '自动提交淘宝退款申请' : '打开淘宝退款申请页',
+      content: autoSubmit
+        ? '当前淘宝采购单未读取到物流公司、物流状态或快递单号。插件将打开退款页，选择“不想要了”，并自动点击淘宝“提交”。'
+        : '当前淘宝采购单已有物流信息或发货状态，插件只打开退款页并选择“不想要了”，不会自动提交，请你人工处理退款。',
+      okText: autoSubmit ? '自动提交退款' : '打开并选择原因',
+      cancelText: '取消',
+      async onOk() {
+        setPreparingTaobaoRefundOrderIds(previous => new Set(previous).add(order.order_id));
+        try {
+          const session = await extensionApi.taobaoRefund.open({
+            accountId,
+            orderId: order.order_id,
+            platformOrderId,
+            reason: '不想要了',
+            autoSubmit,
+          });
+          message.success(session.status === 'opened'
+            ? (autoSubmit ? '已打开淘宝退款页，准备自动提交' : '已打开淘宝退款页，正在选择退款原因')
+            : '淘宝退款申请已创建');
+        } catch (err: any) {
+          setPreparingTaobaoRefundOrderIds(previous => {
+            const next = new Set(previous);
+            next.delete(order.order_id);
+            return next;
+          });
+          message.error(`打开淘宝退款页失败: ${err.message}`);
+          throw err;
+        }
+      },
+    });
+  }, [accountId, orderAssociations]);
+
   const handleOpenShippingSession = useCallback(async (source: ProductSourceItem) => {
     if (!shipSourceOrder || !shipSourceProduct) return;
     const address = realAddressCaches[shipSourceOrder.order_id]?.address;
@@ -505,6 +620,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     orderAssociations,
     checkingPurchaseOrderIds,
     shippingFromPurchaseOrderIds,
+    preparingTaobaoRefundOrderIds,
     onCopyText: handleCopyText,
     onCopyImage: handleCopyImage,
     onCopyAddress: handleCopyAddress,
@@ -516,6 +632,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     onEditAssociation: openAssociationEditor,
     onCheckPurchaseOrder: handleCheckPurchaseOrder,
     onShipFromPurchase: handleShipFromPurchase,
+    onPrepareTaobaoRefund: handlePrepareTaobaoRefund,
   }), [
     realAddressCaches,
     decodingOrderIds,
@@ -523,6 +640,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     orderAssociations,
     checkingPurchaseOrderIds,
     shippingFromPurchaseOrderIds,
+    preparingTaobaoRefundOrderIds,
     handleCopyText,
     handleCopyImage,
     handleCopyAddress,
@@ -534,6 +652,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     openAssociationEditor,
     handleCheckPurchaseOrder,
     handleShipFromPurchase,
+    handlePrepareTaobaoRefund,
   ]);
 
   return (

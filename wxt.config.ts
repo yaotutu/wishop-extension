@@ -4,7 +4,7 @@ import packageJson from './package.json';
 const HOST_PERMISSIONS = [
   // 微信小店 API：商品提审、订单、违规检测等后台能力。
   'https://api.weixin.qq.com/*',
-  // 淘宝/Tmall：订单去发货时注入发货助手工具栏。
+  // 淘宝/Tmall：订单去发货、采购单读取和退款申请时注入工作页工具栏。
   'https://*.taobao.com/*',
   'https://*.tmall.com/*',
 ];

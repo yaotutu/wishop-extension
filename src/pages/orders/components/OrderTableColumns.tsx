@@ -1,10 +1,11 @@
 import React from 'react';
 import { Button, Flex, Image, Space, Tag, Typography } from 'antd';
-import { CopyOutlined, EyeOutlined, LinkOutlined, PictureOutlined, SendOutlined, ShoppingCartOutlined, SyncOutlined } from '@ant-design/icons';
+import { CopyOutlined, EyeOutlined, LinkOutlined, PictureOutlined, RollbackOutlined, SendOutlined, ShoppingCartOutlined, SyncOutlined } from '@ant-design/icons';
 import type { Order, OrderAssociation, OrderProductInfo, OrderRealAddressCache, ProductSourceItem } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
 import { formatOrderAddressLine, getOrderPhoneDisplay } from '../../../shared/address-format';
 import { firstProduct, formatPrice, formatTime, getEstimatedCommissionFee, hasAddressInfo, PAYMENT_METHOD, STATUS_CONFIG } from '../order-display';
+import { canPrepareTaobaoRefund as canPrepareTaobaoRefundForOrder, isLinkedPurchaseRefundFinished } from '../purchase-refund';
 
 const { Text } = Typography;
 
@@ -15,6 +16,7 @@ interface CreateOrderColumnsOptions {
   orderAssociations: Record<string, OrderAssociation>;
   checkingPurchaseOrderIds: Set<string>;
   shippingFromPurchaseOrderIds: Set<string>;
+  preparingTaobaoRefundOrderIds: Set<string>;
   onCopyText: (text: string | undefined, label: string) => void;
   onCopyImage: (imageUrl?: string) => void;
   onCopyAddress: (cache: OrderRealAddressCache) => void;
@@ -26,6 +28,7 @@ interface CreateOrderColumnsOptions {
   onEditAssociation: (order: Order) => void;
   onCheckPurchaseOrder: (order: Order) => void;
   onShipFromPurchase: (order: Order) => void;
+  onPrepareTaobaoRefund: (order: Order) => void;
 }
 
 /**
@@ -271,6 +274,8 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
           && !!linked?.trackingNumber
           && !!linked?.logisticsCompany
           && !record.order_detail?.delivery_info?.delivery_product_info?.length;
+        const canPrepareTaobaoRefund = canPrepareTaobaoRefundForOrder(record, linked);
+        const taobaoRefundFinished = linked?.platform === 'taobao' && isLinkedPurchaseRefundFinished(linked);
         return (
           <div style={{ display: 'grid', gap: 3 }}>
             {internalRemark && (
@@ -319,6 +324,22 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
                   >
                     回填发货
                   </Button>
+                )}
+                {canPrepareTaobaoRefund && (
+                  <Button
+                    type="link"
+                    size="small"
+                    danger
+                    icon={<RollbackOutlined />}
+                    loading={options.preparingTaobaoRefundOrderIds.has(record.order_id)}
+                    onClick={() => options.onPrepareTaobaoRefund(record)}
+                    style={{ padding: 0, height: 18, fontSize: 12, justifySelf: 'start' }}
+                  >
+                    申请退款
+                  </Button>
+                )}
+                {taobaoRefundFinished && (
+                  <Text type="secondary" style={{ fontSize: 12 }}>退款流程已结束</Text>
                 )}
               </>
             ) : (

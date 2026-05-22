@@ -13,6 +13,7 @@ import { createRuleRuntimeHandlers } from '../runtime-handlers/rule-handlers';
 import { createSchedulerRuntimeHandlers } from '../runtime-handlers/scheduler-handlers';
 import { createShippingRuntimeHandlers } from '../runtime-handlers/shipping-handlers';
 import { createTaobaoWorkspaceRuntimeHandlers } from '../runtime-handlers/taobao-workspace-handlers';
+import { createTaobaoRefundRuntimeHandlers } from '../runtime-handlers/taobao-refund-handlers';
 import { createTaskRuntimeHandlers } from '../runtime-handlers/task-handlers';
 import { createViolationRuntimeHandlers } from '../runtime-handlers/violation-handlers';
 import { createLicenseRuntimeHandlers } from '../runtime-handlers/license-handlers';
@@ -52,6 +53,14 @@ const FEATURE_CHANNELS = {
   'purchaseLookup:resolveChallenge': 'orders',
   'purchaseLookup:complete': 'orders',
   'purchaseLookup:fail': 'orders',
+  'taobaoRefund:open': 'orders',
+  'taobaoRefund:getCurrentTabSession': 'orders',
+  'taobaoRefund:markPageReady': 'orders',
+  'taobaoRefund:reportChallenge': 'orders',
+  'taobaoRefund:resolveChallenge': 'orders',
+  'taobaoRefund:prepared': 'orders',
+  'taobaoRefund:submitted': 'orders',
+  'taobaoRefund:fail': 'orders',
   'productSources:list': 'orders',
   'productSources:set': 'orders',
   'productSources:remove': 'orders',
@@ -108,6 +117,7 @@ interface CreateBackgroundRouterOptions {
   scanSessions: SessionManager<ScanSessionState>;
   getCurrentTabShippingSession: (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
   getCurrentTabPurchaseLookupSession: (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
+  getCurrentTabTaobaoRefundSession: (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
 }
 
 /**
@@ -129,6 +139,7 @@ export function createBackgroundRouter(options: CreateBackgroundRouterOptions): 
     ...createRealAddressRuntimeHandlers(),
     ...createOrderAssociationRuntimeHandlers(),
     ...createPurchaseLookupRuntimeHandlers(options.getCurrentTabPurchaseLookupSession),
+    ...createTaobaoRefundRuntimeHandlers(options.getCurrentTabTaobaoRefundSession),
     ...createDraftRuntimeHandlers({
       fetchDrafts,
       listDraft,
