@@ -38,6 +38,7 @@ import type {
 } from './types';
 import type { GlobalLogEntry } from './global-log';
 import type { NotificationEntry, NotificationPreference } from './notification';
+import type { AppSettings, AppSettingsPatch } from './settings';
 import type { RuntimeArgs, RuntimeChannel, RuntimeResult } from './runtime-channels';
 
 let devRuntimeReloadScheduled = false;
@@ -209,6 +210,10 @@ export const extensionApi = {
     onChanged: (callback: (notifications: NotificationEntry[]) => void) => onRuntimeEvent('notification:changed', callback),
     onPreferenceChanged: (callback: (preference: NotificationPreference) => void) =>
       onRuntimeEvent('notification:preferenceChanged', callback),
+  },
+  settings: {
+    get: (): Promise<AppSettings> => invoke('settings:get'),
+    update: (patch: AppSettingsPatch): Promise<AppSettings> => invoke('settings:update', patch),
   },
   scheduledJobs: {
     list: (): Promise<ScheduledJob[]> => invoke('scheduledJobs:list'),

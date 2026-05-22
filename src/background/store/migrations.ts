@@ -1,6 +1,7 @@
 import type { StoreSchema } from './core';
 import { CURRENT_STORAGE_VERSION } from './core';
 import { DEFAULT_NOTIFICATION_PREFERENCE } from '../../shared/notification';
+import { DEFAULT_APP_SETTINGS } from '../../shared/settings';
 
 type RawStore = Partial<StoreSchema> & Record<string, unknown>;
 type Migration = (store: RawStore) => RawStore;
@@ -55,6 +56,13 @@ const migrations: Record<number, Migration> = {
       accounts: accounts as unknown as StoreSchema['accounts'],
       notificationPreference: DEFAULT_NOTIFICATION_PREFERENCE,
       storageVersion: 5,
+    };
+  },
+  6(store) {
+    return {
+      ...store,
+      appSettings: store.appSettings || DEFAULT_APP_SETTINGS,
+      storageVersion: 6,
     };
   },
 };

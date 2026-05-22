@@ -6,6 +6,8 @@ import type {
   TaskConfig,
 } from '../../shared/types';
 import type { NotificationPreference } from '../../shared/notification';
+import type { AppSettings } from '../../shared/settings';
+import { DEFAULT_APP_SETTINGS, normalizeAppSettings } from '../../shared/settings';
 
 export interface StoreSchema {
   storageVersion: number;
@@ -17,6 +19,7 @@ export interface StoreSchema {
   blacklistRules?: BlacklistRule[];
   statusRules?: StatusRule[];
   notificationPreference?: NotificationPreference;
+  appSettings?: AppSettings;
 }
 
 export interface StoredWxAccessToken {
@@ -27,7 +30,7 @@ export interface StoredWxAccessToken {
   updatedAt: number;
 }
 
-export const CURRENT_STORAGE_VERSION = 5;
+export const CURRENT_STORAGE_VERSION = 6;
 
 export const DEFAULT_TASK_CONFIG: TaskConfig = {
   listUnreviewed: true,
@@ -43,6 +46,7 @@ export const DEFAULT_BLACKLIST: BlacklistRule[] = [
   { code: 10020208, description: '本店铺的上架功能被封禁，请登录微信小店后台管理页查看详情' },
   { code: 10020246, description: '0元保证金试运营商品数超出限制，上架中与审核中商品总数不得超过100个' },
   { code: 10020247, description: '由于未在限定时间内完成升级，该店铺已被限制商品新增能力' },
+  { code: 6600144, description: '商家店铺体验分为差，需要开通运费险后才能继续提审' },
 ];
 
 export const DEFAULT_STATUS_RULES: StatusRule[] = [
@@ -66,6 +70,7 @@ export async function readStore(): Promise<StoreSchema> {
     'blacklistRules',
     'statusRules',
     'notificationPreference',
+    'appSettings',
   ]);
   return {
     storageVersion: typeof data.storageVersion === 'number' ? data.storageVersion : 0,
@@ -81,6 +86,9 @@ export async function readStore(): Promise<StoreSchema> {
     notificationPreference: typeof data.notificationPreference === 'object' && data.notificationPreference !== null
       ? data.notificationPreference as NotificationPreference
       : undefined,
+    appSettings: typeof data.appSettings === 'object' && data.appSettings !== null
+      ? normalizeAppSettings(data.appSettings as Partial<AppSettings>)
+      : DEFAULT_APP_SETTINGS,
   };
 }
 

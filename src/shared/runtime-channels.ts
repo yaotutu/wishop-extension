@@ -1,5 +1,6 @@
 import type { GlobalLogEntry } from './global-log';
 import type { NotificationEntry, NotificationPreference } from './notification';
+import type { AppSettings, AppSettingsPatch } from './settings';
 import type {
   Account,
   BlacklistRule,
@@ -113,6 +114,8 @@ export interface RuntimeChannels {
   'notifications:clear': { args: []; result: void };
   'notifications:getPreference': { args: []; result: NotificationPreference };
   'notifications:updatePreference': { args: [patch: Partial<NotificationPreference>]; result: NotificationPreference };
+  'settings:get': { args: []; result: AppSettings };
+  'settings:update': { args: [patch: AppSettingsPatch]; result: AppSettings };
 
   'scheduledJobs:list': { args: []; result: ScheduledJob[] };
   'scheduledJobs:add': { args: [job: Omit<ScheduledJob, 'id' | 'stats' | 'createdAt' | 'updatedAt'>]; result: ScheduledJob };

@@ -117,6 +117,7 @@ export interface ProductSourceBinding {
 }
 
 export type LinkedOrderPlatform = 'taobao' | 'tmall' | '1688' | 'manual';
+export type PurchaseShipmentCheckStatus = 'queued' | 'running' | 'waiting_user' | 'completed' | 'failed' | 'skipped';
 
 export interface LinkedPlatformOrder {
   id: string;
@@ -127,6 +128,12 @@ export interface LinkedPlatformOrder {
   logisticsCompany?: string;
   trackingNumber?: string;
   remark?: string;
+  lastShipmentCheckQueuedAt?: number;
+  lastShipmentCheckStartedAt?: number;
+  lastShipmentCheckFinishedAt?: number;
+  lastShipmentCheckStatus?: PurchaseShipmentCheckStatus;
+  lastShipmentCheckError?: string;
+  nextShipmentCheckAfter?: number;
   createdAt: number;
   updatedAt: number;
 }

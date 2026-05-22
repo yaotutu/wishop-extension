@@ -72,7 +72,7 @@ export async function listOne(
     const blacklisted = matchBlacklist(res.errcode, res.errmsg, blacklistRules);
     if (blacklisted) {
       addLog({ runId, productId: product.productId, productTitle: product.title, action: 'list', status: 'failed', errorCode: res.errcode, errorMsg: res.errmsg });
-      logger.warn(`黑名单错误码(${blacklisted.code})，停止任务`);
+      logger.warn(`停止错误码(${blacklisted.code})，停止任务`);
       return 'stopped';
     }
 

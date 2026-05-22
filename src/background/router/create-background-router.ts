@@ -11,6 +11,7 @@ import { createProductSourceRuntimeHandlers } from '../runtime-handlers/product-
 import { createQuotaRuntimeHandlers } from '../runtime-handlers/quota-handlers';
 import { createRuleRuntimeHandlers } from '../runtime-handlers/rule-handlers';
 import { createSchedulerRuntimeHandlers } from '../runtime-handlers/scheduler-handlers';
+import { createSettingsRuntimeHandlers } from '../runtime-handlers/settings-handlers';
 import { createShippingRuntimeHandlers } from '../runtime-handlers/shipping-handlers';
 import { createTaobaoWorkspaceRuntimeHandlers } from '../runtime-handlers/taobao-workspace-handlers';
 import { createTaobaoRefundRuntimeHandlers } from '../runtime-handlers/taobao-refund-handlers';
@@ -77,6 +78,8 @@ const FEATURE_CHANNELS = {
   'notifications:clear': null,
   'notifications:getPreference': null,
   'notifications:updatePreference': null,
+  'settings:get': null,
+  'settings:update': null,
   'scheduledJobs:list': 'listing',
   'scheduledJobs:add': 'listing',
   'scheduledJobs:update': 'listing',
@@ -165,6 +168,7 @@ export function createBackgroundRouter(options: CreateBackgroundRouterOptions): 
     ...createQuotaRuntimeHandlers(),
     ...createLogRuntimeHandlers(),
     ...createNotificationRuntimeHandlers(),
+    ...createSettingsRuntimeHandlers(),
     ...createLicenseRuntimeHandlers(),
     ...createAppRuntimeHandlers(),
   }, {

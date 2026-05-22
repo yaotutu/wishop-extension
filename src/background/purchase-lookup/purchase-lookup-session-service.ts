@@ -16,7 +16,8 @@ import {
   recordTaskStarted,
   recordTaskWaitingUser,
 } from '../global-logs/global-log-service';
-import { getOrderAssociations, setOrderAssociation } from '../store/order-association-repository';
+import { getAppSettings } from '../store/settings-repository';
+import { getOrderAssociations, setOrderAssociation, updateLinkedOrderShipmentCheck } from '../store/order-association-repository';
 import { activateTaobaoWorkTab, ensureTaobaoTaskWorkTab, openTaobaoWorkTab } from '../taobao-workspace/work-tab-service';
 
 const SESSION_TTL_MS = 30 * 60 * 1000;
@@ -78,12 +79,68 @@ function isTerminalSession(session: PurchaseLookupSession): boolean {
   return session.status === 'completed' || session.status === 'failed';
 }
 
+function lookupKey(accountId: string, orderId: string, platformOrderId: string): string {
+  return `${accountId}:${orderId}:${platformOrderId}`;
+}
+
+function sessionKey(session: Pick<PurchaseLookupSession, 'accountId' | 'orderId' | 'platformOrderId'>): string {
+  return lookupKey(session.accountId, session.orderId, session.platformOrderId);
+}
+
+function findActivePurchaseLookupSession(input: CreatePurchaseLookupSessionInput): PurchaseLookupSession | undefined {
+  pruneExpiredSessions();
+  const targetKey = lookupKey(input.accountId, input.orderId, input.platformOrderId.trim());
+  return Array.from(sessions.values()).find(session => !isTerminalSession(session) && sessionKey(session) === targetKey);
+}
+
+export function getActivePurchaseLookupKeys(): Set<string> {
+  pruneExpiredSessions();
+  return new Set(
+    Array.from(sessions.values())
+      .filter(session => !isTerminalSession(session))
+      .map(sessionKey),
+  );
+}
+
 function hasActivePurchaseLookupSession(): boolean {
   if (!activeSessionId) return false;
   const active = getFreshSession(activeSessionId);
   if (active && !isTerminalSession(active)) return true;
   activeSessionId = undefined;
   return false;
+}
+
+async function markPurchaseLookupShipmentCheckCompleted(session: PurchaseLookupSession): Promise<void> {
+  const settings = (await getAppSettings()).shipmentCheck;
+  const finishedAt = now();
+  await updateLinkedOrderShipmentCheck(session.accountId, session.orderId, {
+    lastShipmentCheckFinishedAt: finishedAt,
+    lastShipmentCheckStatus: 'completed',
+    lastShipmentCheckError: '',
+    nextShipmentCheckAfter: finishedAt + settings.normalCooldownMinutes * 60 * 1000,
+  });
+}
+
+async function markPurchaseLookupShipmentCheckWaitingUser(session: PurchaseLookupSession, reason: string): Promise<void> {
+  const settings = (await getAppSettings()).shipmentCheck;
+  const timestamp = now();
+  await updateLinkedOrderShipmentCheck(session.accountId, session.orderId, {
+    lastShipmentCheckFinishedAt: timestamp,
+    lastShipmentCheckStatus: 'waiting_user',
+    lastShipmentCheckError: reason,
+    nextShipmentCheckAfter: timestamp + settings.verificationCooldownMinutes * 60 * 1000,
+  });
+}
+
+async function markPurchaseLookupShipmentCheckFailed(session: PurchaseLookupSession, error: string): Promise<void> {
+  const settings = (await getAppSettings()).shipmentCheck;
+  const timestamp = now();
+  await updateLinkedOrderShipmentCheck(session.accountId, session.orderId, {
+    lastShipmentCheckFinishedAt: timestamp,
+    lastShipmentCheckStatus: 'failed',
+    lastShipmentCheckError: error,
+    nextShipmentCheckAfter: timestamp + settings.failureCooldownMinutes * 60 * 1000,
+  });
 }
 
 async function startPurchaseLookupSession(sessionId: string): Promise<PurchaseLookupSession> {
@@ -219,6 +276,8 @@ export async function updatePurchaseLookupSessionStatus(
 }
 
 export async function openPurchaseLookupSessionTab(input: CreatePurchaseLookupSessionInput): Promise<PurchaseLookupSession> {
+  const active = findActivePurchaseLookupSession(input);
+  if (active) return active;
   const session = await createPurchaseLookupSession(input);
   await ensureTaobaoTaskWorkTab().catch(() => {});
   if (hasActivePurchaseLookupSession()) {
@@ -249,6 +308,7 @@ export async function reportPurchaseLookupChallenge(
     updatedAt: now(),
   };
   sessions.set(sessionId, next);
+  void markPurchaseLookupShipmentCheckWaitingUser(next, next.lastError || '淘宝工作页需要用户处理验证').catch(() => {});
   void recordTaskWaitingUser({
     ...purchaseLookupLogBase(next),
     title: '淘宝订单读取需要用户处理验证',
@@ -292,6 +352,7 @@ export async function completePurchaseLookupSession(
   const next = { ...session, status: 'completed' as const, challenge: undefined, updatedAt: now() };
   sessions.set(sessionId, next);
   if (activeSessionId === sessionId) activeSessionId = undefined;
+  void markPurchaseLookupShipmentCheckCompleted(next).catch(() => {});
   void recordTaskCompleted({
     ...purchaseLookupLogBase(next),
     title: '淘宝订单读取完成',
@@ -305,6 +366,7 @@ export async function completePurchaseLookupSession(
 export async function failPurchaseLookupSession(sessionId: string, error: string): Promise<PurchaseLookupSession> {
   const session = await updatePurchaseLookupSessionStatus(sessionId, 'failed', error);
   if (activeSessionId === sessionId) activeSessionId = undefined;
+  void markPurchaseLookupShipmentCheckFailed(session, error).catch(() => {});
   void recordTaskFailed({
     ...purchaseLookupLogBase(session),
     title: '淘宝订单读取失败',
@@ -336,6 +398,7 @@ export function installPurchaseLookupTabCleanup(): void {
       updatedAt: now(),
     };
     sessions.set(sessionId, next);
+    void markPurchaseLookupShipmentCheckFailed(next, errorMessage).catch(() => {});
     void recordTaskFailed({
       ...purchaseLookupLogBase(next),
       title: '淘宝订单读取失败',

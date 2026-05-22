@@ -86,9 +86,9 @@ export async function runTaskCycle(
           }
         } else if (res === 'stopped') {
           result.stopped = true;
-          result.reason = '触发黑名单错误码，停止任务';
+          result.reason = '触发停止错误码，停止任务';
           if (product.editStatus === 1) {
-            status1Failed.push({ productId: product.productId, title: product.title, reason: '触发黑名单' });
+            status1Failed.push({ productId: product.productId, title: product.title, reason: '触发停止错误码' });
           }
         } else if (res === 'deleted') {
           result.deleted++;

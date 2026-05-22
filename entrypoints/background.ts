@@ -1,6 +1,11 @@
 import { installRuntimeHandlers } from '../src/background/handlers';
 import { installPurchaseLookupTabCleanup } from '../src/background/purchase-lookup/purchase-lookup-session-service';
 import { registerListingScheduledJobs } from '../src/background/scheduler/listing-job-executor';
+import {
+  ensureOrderShipmentCheckScheduledJob,
+  installOrderShipmentCheckDispatchListener,
+  registerOrderShipmentScheduledJobs,
+} from '../src/background/scheduler/order-shipment-job-executor';
 import { installScheduledJobAlarmListener, startAllScheduledJobs } from '../src/background/scheduler/scheduler-center';
 import { installShippingPaymentSuccessWatcher, installShippingTabCleanup } from '../src/background/shipping/shipping-session-service';
 import { migrateStore } from '../src/background/store';
@@ -9,14 +14,19 @@ import { installTaobaoWorkTabCleanup } from '../src/background/taobao-workspace/
 
 export default defineBackground(() => {
   registerListingScheduledJobs();
+  registerOrderShipmentScheduledJobs();
   installRuntimeHandlers();
   installShippingTabCleanup();
   installShippingPaymentSuccessWatcher();
   installPurchaseLookupTabCleanup();
   installTaobaoRefundTabCleanup();
   installTaobaoWorkTabCleanup();
+  installOrderShipmentCheckDispatchListener();
   installScheduledJobAlarmListener();
-  void migrateStore().then(() => startAllScheduledJobs());
+  void migrateStore().then(async () => {
+    await ensureOrderShipmentCheckScheduledJob();
+    await startAllScheduledJobs();
+  });
 
   chrome.action.onClicked.addListener(async () => {
     const dashboardUrl = chrome.runtime.getURL('/dashboard.html');

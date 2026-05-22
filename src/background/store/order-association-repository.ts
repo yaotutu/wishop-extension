@@ -14,6 +14,12 @@ function normalizeLinkedOrder(order: Partial<LinkedPlatformOrder>, now: number):
     logisticsCompany: order.logisticsCompany?.trim() || '',
     trackingNumber: order.trackingNumber?.trim() || '',
     remark: order.remark?.trim() || '',
+    lastShipmentCheckQueuedAt: order.lastShipmentCheckQueuedAt,
+    lastShipmentCheckStartedAt: order.lastShipmentCheckStartedAt,
+    lastShipmentCheckFinishedAt: order.lastShipmentCheckFinishedAt,
+    lastShipmentCheckStatus: order.lastShipmentCheckStatus,
+    lastShipmentCheckError: order.lastShipmentCheckError?.trim() || '',
+    nextShipmentCheckAfter: order.nextShipmentCheckAfter,
     createdAt: order.createdAt || now,
     updatedAt: now,
   });
@@ -57,4 +63,35 @@ export async function setOrderAssociation(
   });
 
   return association;
+}
+
+export async function updateLinkedOrderShipmentCheck(
+  accountId: string,
+  orderId: string,
+  patch: Partial<Pick<
+    LinkedPlatformOrder,
+    | 'lastShipmentCheckQueuedAt'
+    | 'lastShipmentCheckStartedAt'
+    | 'lastShipmentCheckFinishedAt'
+    | 'lastShipmentCheckStatus'
+    | 'lastShipmentCheckError'
+    | 'nextShipmentCheckAfter'
+  >>,
+): Promise<OrderAssociation | null> {
+  let updated: OrderAssociation | null = null;
+  await updateAccountData(accountId, account => {
+    const associations = account.orderAssociations || [];
+    account.orderAssociations = associations.map(association => {
+      if (association.orderId !== orderId || association.linkedOrders.length === 0) return association;
+      const [linked, ...rest] = association.linkedOrders;
+      const nextAssociation: OrderAssociation = {
+        ...association,
+        linkedOrders: [{ ...linked, ...patch, updatedAt: Date.now() }, ...rest],
+        updatedAt: Date.now(),
+      };
+      updated = normalizeAssociationForRead(nextAssociation);
+      return nextAssociation;
+    });
+  });
+  return updated;
 }
