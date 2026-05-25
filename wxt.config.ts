@@ -9,6 +9,14 @@ const HOST_PERMISSIONS = [
   'https://*.tmall.com/*',
 ];
 
+const EXTENSION_PERMISSIONS = [
+  'storage',
+  'unlimitedStorage',
+  'alarms',
+  'tabs',
+  'notifications',
+];
+
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
@@ -35,7 +43,7 @@ export default defineConfig({
     name: '微店管家',
     description: '微信小店多账户商品提审、订单管理和违规词检测工具',
     version: packageJson.version,
-    permissions: ['storage', 'alarms', 'tabs', 'notifications'],
+    permissions: EXTENSION_PERMISSIONS,
     host_permissions: HOST_PERMISSIONS,
     action: {
       default_title: '打开微店管家',

@@ -6,7 +6,6 @@ import { getRecentOrderWindow, makeRecentOrderWindowState, moveRecentOrderWindow
 const MAX_RECENT_WINDOWS = 26;
 const MAX_STATUS_FALLBACK_WINDOWS = 5;
 const MAX_PAGES_PER_WINDOW = 10;
-const MAX_RECENT_SYNC_ORDERS = 500;
 const RECENT_SYNC_FALLBACK_STATUSES = [
   20,
   21,
@@ -157,19 +156,19 @@ export function createWxOrderSource(resolveClient: ResolveWxOrderClient = defaul
       const logger = options.debug ? createLogger('OrderSource', accountId) : null;
       logger?.info('最近订单同步开始', { fallbackStatuses: Boolean(options.fallbackStatuses) });
 
-      while (scannedWindows < MAX_RECENT_WINDOWS && orders.length < MAX_RECENT_SYNC_ORDERS) {
+      while (scannedWindows < MAX_RECENT_WINDOWS) {
         const timeRange = getRecentOrderWindow(state);
         if (!timeRange) break;
         const windowIndex = scannedWindows + 1;
         const windowOrders = await fetchWindowOrders(api, accountId, timeRange, undefined, options.debug, windowIndex);
-        orders = dedupeOrders([...orders, ...windowOrders]).slice(0, MAX_RECENT_SYNC_ORDERS);
+        orders = dedupeOrders([...orders, ...windowOrders]);
         if (options.fallbackStatuses && windowOrders.length === 0 && scannedWindows < MAX_STATUS_FALLBACK_WINDOWS) {
           logger?.info('无状态列表为空，开始按状态回退查询', {
             windowIndex,
             create_time_range: timeRange,
           });
           const statusOrders = await fetchStatusWindowOrders(api, accountId, timeRange, options.debug, windowIndex);
-          orders = dedupeOrders([...orders, ...statusOrders]).slice(0, MAX_RECENT_SYNC_ORDERS);
+          orders = dedupeOrders([...orders, ...statusOrders]);
         }
         scannedWindows += 1;
         moveRecentOrderWindowBack(state);
@@ -178,7 +177,6 @@ export function createWxOrderSource(resolveClient: ResolveWxOrderClient = defaul
       logger?.info('最近订单同步完成', {
         scannedWindowCount: scannedWindows,
         orderCount: orders.length,
-        capped: orders.length >= MAX_RECENT_SYNC_ORDERS,
       });
       return orders;
     },

@@ -119,3 +119,38 @@ test('recent sync continues scanning older windows after a non-empty recent wind
   assert.deepEqual(orders.map(order => order.order_id), ['recent-order', 'older-order']);
   assert.equal(listCalls.length > 2, true);
 });
+
+test('recent sync does not stop at 500 orders when older windows have more orders', async () => {
+  const listCalls: OrderListParams[] = [];
+  const source = createWxOrderSource(async () => ({
+    async getOrderList(params: OrderListParams) {
+      listCalls.push(params);
+      const windowStart = params.create_time_range?.start_time;
+      const previousCallsInWindow = listCalls
+        .slice(0, -1)
+        .filter(call => call.create_time_range?.start_time === windowStart).length;
+      if (listCalls.length <= 10) {
+        return {
+          order_id_list: Array.from({ length: 50 }, (_, index) => `recent-${previousCallsInWindow * 50 + index + 1}`),
+          next_key: listCalls.length < 10 ? `next-${listCalls.length}` : '',
+          has_more: listCalls.length < 10,
+        };
+      }
+      if (listCalls.length === 11) {
+        return { order_id_list: ['older-501'], next_key: '', has_more: false };
+      }
+      return { order_id_list: [], next_key: '', has_more: false };
+    },
+    async getOrderDetail(orderId: string) {
+      return makeOrder(orderId);
+    },
+    async searchOrders(_params: OrderSearchParams) {
+      return { order_id_list: [], next_key: '', has_more: false };
+    },
+  }));
+
+  const orders = await source.fetchRecentOrders('account-1');
+
+  assert.equal(orders.length, 501);
+  assert.equal(orders.at(-1)?.order_id, 'older-501');
+});

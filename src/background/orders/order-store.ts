@@ -14,7 +14,7 @@ import { buildOrderIndexedText, orderMatchesSearch } from './order-index.ts';
 
 const ORDER_SNAPSHOTS_KEY = 'orderSnapshots';
 const ORDER_SYNC_STATES_KEY = 'orderSyncStates';
-const DEFAULT_MAX_ORDERS_PER_ACCOUNT = 500;
+const DEFAULT_ORDER_PAGE_SIZE = 50;
 
 export interface OrderStoreStorage {
   get(keys: string | string[]): Promise<Record<string, unknown>>;
@@ -72,7 +72,7 @@ function matchesFilters(snapshot: StoredOrderSnapshot, filters: OrderListFilters
 }
 
 function paginate(snapshots: StoredOrderSnapshot[], filters: OrderListFilters): LocalOrderListResult {
-  const pageSize = Math.max(1, filters.pageSize || snapshots.length || DEFAULT_MAX_ORDERS_PER_ACCOUNT);
+  const pageSize = Math.max(1, filters.pageSize || snapshots.length || DEFAULT_ORDER_PAGE_SIZE);
   const start = Math.max(0, Number(filters.cursor || 0) || 0);
   const end = start + pageSize;
   const page = snapshots.slice(start, end);
@@ -84,7 +84,8 @@ function paginate(snapshots: StoredOrderSnapshot[], filters: OrderListFilters): 
   };
 }
 
-function prunePerAccount(snapshots: StoredOrderSnapshot[], maxOrdersPerAccount: number): StoredOrderSnapshot[] {
+function limitPerAccount(snapshots: StoredOrderSnapshot[], maxOrdersPerAccount?: number): StoredOrderSnapshot[] {
+  if (!maxOrdersPerAccount || maxOrdersPerAccount <= 0) return snapshots;
   const grouped = new Map<string, StoredOrderSnapshot[]>();
   for (const snapshot of snapshots) {
     grouped.set(snapshot.accountId, [...(grouped.get(snapshot.accountId) || []), snapshot]);
@@ -93,7 +94,7 @@ function prunePerAccount(snapshots: StoredOrderSnapshot[], maxOrdersPerAccount: 
 }
 
 export function createOrderStore(storage: OrderStoreStorage = defaultStorage(), options: OrderStoreOptions = {}) {
-  const maxOrdersPerAccount = options.maxOrdersPerAccount || DEFAULT_MAX_ORDERS_PER_ACCOUNT;
+  const maxOrdersPerAccount = options.maxOrdersPerAccount;
   const now = options.now || Date.now;
 
   async function readState(): Promise<StoredOrderState> {
@@ -144,7 +145,7 @@ export function createOrderStore(storage: OrderStoreStorage = defaultStorage(), 
       });
     }
 
-    const snapshots = prunePerAccount([...currentByKey.values()], maxOrdersPerAccount);
+    const snapshots = limitPerAccount([...currentByKey.values()], maxOrdersPerAccount);
     await writeState({ snapshots });
     return snapshots.filter(snapshot => snapshot.accountId === accountId);
   }
