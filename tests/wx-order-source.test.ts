@@ -64,3 +64,30 @@ test('manual recent sync falls back to status-scoped order lists when the unfilt
   assert.deepEqual(orders.map(order => order.order_id), ['status-order']);
   assert.ok(listCalls.some(call => call.status === PENDING_SHIPMENT));
 });
+
+test('recent sync always sends a concrete seven-day create time range', async () => {
+  const listCalls: OrderListParams[] = [];
+  const source = createWxOrderSource(async () => ({
+    async getOrderList(params: OrderListParams) {
+      listCalls.push(params);
+      return { order_id_list: ['recent-order'], next_key: '', has_more: false };
+    },
+    async getOrderDetail(orderId: string) {
+      return makeOrder(orderId);
+    },
+    async searchOrders(_params: OrderSearchParams) {
+      return { order_id_list: [], next_key: '', has_more: false };
+    },
+  }));
+
+  await source.fetchRecentOrders('account-1', { fallbackStatuses: true });
+
+  assert.ok(listCalls.length > 0);
+  for (const call of listCalls) {
+    assert.ok(call.create_time_range);
+    assert.equal(call.update_time_range, undefined);
+    assert.ok(Number.isFinite(call.create_time_range.start_time));
+    assert.ok(Number.isFinite(call.create_time_range.end_time));
+    assert.ok(call.create_time_range.end_time - call.create_time_range.start_time < 7 * 24 * 60 * 60);
+  }
+});

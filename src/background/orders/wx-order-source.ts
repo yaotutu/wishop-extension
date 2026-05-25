@@ -1,4 +1,5 @@
 import type { Order, OrderListParams, OrderListResult, OrderSearchParams, OrderStatus } from '../../shared/types';
+import { normalizeOrderListTimeRange } from '../../shared/order-time-range.ts';
 import { createLogger } from '../utils/logger.ts';
 import { getRecentOrderWindow, makeRecentOrderWindowState, moveRecentOrderWindowBack } from './recent-order-window.ts';
 
@@ -69,14 +70,7 @@ function assertValidTimeRange(
   accountId: string,
   status: OrderStatus | undefined,
 ): void {
-  if (
-    Number.isFinite(timeRange.start_time)
-    && Number.isFinite(timeRange.end_time)
-    && timeRange.start_time > 0
-    && timeRange.end_time >= timeRange.start_time
-  ) {
-    return;
-  }
+  if (normalizeOrderListTimeRange(timeRange)) return;
   throw new Error(`订单同步内部错误：订单列表请求缺少有效时间范围 accountId=${accountId}, status=${status ?? 'all'}, range=${JSON.stringify(timeRange)}`);
 }
 

@@ -165,6 +165,34 @@ test('all-account refresh keeps successful accounts when one account fails', asy
   assert.deepEqual(list.orders.map(item => item.orderId), ['good-order']);
 });
 
+test('all-account refresh continues when the first account fails', async () => {
+  const accounts = [makeAccount('bad', '异常店铺'), makeAccount('good', '正常店铺')];
+  const store = createOrderStore(createMemoryStorage());
+  const calls: string[] = [];
+  const sync = createOrderSyncService({
+    store,
+    source: {
+      async fetchRecentOrders(accountId) {
+        calls.push(accountId);
+        if (accountId === 'bad') throw new Error('invalid args');
+        return [makeOrder('good-order')];
+      },
+      async searchOrders() { return []; },
+      async getOrderDetail() { return makeOrder('unused'); },
+    },
+    getAccounts: async () => accounts,
+  });
+  const domain = createOrderDomainService({ store, sync });
+
+  const result = await domain.refresh({ type: 'all' });
+  const list = await domain.list({ type: 'all' }, {});
+
+  assert.deepEqual(calls, ['bad', 'good']);
+  assert.deepEqual(result.refreshedAccountIds, ['good']);
+  assert.deepEqual(result.failedAccounts.map(item => item.accountId), ['bad']);
+  assert.deepEqual(list.orders.map(item => item.orderId), ['good-order']);
+});
+
 test('all-account refresh rejects when every account fails', async () => {
   const accounts = [makeAccount('bad-1', '异常店铺一'), makeAccount('bad-2', '异常店铺二')];
   const store = createOrderStore(createMemoryStorage());

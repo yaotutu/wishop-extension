@@ -67,6 +67,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
   const [searchKeyword, setSearchKeyword] = useState('');
   const [activeSearch, setActiveSearch] = useState<OrderSearchParams | null>(null);
   const [hiddenError, setHiddenError] = useState('');
+  const [refreshError, setRefreshError] = useState('');
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [detailAccountId, setDetailAccountId] = useState('');
   const [detailOrderId, setDetailOrderId] = useState('');
@@ -110,7 +111,9 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
   const orderAssociations = orderAssociationsQuery.data || {};
   const realAddressCaches = realAddressCachesQuery.data || {};
   const orderError = ordersQuery.error instanceof Error ? ordersQuery.error.message : '';
-  const error = orderError && orderError !== hiddenError ? orderError : null;
+  const syncError = syncStateQuery.data?.lastError || '';
+  const visibleError = refreshError || syncError || orderError;
+  const error = visibleError && visibleError !== hiddenError ? visibleError : null;
   const scopeKey = scope.type === 'all' ? 'all' : `account:${scope.accountId}`;
 
   const scheduleTaobaoRefundStatusSync = useCallback((session: TaobaoRefundSession) => {
@@ -156,6 +159,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
     setTimeScope('all');
     setActiveSearch(null);
     setSearchKeyword('');
+    setRefreshError('');
     setDetailAccountId('');
     setDetailOrderId('');
   }, [scope]);
@@ -739,6 +743,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
           refreshOrdersMutation.mutate(undefined, {
             onSuccess: (result) => {
               console.info('[wishop][orders:ui] manual refresh success', result);
+              setRefreshError('');
               if (result.failedAccounts.length > 0 && result.refreshedAccountIds.length === 0) {
                 message.error(`订单刷新失败：${result.failedAccounts.map(item => item.error).join('; ')}`);
               } else if (result.updatedOrderCount === 0) {
@@ -749,16 +754,18 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
               void ordersQuery.refetch();
             },
             onError: (err: any) => {
+              const messageText = err?.message || String(err);
+              setRefreshError(messageText);
               console.error('[wishop][orders:ui] manual refresh failed', {
                 scope,
                 accountIds,
-                error: err?.message || String(err),
+                error: messageText,
               });
-              message.error(`订单刷新失败: ${err.message}`);
+              message.error(`订单刷新失败: ${messageText}`);
             },
           });
         }}
-        onClearError={() => setHiddenError(orderError)}
+        onClearError={() => setHiddenError(visibleError)}
       />
 
       <div ref={tableAreaRef} style={{ flex: 1, minHeight: 0 }}>

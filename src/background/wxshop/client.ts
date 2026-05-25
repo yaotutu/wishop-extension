@@ -1,5 +1,6 @@
 import axios from 'axios';
 import type { DraftProduct, QuotaResult, Order, OrderListParams, OrderListResult, OrderSearchParams, OrderAddressInfo } from '../../shared/types';
+import { normalizeOrderListTimeRange } from '../../shared/order-time-range.ts';
 import { getAccessToken, isAccessTokenInvalidError, removeAccessToken } from './access-token-service';
 
 export type { DraftProduct, QuotaResult };
@@ -45,18 +46,6 @@ function normalizeOrder(order: Order): Order {
 
 function normalizeOrderIds(orderIds: Array<string | number> = []): string[] {
   return orderIds.map(orderId => String(orderId).trim()).filter(Boolean);
-}
-
-function normalizeOrderTimeRange(
-  range: OrderListParams['create_time_range'],
-): NonNullable<OrderListParams['create_time_range']> | null {
-  if (!range) return null;
-  const startTime = Number(range.start_time);
-  const endTime = Number(range.end_time);
-  if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || startTime <= 0 || endTime < startTime) {
-    return null;
-  }
-  return { start_time: startTime, end_time: endTime };
 }
 
 export function createWxShopClient(accountId: string) {
@@ -145,8 +134,8 @@ export function createWxShopClient(accountId: string) {
   }
 
   async function getOrderList(params: OrderListParams = {}): Promise<OrderListResult> {
-    const createTimeRange = normalizeOrderTimeRange(params.create_time_range);
-    const updateTimeRange = normalizeOrderTimeRange(params.update_time_range);
+    const createTimeRange = normalizeOrderListTimeRange(params.create_time_range);
+    const updateTimeRange = normalizeOrderListTimeRange(params.update_time_range);
     const body: Record<string, unknown> = {
       page_size: params.page_size || 10,
     };
