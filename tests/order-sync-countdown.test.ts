@@ -7,3 +7,8 @@ test('formats order auto sync countdown from local time', () => {
   assert.equal(orderSyncCountdownText({ running: true, nextSyncAt: 1700000065000 }, 1700000000000), '正在同步订单');
   assert.equal(orderSyncCountdownText({}, 1700000000000), '等待自动更新');
 });
+
+test('keeps order auto sync countdown rolling after stored next time expires', () => {
+  assert.equal(orderSyncCountdownText({ nextSyncAt: 1700000065000 }, 1700000065000), '60 秒后自动更新');
+  assert.equal(orderSyncCountdownText({ nextSyncAt: 1700000065000 }, 1700000070000), '55 秒后自动更新');
+});
