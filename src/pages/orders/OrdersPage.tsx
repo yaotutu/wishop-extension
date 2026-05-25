@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { Table, Button, Empty, Modal, Select, message } from 'antd';
 import {
+  useOrderAutoSyncJobQuery,
   useFetchRealAddressMutation,
   useOrderAssociationsQuery,
   useOrderDetailQuery,
@@ -90,6 +91,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
   const [scrollY, setScrollY] = useState(400);
   const ordersQuery = useOrdersQuery(scope, activeStatus, activeSearch, timeScope, searchSource);
   const syncStateQuery = useOrderSyncStateQuery(scope);
+  const autoSyncJobQuery = useOrderAutoSyncJobQuery();
   const refreshOrdersMutation = useRefreshOrdersMutation(scope);
   const detailQuery = useOrderDetailQuery(detailAccountId, detailOrderId);
   const productSourcesQuery = useProductSourcesQuery(accountIds);
@@ -726,6 +728,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
         refreshing={refreshOrdersMutation.isPending}
         error={error}
         syncState={syncStateQuery.data}
+        autoSyncJob={autoSyncJobQuery.data}
         onStatusChange={handleStatusChange}
         onTimeScopeChange={handleTimeScopeChange}
         onSearchTypeChange={setSearchType}

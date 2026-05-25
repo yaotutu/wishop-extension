@@ -12,6 +12,7 @@ import type {
   OrderTimeScope,
   ProductSourceBinding,
   ProductSourceItem,
+  ScheduledJob,
   ShipOrderFromPurchaseInput,
   StoredOrderSnapshot,
 } from '../shared/types';
@@ -82,6 +83,18 @@ export function useOrderSyncStateQuery(scope: OrderScope) {
     queryKey: queryKeys.orders.syncState(scope),
     queryFn: () => extensionApi.orders.syncState(scope),
     refetchInterval: 1000,
+  });
+}
+
+function isOrderAutoSyncJob(job: ScheduledJob): boolean {
+  return job.jobType === 'orders.syncRecent' && job.scope === 'system';
+}
+
+export function useOrderAutoSyncJobQuery() {
+  return useQuery({
+    queryKey: queryKeys.scheduledJobs.orderSyncRecent,
+    queryFn: async () => (await extensionApi.scheduledJobs.list()).find(isOrderAutoSyncJob),
+    refetchInterval: 5000,
   });
 }
 

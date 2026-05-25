@@ -27,6 +27,7 @@ export { useQuota } from './useQuota';
 export { useDrafts } from './useDrafts';
 export { useOrders } from './useOrders';
 export {
+  useOrderAutoSyncJobQuery,
   useFetchRealAddressMutation,
   useOrderAssociationsQuery,
   useOrderDetailQuery,

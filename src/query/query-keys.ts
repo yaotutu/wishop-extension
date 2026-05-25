@@ -63,6 +63,7 @@ export const queryKeys = {
   },
   scheduledJobs: {
     list: ['scheduledJobs'] as const,
+    orderSyncRecent: ['scheduledJobs', 'orders', 'syncRecent'] as const,
     accountListing: (accountId: string) => ['scheduledJobs', 'listing', 'account', accountId] as const,
     globalListing: ['scheduledJobs', 'listing', 'global'] as const,
   },

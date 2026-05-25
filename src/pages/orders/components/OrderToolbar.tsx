@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, Button, Flex, Input, Select, Space, Tag, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
-import type { OrderSearchParams, OrderSearchSource, OrderStatus, OrderSyncState, OrderTimeScope } from '../../../shared/types';
+import type { OrderSearchParams, OrderSearchSource, OrderStatus, OrderSyncState, OrderTimeScope, ScheduledJob } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
 import { orderSyncCountdownText } from '../order-sync-countdown';
 
@@ -41,6 +41,7 @@ interface Props {
   refreshing: boolean;
   error: string | null;
   syncState?: OrderSyncState;
+  autoSyncJob?: ScheduledJob;
   onStatusChange: (value: string | number | null) => void;
   onTimeScopeChange: (value: OrderTimeScope) => void;
   onSearchTypeChange: (value: OrderSearchParams['search_type']) => void;
@@ -62,6 +63,7 @@ export const OrderToolbar: React.FC<Props> = ({
   refreshing,
   error,
   syncState,
+  autoSyncJob,
   onStatusChange,
   onTimeScopeChange,
   onSearchTypeChange,
@@ -125,7 +127,7 @@ export const OrderToolbar: React.FC<Props> = ({
         />
         <Button size="small" icon={<ReloadOutlined />} loading={refreshing} onClick={onRefresh}>立即更新</Button>
         <Text type="secondary" style={{ fontSize: 12 }}>
-          {orderSyncCountdownText(syncState, now)}
+          {orderSyncCountdownText({ syncState, autoSyncJob, now })}
         </Text>
       </Flex>
       {error && (
