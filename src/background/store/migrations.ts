@@ -65,6 +65,13 @@ const migrations: Record<number, Migration> = {
       storageVersion: 6,
     };
   },
+  7(store) {
+    return {
+      ...store,
+      scheduledJobs: [],
+      storageVersion: 7,
+    };
+  },
 };
 
 export async function migrateStore(): Promise<void> {

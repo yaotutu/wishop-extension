@@ -13,6 +13,7 @@ import type {
   ProductSourceBinding,
   ProductSourceItem,
   ScheduledJob,
+  ScheduledJobView,
   ShipOrderFromPurchaseInput,
   StoredOrderSnapshot,
 } from '../shared/types';
@@ -86,7 +87,7 @@ export function useOrderSyncStateQuery(scope: OrderScope) {
   });
 }
 
-function isOrderAutoSyncJob(job: ScheduledJob): boolean {
+function isOrderAutoSyncJob(job: ScheduledJobView): boolean {
   return job.jobType === 'orders.syncRecent' && job.scope === 'system';
 }
 

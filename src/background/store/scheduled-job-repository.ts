@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { ScheduledJob, ScheduledJobRunStats } from '../../shared/types';
+import type { ScheduledJob, ScheduledJobInput, ScheduledJobRunStats } from '../../shared/types';
 import { readStore, writeStore } from './core';
 
 const EMPTY_STATS: ScheduledJobRunStats = {
@@ -16,17 +16,17 @@ export async function getScheduledJob(jobId: string): Promise<ScheduledJob | und
 }
 
 export async function addScheduledJob(
-  input: Omit<ScheduledJob, 'id' | 'stats' | 'createdAt' | 'updatedAt'>,
+  input: ScheduledJobInput,
 ): Promise<ScheduledJob> {
   const store = await readStore();
   const timestamp = Date.now();
-  const job: ScheduledJob = {
+  const job = {
     ...input,
     id: uuidv4(),
     stats: { ...EMPTY_STATS },
     createdAt: timestamp,
     updatedAt: timestamp,
-  };
+  } as ScheduledJob;
   await writeStore({ scheduledJobs: [...(store.scheduledJobs || []), job] });
   return job;
 }
@@ -36,6 +36,27 @@ export async function updateScheduledJob(jobId: string, patch: Partial<Scheduled
   await writeStore({
     scheduledJobs: (store.scheduledJobs || []).map(job => (
       job.id === jobId ? { ...job, ...patch, updatedAt: Date.now() } : job
+    )) as ScheduledJob[],
+  });
+}
+
+export async function updateScheduledJobPayload<TPayload>(
+  jobId: string,
+  payload: TPayload,
+): Promise<void> {
+  const store = await readStore();
+  await writeStore({
+    scheduledJobs: (store.scheduledJobs || []).map(job => (
+      job.id === jobId ? { ...job, payload, updatedAt: Date.now() } : job
+    )),
+  });
+}
+
+export async function completeScheduledJob(jobId: string, completedAt = Date.now()): Promise<void> {
+  const store = await readStore();
+  await writeStore({
+    scheduledJobs: (store.scheduledJobs || []).map(job => (
+      job.id === jobId ? { ...job, enabled: false, completedAt, updatedAt: completedAt } : job
     )),
   });
 }
@@ -53,7 +74,7 @@ export async function removeScheduledJobsForAccount(accountId: string): Promise<
     scheduledJobs: (store.scheduledJobs || [])
       .filter(job => job.scope !== 'account' || job.accountId !== accountId)
       .map(job => {
-        if (job.scope !== 'global' || !job.accountStats?.[accountId]) return job;
+        if (job.scope !== 'global' || !job.accountStats[accountId]) return job;
         const { [accountId]: _removed, ...accountStats } = job.accountStats;
         return { ...job, accountStats, updatedAt: Date.now() };
       }),
@@ -83,11 +104,12 @@ export async function updateScheduledJobAccountStats(
   await writeStore({
     scheduledJobs: (store.scheduledJobs || []).map(job => {
       if (job.id !== jobId) return job;
-      const prev = job.accountStats?.[accountId] || EMPTY_STATS;
+      if (job.scope !== 'global') return job;
+      const prev = job.accountStats[accountId] || EMPTY_STATS;
       return {
         ...job,
         accountStats: {
-          ...(job.accountStats || {}),
+          ...job.accountStats,
           [accountId]: { ...prev, ...patch },
         },
         updatedAt: Date.now(),

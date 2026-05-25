@@ -14,6 +14,7 @@ export type ScheduledJobType =
   | 'orders.backfillHistory'
   | 'violation.scanProducts';
 export type ScheduledJobStatus = 'idle' | 'running' | 'waiting_user' | 'completed' | 'failed' | 'skipped';
+export type ScheduledJobRunMode = 'recurring' | 'untilComplete';
 
 export interface ScheduledJobRunStats {
   lastRunDate: string;
@@ -26,37 +27,68 @@ export interface ScheduledJobRunStats {
   lastError?: string;
 }
 
-export interface ScheduledJob<TPayload = unknown> {
+export interface ScheduledJobBase<TPayload = unknown> {
   id: string;
   name: string;
   enabled: boolean;
   module: ScheduledJobModule;
   jobType: ScheduledJobType;
-  scope: ScheduledJobScope;
-  accountId?: string;
-  excludedAccountIds?: string[];
+  runMode: ScheduledJobRunMode;
   cronExpression: string;
-  staggerMinutes?: number;
-  dailyLimit?: number;
+  dailyLimit: number;
   payload: TPayload;
+  completedAt: number | null;
   stats: ScheduledJobRunStats;
-  accountStats?: Record<string, ScheduledJobRunStats>;
-  nextRunAt?: number;
   createdAt: number;
   updatedAt: number;
 }
 
-export interface ScheduledJobRunNowResult {
+export type AccountScheduledJob<TPayload = unknown> = ScheduledJobBase<TPayload> & {
+  scope: 'account';
+  accountId: string;
+};
+
+export type GlobalScheduledJob<TPayload = unknown> = ScheduledJobBase<TPayload> & {
+  scope: 'global';
+  excludedAccountIds: string[];
+  staggerMinutes: number;
+  accountStats: Record<string, ScheduledJobRunStats>;
+};
+
+export type SystemScheduledJob<TPayload = unknown> = ScheduledJobBase<TPayload> & {
+  scope: 'system';
+};
+
+export type ScheduledJob<TPayload = unknown> =
+  | AccountScheduledJob<TPayload>
+  | GlobalScheduledJob<TPayload>
+  | SystemScheduledJob<TPayload>;
+
+export type AccountScheduledJobInput<TPayload = unknown> = Omit<AccountScheduledJob<TPayload>, 'id' | 'stats' | 'createdAt' | 'updatedAt'>;
+export type GlobalScheduledJobInput<TPayload = unknown> = Omit<GlobalScheduledJob<TPayload>, 'id' | 'stats' | 'createdAt' | 'updatedAt'>;
+export type SystemScheduledJobInput<TPayload = unknown> = Omit<SystemScheduledJob<TPayload>, 'id' | 'stats' | 'createdAt' | 'updatedAt'>;
+export type ScheduledJobInput<TPayload = unknown> =
+  | AccountScheduledJobInput<TPayload>
+  | GlobalScheduledJobInput<TPayload>
+  | SystemScheduledJobInput<TPayload>;
+
+export type ScheduledJobView<TPayload = unknown> = ScheduledJob<TPayload> & {
+  nextRunAt: number | null;
+};
+
+export interface ScheduledJobExecutorResult {
   listed: number;
   status: ScheduledJobStatus;
-  message?: string;
-  error?: string;
+  message: string | null;
+  error: string | null;
+  completed: boolean;
 }
+
+export type ScheduledJobRunNowResult = ScheduledJobExecutorResult;
 
 export interface OrderHistoryBackfillPayload {
   lookbackDays?: number;
   cursorByAccountId?: Record<string, number>;
-  completedAt?: number;
 }
 
 export interface LogEntry {

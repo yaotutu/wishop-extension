@@ -7,7 +7,7 @@ import { registerScheduledJobExecutor } from './scheduler-center';
 
 export function registerListingScheduledJobs(): void {
   registerScheduledJobExecutor('listing.submitDrafts', async ({ job, accountId, runId }) => {
-    const targetAccountId = accountId || job.accountId;
+    const targetAccountId = accountId || (job.scope === 'account' ? job.accountId : undefined);
     if (!targetAccountId) throw new Error('缺少账号 ID');
 
     const api = await getClient(targetAccountId);
@@ -16,7 +16,9 @@ export function registerListingScheduledJobs(): void {
       return {
         listed: 0,
         status: 'skipped' as const,
+        message: null,
         error: '今日提审配额已用完',
+        completed: false,
       };
     }
 
@@ -39,7 +41,9 @@ export function registerListingScheduledJobs(): void {
     return {
       listed: result.listed,
       status: result.stopped || result.errors > 0 ? 'failed' as const : 'completed' as const,
-      error: result.reason,
+      message: result.stopped || result.errors > 0 ? null : result.reason || '商品提审任务执行完成',
+      error: result.stopped || result.errors > 0 ? result.reason || '商品提审任务执行失败' : null,
+      completed: false,
     };
   });
 }

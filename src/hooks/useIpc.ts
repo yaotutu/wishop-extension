@@ -20,6 +20,7 @@ export type { NotificationEntry, NotificationPreference } from '../shared/notifi
 export { useAccounts } from './useAccounts';
 export { useConfig } from './useConfig';
 export { useGlobalSchedulers, useSchedulers } from './useScheduler';
+export type { ListingScheduledJob } from './useScheduler';
 export { useGlobalLogs } from './useGlobalLogs';
 export { useNotifications } from './useNotifications';
 export { useListingLogs } from './useListingLogs';

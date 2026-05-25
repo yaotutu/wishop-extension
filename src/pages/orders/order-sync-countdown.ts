@@ -1,8 +1,8 @@
-import type { OrderSyncState, ScheduledJob } from '../../shared/types';
+import type { OrderSyncState, ScheduledJobView } from '../../shared/types';
 
 interface OrderSyncCountdownInput {
   syncState?: Partial<Pick<OrderSyncState, 'running' | 'nextSyncAt'>>;
-  autoSyncJob?: Pick<ScheduledJob, 'enabled' | 'nextRunAt' | 'cronExpression'>;
+  autoSyncJob?: Pick<ScheduledJobView, 'enabled' | 'nextRunAt' | 'cronExpression'>;
   now?: number;
 }
 

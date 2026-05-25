@@ -4,7 +4,7 @@ import type { ShipmentCheckSettings } from '../../shared/settings';
 import { MAX_SHIPMENT_CHECK_ORDER_LOOKBACK_DAYS, normalizeShipmentCheckSettings } from '../../shared/settings';
 import { getActivePurchaseLookupKeys, openPurchaseLookupSessionTab } from '../purchase-lookup/purchase-lookup-session-service';
 import { getOrderAssociations, updateLinkedOrderShipmentCheck } from '../store/order-association-repository';
-import { addScheduledJob, getScheduledJobs, updateScheduledJob } from '../store/scheduled-job-repository';
+import { addScheduledJob, getScheduledJob, getScheduledJobs, updateScheduledJob } from '../store/scheduled-job-repository';
 import { getAppSettings } from '../store/settings-repository';
 import { getClient } from '../wxshop/client-registry';
 import { registerScheduledJobExecutor } from './scheduler-center';
@@ -116,9 +116,8 @@ export async function ensureOrderShipmentCheckScheduledJob(): Promise<ScheduledJ
     if (existing.cronExpression !== cronExpression) patch.cronExpression = cronExpression;
     if (existing.enabled !== settings.enabled) patch.enabled = settings.enabled;
     if (Object.keys(patch).length > 0) {
-      const updatedAt = Date.now();
       await updateScheduledJob(existing.id, patch);
-      return { ...existing, ...patch, updatedAt };
+      return (await getScheduledJob(existing.id)) || existing;
     }
     return existing;
   }
@@ -128,10 +127,14 @@ export async function ensureOrderShipmentCheckScheduledJob(): Promise<ScheduledJ
     module: 'orders',
     jobType: 'orders.checkShipmentStatus',
     scope: 'global',
+    runMode: 'recurring',
     cronExpression,
+    excludedAccountIds: [],
     staggerMinutes: 0,
     dailyLimit: 0,
+    completedAt: null,
     payload: {},
+    accountStats: {},
   });
 }
 
@@ -140,7 +143,7 @@ export function registerOrderShipmentScheduledJobs(): void {
     if (!accountId) throw new Error('缺少账号 ID');
     const settings = normalizeShipmentCheckSettings((await getAppSettings()).shipmentCheck);
     if (!settings.enabled) {
-      return { listed: 0, status: 'skipped' as const, error: '发货状态检测已关闭' };
+      return { listed: 0, status: 'skipped' as const, message: null, error: '发货状态检测已关闭', completed: false };
     }
 
     const [orders, associations] = await Promise.all([
@@ -162,7 +165,9 @@ export function registerOrderShipmentScheduledJobs(): void {
     return {
       listed: plan.length,
       status: plan.length > 0 ? 'completed' as const : 'skipped' as const,
-      error: plan.length > 0 ? `已安排 ${plan.length} 个采购单在本窗口内检测` : '本轮没有需要检测的采购单',
+      message: plan.length > 0 ? `已安排 ${plan.length} 个采购单在本窗口内检测` : '本轮没有需要检测的采购单',
+      error: null,
+      completed: false,
     };
   });
 }

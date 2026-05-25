@@ -3,10 +3,11 @@ import { extensionApi } from '../../shared/extension-api';
 import { Checkbox, InputNumber, Button, Space, Alert, Tag, Divider, Modal, Table, Switch, Input, message, Empty, Popconfirm, Select, Tooltip } from 'antd';
 import { PlayCircleOutlined, CloseCircleOutlined, WarningOutlined, DeleteOutlined, ReloadOutlined, ExclamationCircleOutlined, ClockCircleOutlined, PlusOutlined, EditOutlined, StopOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import { useTaskConfig, useListingLogs, useQuota, useSchedulers, useGlobalSchedulers } from '../../hooks/useIpc';
+import type { ListingScheduledJob } from '../../hooks/useIpc';
 import { useBlacklistRules } from '../../hooks/useBlacklistRules';
 import { useSkipKeywords } from '../../hooks/useSkipKeywords';
 import { useStatusRules } from '../../hooks/useStatusRules';
-import type { Account, TaskConfig, TaskCycleResult, LogEntry, ScheduledJob, BlacklistRule, StatusRule } from '../../shared/types';
+import type { Account, TaskConfig, TaskCycleResult, LogEntry, BlacklistRule, StatusRule } from '../../shared/types';
 import {
   cronPresets,
   cronToLabel,
@@ -33,13 +34,14 @@ const defaultGlobalTaskConfig: TaskConfig = {
   autoDeleteFailed: true,
 };
 
-type ListingScheduledJob = ScheduledJob<TaskConfig>;
+type AccountListingScheduledJob = Extract<ListingScheduledJob, { scope: 'account' }>;
+type GlobalListingScheduledJob = Extract<ListingScheduledJob, { scope: 'global' }>;
 
 interface ListingJobFormData {
   name: string;
   cronExpression: string;
   dailyLimit?: number;
-  staggerMinutes?: number;
+  staggerMinutes: number;
   enabled: boolean;
   excludedAccountIds: string[];
   taskConfig: TaskConfig;
@@ -69,9 +71,9 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
   const [localListedCountsByAccountId, setLocalListedCountsByAccountId] = useState<Record<string, number>>({});
   const [schedulerOpen, setSchedulerOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState<ListingScheduledJob | null>(null);
+  const [editingTask, setEditingTask] = useState<AccountListingScheduledJob | null>(null);
   const [globalEditModalOpen, setGlobalEditModalOpen] = useState(false);
-  const [editingGlobalTask, setEditingGlobalTask] = useState<ListingScheduledJob | null>(null);
+  const [editingGlobalTask, setEditingGlobalTask] = useState<GlobalListingScheduledJob | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     cronExpression: '0 9 * * *',
@@ -202,7 +204,7 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
     setGlobalEditModalOpen(true);
   };
 
-  const openEditGlobalModal = (task: ListingScheduledJob) => {
+  const openEditGlobalModal = (task: GlobalListingScheduledJob) => {
     setEditingGlobalTask(task);
     setGlobalTimeInput(cronToTimeInput(task.cronExpression));
     setGlobalFormData({
@@ -210,7 +212,7 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
       cronExpression: task.cronExpression,
       staggerMinutes: task.staggerMinutes,
       enabled: task.enabled,
-      excludedAccountIds: task.excludedAccountIds || [],
+      excludedAccountIds: task.excludedAccountIds,
       taskConfig: {
         ...defaultGlobalTaskConfig,
         ...task.payload,
@@ -220,12 +222,12 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
     setGlobalEditModalOpen(true);
   };
 
-  const openEditModal = (task: ListingScheduledJob) => {
+  const openEditModal = (task: AccountListingScheduledJob) => {
     setEditingTask(task);
     setFormData({
       name: task.name,
       cronExpression: task.cronExpression,
-      dailyLimit: task.dailyLimit || 0,
+      dailyLimit: task.dailyLimit,
       enabled: task.enabled,
       taskConfig: { ...task.payload },
     });
@@ -254,8 +256,10 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
         jobType: 'listing.submitDrafts',
         scope: 'account',
         accountId,
+        runMode: 'recurring',
         cronExpression: formData.cronExpression,
         dailyLimit: formData.dailyLimit,
+        completedAt: null,
         payload: formData.taskConfig,
       });
       message.success('任务已创建');
@@ -305,9 +309,12 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
         module: 'listing',
         jobType: 'listing.submitDrafts',
         scope: 'global',
+        runMode: 'recurring',
         cronExpression: normalizedTask.cronExpression,
         staggerMinutes: normalizedTask.staggerMinutes,
         excludedAccountIds: normalizedTask.excludedAccountIds,
+        dailyLimit: 0,
+        completedAt: null,
         payload: normalizedTask.taskConfig,
         accountStats: {},
       });
@@ -794,7 +801,7 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 {globalTasks.map(task => {
-                  const includedCount = accounts.filter(account => !(task.excludedAccountIds || []).includes(account.id)).length;
+                  const includedCount = accounts.filter(account => !task.excludedAccountIds.includes(account.id)).length;
                   return (
                     <div key={task.id} style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: 16, borderBottom: '1px solid #f5f5f5' }}>
                       <Switch checked={task.enabled} onChange={checked => updateGlobalTask(task.id, { enabled: checked })} />
@@ -803,7 +810,7 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
                           <span style={{ fontWeight: 600 }}>{task.name}</span>
                           <Tag color={task.enabled ? 'green' : 'default'}>{task.enabled ? '已启用' : '已停用'}</Tag>
                           <Tag color="blue">{cronToLabel(task.cronExpression)}</Tag>
-                          <Tag>错峰 {task.staggerMinutes || 0} 分钟/账号</Tag>
+                          <Tag>错峰 {task.staggerMinutes} 分钟/账号</Tag>
                         </Space>
                         <div style={{ marginTop: 8, color: '#666', fontSize: 13 }}>
                           覆盖 {includedCount}/{accounts.length} 个账号，预计 {getGlobalTaskWindowLabel(task, includedCount)} 依次启动
@@ -956,7 +963,7 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
                 <span style={{ fontWeight: 500, fontSize: 14, minWidth: 100 }}>{task.name}</span>
                 <Tag color={task.enabled ? 'blue' : 'default'}>{cronToLabel(task.cronExpression)}</Tag>
                 <span style={{ color: '#999', fontSize: 13 }}>
-                  今日 {task.stats.todayRunCount}{(task.dailyLimit || 0) > 0 ? `/${task.dailyLimit}` : ''}
+                  今日 {task.stats.todayRunCount}{task.dailyLimit > 0 ? `/${task.dailyLimit}` : ''}
                 </span>
                 <span style={{ flex: 1 }} />
                 <Button type="text" icon={<EditOutlined />} onClick={() => openEditModal(task)}>编辑</Button>

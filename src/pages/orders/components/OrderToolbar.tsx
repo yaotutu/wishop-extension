@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, Button, Flex, Input, Select, Space, Tag, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
-import type { OrderSearchParams, OrderSearchSource, OrderStatus, OrderSyncState, OrderTimeScope, ScheduledJob } from '../../../shared/types';
+import type { OrderSearchParams, OrderSearchSource, OrderStatus, OrderSyncState, OrderTimeScope, ScheduledJobView } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
 import { orderSyncCountdownText } from '../order-sync-countdown';
 
@@ -41,7 +41,7 @@ interface Props {
   refreshing: boolean;
   error: string | null;
   syncState?: OrderSyncState;
-  autoSyncJob?: ScheduledJob;
+  autoSyncJob?: ScheduledJobView;
   onStatusChange: (value: string | number | null) => void;
   onTimeScopeChange: (value: OrderTimeScope) => void;
   onSearchTypeChange: (value: OrderSearchParams['search_type']) => void;

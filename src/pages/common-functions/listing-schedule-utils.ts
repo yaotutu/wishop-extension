@@ -1,5 +1,3 @@
-import type { ScheduledJob } from '../../shared/types';
-
 export const cronPresets = [
   { label: '每天 6:00', value: '0 6 * * *' },
   { label: '每天 9:00', value: '0 9 * * *' },
@@ -50,11 +48,11 @@ export function formatMinuteOfDay(totalMinutes: number): string {
 }
 
 export function getGlobalTaskWindowLabel(
-  task: Pick<ScheduledJob, 'cronExpression' | 'staggerMinutes'>,
+  task: { cronExpression: string; staggerMinutes: number },
   accountCount: number,
 ): string {
   const start = cronToMinuteOfDay(task.cronExpression);
   if (start == null) return cronToLabel(task.cronExpression);
   if (accountCount <= 1) return formatMinuteOfDay(start);
-  return `${formatMinuteOfDay(start)} - ${formatMinuteOfDay(start + (accountCount - 1) * (task.staggerMinutes || 0))}`;
+  return `${formatMinuteOfDay(start)} - ${formatMinuteOfDay(start + (accountCount - 1) * task.staggerMinutes)}`;
 }

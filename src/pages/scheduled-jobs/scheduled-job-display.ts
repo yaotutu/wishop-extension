@@ -1,4 +1,4 @@
-import type { ScheduledJob } from '../../shared/types';
+import type { ScheduledJobView } from '../../shared/types';
 
 export function formatCron(cronExpression: string): string {
   const daily = cronExpression.match(/^(\d+)\s+(\d+)\s+\*\s+\*\s+\*$/);
@@ -24,8 +24,9 @@ export function formatCountdown(milliseconds: number): string {
   return `${String(hours).padStart(2, '0')}:${mm}:${ss}`;
 }
 
-export function nextRunCountdownText(job: Pick<ScheduledJob, 'enabled' | 'nextRunAt'>, now = Date.now()): string {
-  if (!job.enabled) return '未启用';
+export function nextRunCountdownText(job: Pick<ScheduledJobView, 'enabled' | 'nextRunAt' | 'completedAt'>, now = Date.now()): string {
+  if (job.completedAt != null) return '已完成';
+  if (!job.enabled) return '已停用';
   if (!job.nextRunAt) return '等待调度';
   const remaining = job.nextRunAt - now;
   if (remaining <= 0) return '即将更新';

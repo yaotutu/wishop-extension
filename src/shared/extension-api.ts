@@ -28,6 +28,8 @@ import type {
   PurchaseLookupSession,
   QuotaResult,
   ScheduledJob,
+  ScheduledJobInput,
+  ScheduledJobView,
   ScheduledJobRunNowResult,
   ShippingSession,
   StatusRule,
@@ -224,8 +226,8 @@ export const extensionApi = {
     update: (patch: AppSettingsPatch): Promise<AppSettings> => invoke('settings:update', patch),
   },
   scheduledJobs: {
-    list: (): Promise<ScheduledJob[]> => invoke('scheduledJobs:list'),
-    add: (job: Omit<ScheduledJob, 'id' | 'stats' | 'createdAt' | 'updatedAt'>): Promise<ScheduledJob> =>
+    list: (): Promise<ScheduledJobView[]> => invoke('scheduledJobs:list'),
+    add: (job: ScheduledJobInput): Promise<ScheduledJob> =>
       invoke('scheduledJobs:add', job),
     update: (jobId: string, patch: Partial<ScheduledJob>): Promise<void> => invoke('scheduledJobs:update', jobId, patch),
     remove: (jobId: string): Promise<void> => invoke('scheduledJobs:remove', jobId),

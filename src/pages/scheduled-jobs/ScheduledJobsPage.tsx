@@ -4,7 +4,7 @@ import type { TableProps } from 'antd';
 import { PlayCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { extensionApi } from '../../shared/extension-api';
-import type { Account, ScheduledJob, ScheduledJobRunStats, ScheduledJobStatus } from '../../shared/types';
+import type { Account, ScheduledJob, ScheduledJobRunStats, ScheduledJobStatus, ScheduledJobView } from '../../shared/types';
 import { queryKeys } from '../../query/query-keys';
 import { formatCron, nextRunCountdownText } from './scheduled-job-display';
 
@@ -78,7 +78,7 @@ function statusPriority(status: ScheduledJobStatus): number {
   }
 }
 
-function effectiveStats(job: ScheduledJob): ScheduledJobRunStats {
+function effectiveStats(job: ScheduledJobView): ScheduledJobRunStats {
   const currentDate = todayKey();
   if (job.scope !== 'global') {
     return {
@@ -87,7 +87,7 @@ function effectiveStats(job: ScheduledJob): ScheduledJobRunStats {
     };
   }
 
-  const accountStats = Object.values(job.accountStats || {});
+  const accountStats = Object.values(job.accountStats);
   if (accountStats.length === 0) return job.stats;
 
   const latestErrorStat = accountStats
@@ -112,6 +112,12 @@ function effectiveStats(job: ScheduledJob): ScheduledJobRunStats {
     lastListed: latestMessageStat?.lastListed,
     lastError: latestErrorStat?.lastError,
   };
+}
+
+function lifecycleLabel(job: ScheduledJobView): { text: string; color: string } {
+  if (job.enabled) return { text: '已启用', color: 'green' };
+  if (job.completedAt != null) return { text: '已完成', color: 'success' };
+  return { text: '已停用', color: 'default' };
 }
 
 const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
@@ -167,7 +173,7 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
   const globalCount = rows.filter(job => job.scope === 'global').length;
   const runningCount = rows.filter(job => effectiveStats(job).lastStatus === 'running').length;
 
-  const columns: TableProps<ScheduledJob>['columns'] = [
+  const columns: TableProps<ScheduledJobView>['columns'] = [
     {
       title: '任务',
       dataIndex: 'name',
@@ -190,10 +196,11 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
       key: 'status',
       width: 130,
       render: (_, job) => {
-        const status = effectiveStats(job).lastStatus || 'idle';
+        const status = job.completedAt != null ? 'completed' : effectiveStats(job).lastStatus || 'idle';
+        const lifecycle = lifecycleLabel(job);
         return (
           <Space size={4} vertical>
-            <Tag color={job.enabled ? 'green' : 'default'}>{job.enabled ? '已启用' : '已停用'}</Tag>
+            <Tag color={lifecycle.color}>{lifecycle.text}</Tag>
             <Tag color={statusColors[status]}>{statusLabels[status]}</Tag>
           </Space>
         );
@@ -211,6 +218,14 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
             <Space size={4} vertical>
               <Tag color="purple">全账号</Tag>
               <span style={{ color: '#666', fontSize: 12 }}>{activeAccounts}/{accounts.length} 个账号参与</span>
+            </Space>
+          );
+        }
+        if (job.scope === 'system') {
+          return (
+            <Space size={4} vertical>
+              <Tag color="geekblue">系统</Tag>
+              <span style={{ color: '#666', fontSize: 12 }}>后台任务</span>
             </Space>
           );
         }
@@ -234,7 +249,11 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
           <Tag color={job.enabled && job.nextRunAt ? 'geekblue' : 'default'}>
             {nextRunCountdownText(job, now)}
           </Tag>
-          {job.scope === 'global' && <span style={{ color: '#999', fontSize: 12 }}>错峰 {job.staggerMinutes || 0} 分钟/账号</span>}
+          <Tag color={job.runMode === 'untilComplete' ? 'gold' : 'default'}>
+            {job.runMode === 'untilComplete' ? '执行至完成' : '周期任务'}
+          </Tag>
+          {job.completedAt != null && <span style={{ color: '#999', fontSize: 12 }}>完成于 {formatTime(job.completedAt)}</span>}
+          {job.scope === 'global' && <span style={{ color: '#999', fontSize: 12 }}>错峰 {job.staggerMinutes} 分钟/账号</span>}
         </Space>
       ),
     },
@@ -245,7 +264,7 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
       render: (_, job) => (
         <span>
           {effectiveStats(job).todayRunCount}
-          {(job.dailyLimit || 0) > 0 ? `/${job.dailyLimit}` : ''}
+          {job.dailyLimit > 0 ? `/${job.dailyLimit}` : ''}
         </span>
       ),
     },
@@ -311,7 +330,7 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
       </div>
 
       <div style={{ flex: 1, minHeight: 0, paddingTop: 12 }}>
-        <Table<ScheduledJob>
+        <Table<ScheduledJobView>
           rowKey="id"
           size="small"
           loading={isLoading}

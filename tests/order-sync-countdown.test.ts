@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { orderSyncCountdownText } from '../src/pages/orders/order-sync-countdown.ts';
-import type { ScheduledJob } from '../src/shared/types.ts';
+import type { ScheduledJobView } from '../src/shared/types.ts';
 
-function makeOrderSyncJob(patch: Partial<ScheduledJob> = {}): ScheduledJob {
+function makeOrderSyncJob(patch: Partial<ScheduledJobView> = {}): ScheduledJobView {
   return {
     id: 'orders-sync-recent',
     name: '订单自动同步',
@@ -11,14 +11,17 @@ function makeOrderSyncJob(patch: Partial<ScheduledJob> = {}): ScheduledJob {
     module: 'orders',
     jobType: 'orders.syncRecent',
     scope: 'system',
+    runMode: 'recurring',
     cronExpression: '*/3 * * * *',
     dailyLimit: 0,
     payload: {},
+    completedAt: null,
     stats: { lastRunDate: '', todayRunCount: 0 },
+    nextRunAt: null,
     createdAt: 1700000000000,
     updatedAt: 1700000000000,
     ...patch,
-  };
+  } as ScheduledJobView;
 }
 
 test('formats order auto sync countdown from backend scheduled job', () => {

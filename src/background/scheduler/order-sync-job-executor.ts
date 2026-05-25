@@ -1,10 +1,10 @@
-import type { OrderHistoryBackfillPayload, ScheduledJob } from '../../shared/types';
+import type { OrderHistoryBackfillPayload, ScheduledJob, ScheduledJobExecutorResult } from '../../shared/types';
 import { planOrderHistoryBackfillWindow } from '../orders/order-history-backfill-window.ts';
 import { ORDER_HISTORY_BACKFILL_CRON, ORDER_RECENT_SYNC_CRON } from '../orders/order-sync-schedule.ts';
 import { getAccounts } from '../store/account-repository';
-import { addScheduledJob, getScheduledJobs, updateScheduledJob } from '../store/scheduled-job-repository';
+import { addScheduledJob, getScheduledJob, getScheduledJobs, updateScheduledJob, updateScheduledJobPayload } from '../store/scheduled-job-repository';
 import { orderSyncService } from '../orders/order-domain';
-import { registerScheduledJobExecutor, stopScheduledJob } from './scheduler-center';
+import { registerScheduledJobExecutor } from './scheduler-center';
 
 const DEFAULT_ORDER_SYNC_JOB_NAME = '订单自动同步';
 const DEFAULT_HISTORY_BACKFILL_JOB_NAME = '订单历史补拉';
@@ -18,9 +18,8 @@ export async function ensureOrderSyncScheduledJob(): Promise<ScheduledJob | null
     if (existing.cronExpression !== ORDER_RECENT_SYNC_CRON) patch.cronExpression = ORDER_RECENT_SYNC_CRON;
     if (!existing.enabled) patch.enabled = true;
     if (Object.keys(patch).length > 0) {
-      const updatedAt = Date.now();
       await updateScheduledJob(existing.id, patch);
-      return { ...existing, ...patch, updatedAt };
+      return (await getScheduledJob(existing.id)) || existing;
     }
     return existing;
   }
@@ -31,8 +30,10 @@ export async function ensureOrderSyncScheduledJob(): Promise<ScheduledJob | null
     module: 'orders',
     jobType: 'orders.syncRecent',
     scope: 'system',
+    runMode: 'recurring',
     cronExpression: ORDER_RECENT_SYNC_CRON,
     dailyLimit: 0,
+    completedAt: null,
     payload: {},
   });
 }
@@ -42,7 +43,6 @@ function normalizeBackfillPayload(payload: unknown): OrderHistoryBackfillPayload
   return {
     lookbackDays: value.lookbackDays || DEFAULT_HISTORY_BACKFILL_LOOKBACK_DAYS,
     cursorByAccountId: value.cursorByAccountId || {},
-    completedAt: value.completedAt,
   };
 }
 
@@ -53,11 +53,11 @@ export async function ensureOrderHistoryBackfillScheduledJob(): Promise<Schedule
     const patch: Partial<ScheduledJob<OrderHistoryBackfillPayload>> = {};
     const normalizedPayload = normalizeBackfillPayload(existing.payload);
     if (existing.cronExpression !== ORDER_HISTORY_BACKFILL_CRON) patch.cronExpression = ORDER_HISTORY_BACKFILL_CRON;
+    if (existing.runMode !== 'untilComplete') patch.runMode = 'untilComplete';
     if (JSON.stringify(existing.payload || {}) !== JSON.stringify(normalizedPayload)) patch.payload = normalizedPayload;
     if (Object.keys(patch).length > 0) {
-      const updatedAt = Date.now();
       await updateScheduledJob(existing.id, patch as Partial<ScheduledJob>);
-      return { ...existing, ...patch, updatedAt };
+      return ((await getScheduledJob(existing.id)) || existing) as ScheduledJob<OrderHistoryBackfillPayload>;
     }
     return existing;
   }
@@ -68,8 +68,10 @@ export async function ensureOrderHistoryBackfillScheduledJob(): Promise<Schedule
     module: 'orders',
     jobType: 'orders.backfillHistory',
     scope: 'system',
+    runMode: 'untilComplete',
     cronExpression: ORDER_HISTORY_BACKFILL_CRON,
     dailyLimit: 0,
+    completedAt: null,
     payload: {
       lookbackDays: DEFAULT_HISTORY_BACKFILL_LOOKBACK_DAYS,
       cursorByAccountId: {},
@@ -77,7 +79,7 @@ export async function ensureOrderHistoryBackfillScheduledJob(): Promise<Schedule
   }) as Promise<ScheduledJob<OrderHistoryBackfillPayload>>;
 }
 
-async function runHistoryBackfillWindow(job: ScheduledJob): Promise<{ listed: number; status: 'completed' | 'failed' | 'skipped'; message?: string; error?: string }> {
+async function runHistoryBackfillWindow(job: ScheduledJob): Promise<ScheduledJobExecutorResult> {
   const accounts = await getAccounts();
   const payload = normalizeBackfillPayload(job.payload);
   const cursorByAccountId = { ...(payload.cursorByAccountId || {}) };
@@ -120,21 +122,16 @@ async function runHistoryBackfillWindow(job: ScheduledJob): Promise<{ listed: nu
   }
 
   const allCompleted = accounts.length > 0 && completedAccountCount === accounts.length;
-  await updateScheduledJob(job.id, {
-    enabled: allCompleted ? false : job.enabled,
-    payload: {
-      lookbackDays,
-      cursorByAccountId,
-      completedAt: allCompleted ? Date.now() : payload.completedAt,
-    } satisfies OrderHistoryBackfillPayload,
-  });
-  if (allCompleted) await stopScheduledJob(job.id);
+  await updateScheduledJobPayload(job.id, {
+    lookbackDays,
+    cursorByAccountId,
+  } satisfies OrderHistoryBackfillPayload);
 
   if (accounts.length === 0) {
-    return { listed: 1, status: 'skipped', message: '订单历史补拉跳过：当前没有账号' };
+    return { listed: 1, status: 'skipped', message: '订单历史补拉跳过：当前没有账号', error: null, completed: false };
   }
   if (allCompleted) {
-    return { listed: 1, status: 'skipped', message: '订单历史补拉已完成，任务已停用' };
+    return { listed: 1, status: 'completed', message: '订单历史补拉已完成', error: null, completed: true };
   }
   const message = failures.length > 0
     ? `订单历史补拉完成，处理 ${processedAccountCount} 个账号，失败 ${failures.length} 个账号：${failures.join('; ')}`
@@ -143,8 +140,9 @@ async function runHistoryBackfillWindow(job: ScheduledJob): Promise<{ listed: nu
   return {
     listed: Math.max(updatedOrderCount, processedAccountCount, 1),
     status,
-    message: status === 'completed' ? message : undefined,
-    error: status === 'failed' ? message : undefined,
+    message: status === 'completed' ? message : null,
+    error: status === 'failed' ? message : null,
+    completed: false,
   };
 }
 
@@ -159,8 +157,9 @@ export function registerOrderSyncScheduledJobs(): void {
     return {
       listed: Math.max(result.fetchedOrderCount || result.updatedOrderCount, 1),
       status,
-      message: status === 'completed' ? message : undefined,
-      error: status === 'failed' ? message : undefined,
+      message: status === 'completed' ? message : null,
+      error: status === 'failed' ? message : null,
+      completed: false,
     };
   });
 
