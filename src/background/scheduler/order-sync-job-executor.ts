@@ -78,7 +78,7 @@ export async function ensureOrderHistoryBackfillScheduledJob(): Promise<Schedule
   }) as Promise<ScheduledJob<OrderHistoryBackfillPayload>>;
 }
 
-async function runHistoryBackfillWindow(job: ScheduledJob): Promise<{ listed: number; status: 'completed' | 'failed' | 'skipped'; error: string }> {
+async function runHistoryBackfillWindow(job: ScheduledJob): Promise<{ listed: number; status: 'completed' | 'failed' | 'skipped'; message?: string; error?: string }> {
   const accounts = await getAccounts();
   const payload = normalizeBackfillPayload(job.payload);
   const cursorByAccountId = { ...(payload.cursorByAccountId || {}) };
@@ -132,17 +132,20 @@ async function runHistoryBackfillWindow(job: ScheduledJob): Promise<{ listed: nu
   if (allCompleted) await stopScheduledJob(job.id);
 
   if (accounts.length === 0) {
-    return { listed: 1, status: 'skipped', error: '订单历史补拉跳过：当前没有账号' };
+    return { listed: 1, status: 'skipped', message: '订单历史补拉跳过：当前没有账号' };
   }
   if (allCompleted) {
-    return { listed: 1, status: 'skipped', error: '订单历史补拉已完成，任务已停用' };
+    return { listed: 1, status: 'skipped', message: '订单历史补拉已完成，任务已停用' };
   }
+  const message = failures.length > 0
+    ? `订单历史补拉完成，处理 ${processedAccountCount} 个账号，失败 ${failures.length} 个账号：${failures.join('; ')}`
+    : `订单历史补拉完成，处理 ${processedAccountCount} 个账号，新增/变更 ${updatedOrderCount} 条订单`;
+  const status = failures.length > 0 && processedAccountCount === 0 ? 'failed' as const : 'completed' as const;
   return {
     listed: Math.max(updatedOrderCount, processedAccountCount, 1),
-    status: failures.length > 0 && processedAccountCount === 0 ? 'failed' : 'completed',
-    error: failures.length > 0
-      ? `订单历史补拉完成，处理 ${processedAccountCount} 个账号，失败 ${failures.length} 个账号：${failures.join('; ')}`
-      : `订单历史补拉完成，处理 ${processedAccountCount} 个账号，更新 ${updatedOrderCount} 条订单`,
+    status,
+    message: status === 'completed' ? message : undefined,
+    error: status === 'failed' ? message : undefined,
   };
 }
 
@@ -150,12 +153,15 @@ export function registerOrderSyncScheduledJobs(): void {
   registerScheduledJobExecutor('orders.syncRecent', async () => {
     const result = await orderSyncService.refresh({ type: 'all' }, { reason: 'autoSync' });
     const failedCount = result.failedAccounts.length;
+    const message = failedCount > 0
+      ? `订单自动同步完成，成功 ${result.refreshedAccountIds.length} 个账号，失败 ${failedCount} 个账号，扫描 ${result.fetchedOrderCount || 0} 条，新增/变更 ${result.updatedOrderCount} 条`
+      : `订单自动同步完成，扫描 ${result.fetchedOrderCount || 0} 条，新增/变更 ${result.updatedOrderCount} 条`;
+    const status = failedCount > 0 && result.refreshedAccountIds.length === 0 ? 'failed' as const : 'completed' as const;
     return {
-      listed: Math.max(result.updatedOrderCount, 1),
-      status: failedCount > 0 && result.refreshedAccountIds.length === 0 ? 'failed' as const : 'completed' as const,
-      error: failedCount > 0
-        ? `订单自动同步完成，成功 ${result.refreshedAccountIds.length} 个账号，失败 ${failedCount} 个账号`
-        : `订单自动同步完成，更新 ${result.updatedOrderCount} 条订单`,
+      listed: Math.max(result.fetchedOrderCount || result.updatedOrderCount, 1),
+      status,
+      message: status === 'completed' ? message : undefined,
+      error: status === 'failed' ? message : undefined,
     };
   });
 

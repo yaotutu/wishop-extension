@@ -241,3 +241,27 @@ test('order refresh maps auto sync to incremental mode and manual refresh to ful
 
   assert.deepEqual(modes, ['incremental', 'full']);
 });
+
+test('order refresh distinguishes fetched orders from changed local orders', async () => {
+  const account = makeAccount('account-1', '店铺一');
+  const store = createOrderStore(createMemoryStorage());
+  const sync = createOrderSyncService({
+    store,
+    source: {
+      async fetchRecentOrders() {
+        return [makeOrder('order-1')];
+      },
+      async searchOrders() { return []; },
+      async getOrderDetail() { return makeOrder('unused'); },
+    },
+    getAccounts: async () => [account],
+  });
+
+  const first = await sync.refresh({ type: 'account', accountId: account.id }, { reason: 'autoSync' });
+  const second = await sync.refresh({ type: 'account', accountId: account.id }, { reason: 'autoSync' });
+
+  assert.equal(first.fetchedOrderCount, 1);
+  assert.equal(first.updatedOrderCount, 1);
+  assert.equal(second.fetchedOrderCount, 1);
+  assert.equal(second.updatedOrderCount, 0);
+});

@@ -31,6 +31,12 @@ interface StoredOrderState {
   syncStates: Record<string, OrderSyncAccountState>;
 }
 
+export interface OrderUpsertResult {
+  snapshots: StoredOrderSnapshot[];
+  fetchedCount: number;
+  changedCount: number;
+}
+
 function defaultStorage(): OrderStoreStorage {
   return {
     get: keys => chrome.storage.local.get(keys),
@@ -119,20 +125,24 @@ export function createOrderStore(storage: OrderStoreStorage = defaultStorage(), 
     accountName: string,
     orders: Order[],
     source: StoredOrderSource,
-  ): Promise<StoredOrderSnapshot[]> {
+  ): Promise<OrderUpsertResult> {
     const state = await readState();
     const currentByKey = new Map(state.snapshots.map(snapshot => [`${snapshot.accountId}:${snapshot.orderId}`, snapshot]));
     const fetchedAt = now();
+    let fetchedCount = 0;
+    let changedCount = 0;
 
     for (const order of orders) {
       const orderId = String(order.order_id || '').trim();
       if (!orderId) continue;
+      fetchedCount += 1;
       const key = `${accountId}:${orderId}`;
       const previous = currentByKey.get(key);
       const changed = !previous
         || previous.order.status !== order.status
         || previous.order.update_time !== order.update_time
         || previous.indexedText !== buildOrderIndexedText(order);
+      if (changed) changedCount += 1;
       currentByKey.set(key, {
         accountId,
         accountName,
@@ -147,7 +157,11 @@ export function createOrderStore(storage: OrderStoreStorage = defaultStorage(), 
 
     const snapshots = limitPerAccount([...currentByKey.values()], maxOrdersPerAccount);
     await writeState({ snapshots });
-    return snapshots.filter(snapshot => snapshot.accountId === accountId);
+    return {
+      snapshots: snapshots.filter(snapshot => snapshot.accountId === accountId),
+      fetchedCount,
+      changedCount,
+    };
   }
 
   async function list(scope: OrderScope, filters: OrderListFilters = {}): Promise<LocalOrderListResult> {

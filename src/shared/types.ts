@@ -21,6 +21,8 @@ export interface ScheduledJobRunStats {
   lastRunAt?: number;
   lastFinishedAt?: number;
   lastStatus?: ScheduledJobStatus;
+  lastMessage?: string;
+  lastListed?: number;
   lastError?: string;
 }
 
@@ -47,6 +49,7 @@ export interface ScheduledJob<TPayload = unknown> {
 export interface ScheduledJobRunNowResult {
   listed: number;
   status: ScheduledJobStatus;
+  message?: string;
   error?: string;
 }
 
@@ -538,6 +541,7 @@ export interface OrderRefreshResult {
   scope: OrderScope;
   refreshedAccountIds: string[];
   failedAccounts: Array<{ accountId: string; accountName?: string; error: string }>;
+  fetchedOrderCount?: number;
   updatedOrderCount: number;
   startedAt: number;
   finishedAt: number;

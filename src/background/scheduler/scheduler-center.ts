@@ -28,6 +28,7 @@ const GLOBAL_JOB_ALARM_PREFIX = 'scheduled-job-global:';
 export type ScheduledJobExecutorResult = {
   listed?: number;
   status?: ScheduledJobStatus;
+  message?: string;
   error?: string;
 };
 
@@ -235,9 +236,12 @@ function aggregateRunResults(results: ScheduledJobRunNowResult[]): ScheduledJobR
   return {
     listed,
     status,
-    error: failed.length > 0
+    message: failed.length > 0 && completed.length > 0
       ? `手动执行完成，失败 ${failed.length}/${results.length} 个账号：${failed.map(result => result.error).filter(Boolean).join('; ')}`
-      : results.map(result => result.error).filter(Boolean).join('; ') || undefined,
+      : results.map(result => result.message).filter(Boolean).join('; ') || undefined,
+    error: failed.length === results.length
+      ? failed.map(result => result.error || result.message).filter(Boolean).join('; ')
+      : undefined,
   };
 }
 
@@ -271,6 +275,8 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
     todayRunCount,
     lastRunAt: startedAt,
     lastStatus: 'running',
+    lastMessage: undefined,
+    lastListed: undefined,
     lastError: undefined,
   });
 
@@ -298,12 +304,16 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
         ? 'skipped'
         : 'completed';
     const countIncrement = result?.listed ?? 1;
+    const detail = result?.message ?? result?.error;
+    const errorMessage = status === 'failed' ? result?.error || result?.message : undefined;
     await patchStatsFor(job, targetAccountId, {
       lastRunDate: currentDate,
       todayRunCount: todayRunCount + countIncrement,
       lastFinishedAt: Date.now(),
       lastStatus: status,
-      lastError: result?.error,
+      lastMessage: status === 'failed' ? undefined : detail,
+      lastListed: result?.listed,
+      lastError: errorMessage,
     });
 
     if (status === 'skipped') {
@@ -316,9 +326,9 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
         taskName: job.name,
         taskKind: taskKind(job),
         title: '定时任务跳过',
-        detail: result?.error,
+        detail,
       });
-      return { listed: countIncrement, status, error: result?.error };
+      return { listed: countIncrement, status, message: detail };
     }
 
     await recordTaskCompleted({
@@ -332,10 +342,10 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
       runId,
       level: status === 'failed' ? 'warning' : 'success',
       title: '定时任务执行完成',
-      detail: result?.error,
+      detail,
       summary: { listed: result?.listed },
     });
-    return { listed: countIncrement, status, error: result?.error };
+    return { listed: countIncrement, status, message: status === 'failed' ? undefined : detail, error: errorMessage };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await patchStatsFor(job, targetAccountId, {
@@ -343,6 +353,8 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
       todayRunCount: todayRunCount + 1,
       lastFinishedAt: Date.now(),
       lastStatus: 'failed',
+      lastMessage: undefined,
+      lastListed: 1,
       lastError: message,
     });
     await recordTaskFailed({

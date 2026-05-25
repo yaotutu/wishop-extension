@@ -139,6 +139,30 @@ test('keeps all synced orders by default instead of silently pruning at 500', as
   assert.equal(result.orders.length, 510);
 });
 
+test('reports fetched and changed counts when upserting orders', async () => {
+  const store = createOrderStore(createMemoryStorage());
+
+  const first = await store.upsertMany('account-1', '店铺一', [
+    makeOrder('order-1'),
+    makeOrder('order-2'),
+  ], 'autoSync');
+  const second = await store.upsertMany('account-1', '店铺一', [
+    makeOrder('order-1'),
+    makeOrder('order-2'),
+  ], 'autoSync');
+  const third = await store.upsertMany('account-1', '店铺一', [
+    makeOrder('order-1', { status: COMPLETED, update_time: 1700000010 }),
+    makeOrder('order-2'),
+  ], 'autoSync');
+
+  assert.equal(first.fetchedCount, 2);
+  assert.equal(first.changedCount, 2);
+  assert.equal(second.fetchedCount, 2);
+  assert.equal(second.changedCount, 0);
+  assert.equal(third.fetchedCount, 2);
+  assert.equal(third.changedCount, 1);
+});
+
 test('paginated order lists return the filtered total count', async () => {
   const store = createOrderStore(createMemoryStorage());
   await store.upsertMany('account-1', '店铺一', Array.from({ length: 55 }, (_, index) => (

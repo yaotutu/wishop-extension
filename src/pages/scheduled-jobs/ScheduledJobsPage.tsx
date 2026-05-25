@@ -93,6 +93,9 @@ function effectiveStats(job: ScheduledJob): ScheduledJobRunStats {
   const latestErrorStat = accountStats
     .filter(stat => stat.lastError)
     .sort((a, b) => (b.lastFinishedAt || b.lastRunAt || 0) - (a.lastFinishedAt || a.lastRunAt || 0))[0];
+  const latestMessageStat = accountStats
+    .filter(stat => stat.lastMessage)
+    .sort((a, b) => (b.lastFinishedAt || b.lastRunAt || 0) - (a.lastFinishedAt || a.lastRunAt || 0))[0];
   const lastStatus = accountStats
     .map(stat => stat.lastStatus || 'idle')
     .sort((a, b) => statusPriority(b) - statusPriority(a))[0];
@@ -105,6 +108,8 @@ function effectiveStats(job: ScheduledJob): ScheduledJobRunStats {
     lastRunAt: Math.max(0, ...accountStats.map(stat => stat.lastRunAt || 0)) || undefined,
     lastFinishedAt: Math.max(0, ...accountStats.map(stat => stat.lastFinishedAt || 0)) || undefined,
     lastStatus,
+    lastMessage: latestMessageStat?.lastMessage,
+    lastListed: latestMessageStat?.lastListed,
     lastError: latestErrorStat?.lastError,
   };
 }
@@ -138,9 +143,9 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
       if (result.status === 'failed') {
         message.error(result.error || '任务执行失败');
       } else if (result.status === 'skipped') {
-        message.warning(result.error || '任务已跳过');
+        message.warning(result.message || result.error || '任务已跳过');
       } else {
-        message.success(result.error || `任务执行完成，处理 ${result.listed} 项`);
+        message.success(result.message || `任务执行完成，处理 ${result.listed} 项`);
       }
       void queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.list });
       void refetch();
@@ -250,13 +255,14 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
       width: 180,
       render: (_, job) => {
         const stats = effectiveStats(job);
+        const detail = stats.lastError || stats.lastMessage;
         return (
           <Space size={4} vertical>
             <span>{formatTime(stats.lastRunAt)}</span>
-            {stats.lastError && (
-              <Tooltip title={stats.lastError}>
-                <span style={{ maxWidth: 150, color: '#cf1322', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {stats.lastError}
+            {detail && (
+              <Tooltip title={detail}>
+                <span style={{ maxWidth: 150, color: stats.lastError ? '#cf1322' : '#666', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {detail}
                 </span>
               </Tooltip>
             )}

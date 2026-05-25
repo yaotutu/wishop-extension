@@ -29,6 +29,8 @@ export interface RefreshOptions {
 interface AccountRefreshResult {
   account: Account;
   orders: Order[];
+  fetchedOrderCount: number;
+  changedOrderCount: number;
 }
 
 function errorMessage(error: unknown): string {
@@ -80,14 +82,20 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
         lookbackDays: options.lookbackDays,
         maxWindows: options.maxWindows,
       });
-      await deps.store.upsertMany(account.id, account.name, orders, source);
+      const upsertResult = await deps.store.upsertMany(account.id, account.name, orders, source);
       logger.info('账号订单刷新完成', {
         accountName: account.name,
-        orderCount: orders.length,
+        fetchedOrderCount: upsertResult.fetchedCount,
+        changedOrderCount: upsertResult.changedCount,
         source,
         mode: options.mode,
       });
-      return { account, orders };
+      return {
+        account,
+        orders,
+        fetchedOrderCount: upsertResult.fetchedCount,
+        changedOrderCount: upsertResult.changedCount,
+      };
     })();
     inFlightRefreshes.set(account.id, promise);
     try {
@@ -112,18 +120,21 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
     });
     const refreshedAccountIds: string[] = [];
     const failedAccounts: OrderRefreshResult['failedAccounts'] = [];
+    let fetchedOrderCount = 0;
     let updatedOrderCount = 0;
 
     for (const account of accounts) {
       try {
         const result = await refreshAccount(account, { ...options, reason, mode });
         refreshedAccountIds.push(account.id);
-        updatedOrderCount += result.orders.length;
+        fetchedOrderCount += result.fetchedOrderCount;
+        updatedOrderCount += result.changedOrderCount;
         await deps.store.markSyncFinished({ type: 'account', accountId: account.id }, {
           scope: { type: 'account', accountId: account.id },
           refreshedAccountIds: [account.id],
           failedAccounts: [],
-          updatedOrderCount: result.orders.length,
+          fetchedOrderCount: result.fetchedOrderCount,
+          updatedOrderCount: result.changedOrderCount,
           startedAt,
           finishedAt: now(),
         });
@@ -139,6 +150,7 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
           scope: { type: 'account', accountId: account.id },
           refreshedAccountIds: [],
           failedAccounts: [{ accountId: account.id, accountName: account.name, error: message }],
+          fetchedOrderCount: 0,
           updatedOrderCount: 0,
           startedAt,
           finishedAt: now(),
@@ -150,6 +162,7 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
       scope,
       refreshedAccountIds,
       failedAccounts,
+      fetchedOrderCount,
       updatedOrderCount,
       startedAt,
       finishedAt: now(),
@@ -160,6 +173,7 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
       reason,
       refreshedAccountCount: refreshedAccountIds.length,
       failedAccountCount: failedAccounts.length,
+      fetchedOrderCount,
       updatedOrderCount,
     });
     if (accounts.length === 0) {
