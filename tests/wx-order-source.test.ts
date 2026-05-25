@@ -59,7 +59,7 @@ test('manual recent sync falls back to status-scoped order lists when the unfilt
     },
   }));
 
-  const orders = await source.fetchRecentOrders('account-1', { fallbackStatuses: true });
+  const orders = await source.fetchRecentOrders('account-1', { mode: 'full', fallbackStatuses: true });
 
   assert.deepEqual(orders.map(order => order.order_id), ['status-order']);
   assert.ok(listCalls.some(call => call.status === PENDING_SHIPMENT));
@@ -93,7 +93,28 @@ test('recent sync always sends a concrete seven-day create time range', async ()
   }
 });
 
-test('recent sync continues scanning older windows after a non-empty recent window', async () => {
+test('incremental recent sync scans only the latest seven-day window', async () => {
+  const listCalls: OrderListParams[] = [];
+  const source = createWxOrderSource(async () => ({
+    async getOrderList(params: OrderListParams) {
+      listCalls.push(params);
+      return { order_id_list: [], next_key: '', has_more: false };
+    },
+    async getOrderDetail(orderId: string) {
+      return makeOrder(orderId);
+    },
+    async searchOrders(_params: OrderSearchParams) {
+      return { order_id_list: [], next_key: '', has_more: false };
+    },
+  }));
+
+  const orders = await source.fetchRecentOrders('account-1', { mode: 'incremental' });
+
+  assert.deepEqual(orders, []);
+  assert.equal(listCalls.length, 1);
+});
+
+test('full recent sync continues scanning older windows after a non-empty recent window', async () => {
   const listCalls: OrderListParams[] = [];
   const source = createWxOrderSource(async () => ({
     async getOrderList(params: OrderListParams) {
@@ -114,13 +135,13 @@ test('recent sync continues scanning older windows after a non-empty recent wind
     },
   }));
 
-  const orders = await source.fetchRecentOrders('account-1');
+  const orders = await source.fetchRecentOrders('account-1', { mode: 'full' });
 
   assert.deepEqual(orders.map(order => order.order_id), ['recent-order', 'older-order']);
   assert.equal(listCalls.length > 2, true);
 });
 
-test('recent sync does not stop at 500 orders when older windows have more orders', async () => {
+test('full recent sync does not stop at 500 orders when older windows have more orders', async () => {
   const listCalls: OrderListParams[] = [];
   const source = createWxOrderSource(async () => ({
     async getOrderList(params: OrderListParams) {
@@ -149,8 +170,35 @@ test('recent sync does not stop at 500 orders when older windows have more order
     },
   }));
 
-  const orders = await source.fetchRecentOrders('account-1');
+  const orders = await source.fetchRecentOrders('account-1', { mode: 'full' });
 
   assert.equal(orders.length, 501);
   assert.equal(orders.at(-1)?.order_id, 'older-501');
+});
+
+test('backfill history sync scans one requested seven-day window', async () => {
+  const listCalls: OrderListParams[] = [];
+  const source = createWxOrderSource(async () => ({
+    async getOrderList(params: OrderListParams) {
+      listCalls.push(params);
+      return { order_id_list: ['history-order'], next_key: '', has_more: false };
+    },
+    async getOrderDetail(orderId: string) {
+      return makeOrder(orderId);
+    },
+    async searchOrders(_params: OrderSearchParams) {
+      return { order_id_list: [], next_key: '', has_more: false };
+    },
+  }));
+
+  const orders = await source.fetchRecentOrders('account-1', {
+    mode: 'backfill',
+    windowStartTime: 1699395201,
+    windowEndTime: 1700000000,
+  });
+
+  assert.deepEqual(orders.map(order => order.order_id), ['history-order']);
+  assert.equal(listCalls.length, 1);
+  assert.equal(listCalls[0].create_time_range?.start_time, 1699395201);
+  assert.equal(listCalls[0].create_time_range?.end_time, 1700000000);
 });

@@ -18,7 +18,12 @@ export interface OrderSyncServiceDeps {
 }
 
 export interface RefreshOptions {
-  reason?: Extract<StoredOrderSource, 'autoSync' | 'manualRefresh'>;
+  reason?: Extract<StoredOrderSource, 'autoSync' | 'manualRefresh' | 'historyBackfill'>;
+  mode?: 'incremental' | 'full' | 'backfill';
+  windowStartTime?: number;
+  windowEndTime?: number;
+  lookbackDays?: number;
+  maxWindows?: number;
 }
 
 interface AccountRefreshResult {
@@ -36,6 +41,12 @@ function formatFailedAccounts(failedAccounts: OrderRefreshResult['failedAccounts
     .join('; ');
 }
 
+function defaultModeForReason(reason: NonNullable<RefreshOptions['reason']>): NonNullable<RefreshOptions['mode']> {
+  if (reason === 'autoSync') return 'incremental';
+  if (reason === 'historyBackfill') return 'backfill';
+  return 'full';
+}
+
 export function createOrderSyncService(deps: OrderSyncServiceDeps) {
   const now = deps.now || Date.now;
   const inFlightRefreshes = new Map<string, Promise<AccountRefreshResult>>();
@@ -46,26 +57,35 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
     return accounts.filter(account => account.id === scope.accountId);
   }
 
-  async function refreshAccount(account: Account, source: StoredOrderSource): Promise<AccountRefreshResult> {
+  async function refreshAccount(account: Account, options: Required<Pick<RefreshOptions, 'reason' | 'mode'>> & Omit<RefreshOptions, 'reason' | 'mode'>): Promise<AccountRefreshResult> {
     const existing = inFlightRefreshes.get(account.id);
     if (existing) return existing;
     const promise = (async () => {
+      const source = options.reason;
+      const fallbackStatuses = source !== 'autoSync';
       const logger = createLogger('OrderSync', account.id);
       logger.info('账号订单刷新开始', {
         accountName: account.name,
         source,
-        fallbackStatuses: source === 'manualRefresh',
+        mode: options.mode,
+        fallbackStatuses,
       });
       await deps.store.markSyncStarted({ type: 'account', accountId: account.id });
       const orders = await deps.source.fetchRecentOrders(account.id, {
-        fallbackStatuses: source === 'manualRefresh',
+        mode: options.mode,
+        fallbackStatuses,
         debug: source === 'manualRefresh',
+        windowStartTime: options.windowStartTime,
+        windowEndTime: options.windowEndTime,
+        lookbackDays: options.lookbackDays,
+        maxWindows: options.maxWindows,
       });
       await deps.store.upsertMany(account.id, account.name, orders, source);
       logger.info('账号订单刷新完成', {
         accountName: account.name,
         orderCount: orders.length,
         source,
+        mode: options.mode,
       });
       return { account, orders };
     })();
@@ -79,6 +99,7 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
 
   async function refresh(scope: OrderScope, options: RefreshOptions = {}): Promise<OrderRefreshResult> {
     const reason = options.reason || 'manualRefresh';
+    const mode = options.mode || defaultModeForReason(reason);
     const startedAt = now();
     const logger = createLogger('OrderSync');
     await deps.store.markSyncStarted(scope);
@@ -86,6 +107,7 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
     logger.info('订单刷新任务开始', {
       scope,
       reason,
+      mode,
       accountCount: accounts.length,
     });
     const refreshedAccountIds: string[] = [];
@@ -94,7 +116,7 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
 
     for (const account of accounts) {
       try {
-        const result = await refreshAccount(account, reason);
+        const result = await refreshAccount(account, { ...options, reason, mode });
         refreshedAccountIds.push(account.id);
         updatedOrderCount += result.orders.length;
         await deps.store.markSyncFinished({ type: 'account', accountId: account.id }, {

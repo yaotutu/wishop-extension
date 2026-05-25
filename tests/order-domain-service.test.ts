@@ -218,3 +218,26 @@ test('all-account refresh rejects when every account fails', async () => {
   assert.match(state.lastError || '', /bad-1 token invalid/);
   assert.match(state.lastError || '', /bad-2 token invalid/);
 });
+
+test('order refresh maps auto sync to incremental mode and manual refresh to full mode', async () => {
+  const account = makeAccount('account-1', '店铺一');
+  const store = createOrderStore(createMemoryStorage());
+  const modes: unknown[] = [];
+  const sync = createOrderSyncService({
+    store,
+    source: {
+      async fetchRecentOrders(_accountId, options) {
+        modes.push(options?.mode);
+        return [makeOrder(`order-${modes.length}`)];
+      },
+      async searchOrders() { return []; },
+      async getOrderDetail() { return makeOrder('unused'); },
+    },
+    getAccounts: async () => [account],
+  });
+
+  await sync.refresh({ type: 'account', accountId: account.id }, { reason: 'autoSync' });
+  await sync.refresh({ type: 'account', accountId: account.id }, { reason: 'manualRefresh' });
+
+  assert.deepEqual(modes, ['incremental', 'full']);
+});

@@ -47,8 +47,13 @@ export interface WxOrderSource {
 }
 
 export interface FetchRecentOrdersOptions {
+  mode?: 'incremental' | 'full' | 'backfill';
   fallbackStatuses?: boolean;
   debug?: boolean;
+  windowStartTime?: number;
+  windowEndTime?: number;
+  lookbackDays?: number;
+  maxWindows?: number;
 }
 
 export interface WxOrderClient {
@@ -58,6 +63,31 @@ export interface WxOrderClient {
 }
 
 export type ResolveWxOrderClient = (accountId: string) => Promise<WxOrderClient>;
+
+function recentScanConfig(options: FetchRecentOrdersOptions): {
+  mode: NonNullable<FetchRecentOrdersOptions['mode']>;
+  nowSeconds: number;
+  lookbackDays: number;
+  maxWindows: number;
+  explicitWindow?: { start_time: number; end_time: number };
+} {
+  const mode = options.mode || 'incremental';
+  const defaultLookbackDays = mode === 'incremental' ? 7 : 182;
+  const defaultMaxWindows = mode === 'full' ? MAX_RECENT_WINDOWS : 1;
+  const explicitWindow = options.windowStartTime !== undefined && options.windowEndTime !== undefined
+    ? {
+      start_time: options.windowStartTime,
+      end_time: options.windowEndTime,
+    }
+    : undefined;
+  return {
+    mode,
+    nowSeconds: options.windowEndTime || Math.floor(Date.now() / 1000),
+    lookbackDays: options.lookbackDays || defaultLookbackDays,
+    maxWindows: explicitWindow ? 1 : options.maxWindows || defaultMaxWindows,
+    explicitWindow,
+  };
+}
 
 async function defaultResolveWxOrderClient(accountId: string): Promise<WxOrderClient> {
   const { getClient } = await import('../wxshop/client-registry');
@@ -150,14 +180,22 @@ export function createWxOrderSource(resolveClient: ResolveWxOrderClient = defaul
   return {
     async fetchRecentOrders(accountId: string, options: FetchRecentOrdersOptions = {}): Promise<Order[]> {
       const api = await resolveClient(accountId);
-      const state = makeRecentOrderWindowState();
+      const scan = recentScanConfig(options);
+      const state = makeRecentOrderWindowState(scan.nowSeconds, scan.lookbackDays);
       let scannedWindows = 0;
       let orders: Order[] = [];
       const logger = options.debug ? createLogger('OrderSource', accountId) : null;
-      logger?.info('最近订单同步开始', { fallbackStatuses: Boolean(options.fallbackStatuses) });
+      logger?.info('最近订单同步开始', {
+        mode: scan.mode,
+        fallbackStatuses: Boolean(options.fallbackStatuses),
+        maxWindows: scan.maxWindows,
+        lookbackDays: scan.lookbackDays,
+      });
 
-      while (scannedWindows < MAX_RECENT_WINDOWS) {
-        const timeRange = getRecentOrderWindow(state);
+      while (scannedWindows < scan.maxWindows) {
+        const timeRange = scan.explicitWindow && scannedWindows === 0
+          ? scan.explicitWindow
+          : getRecentOrderWindow(state);
         if (!timeRange) break;
         const windowIndex = scannedWindows + 1;
         const windowOrders = await fetchWindowOrders(api, accountId, timeRange, undefined, options.debug, windowIndex);
@@ -171,10 +209,12 @@ export function createWxOrderSource(resolveClient: ResolveWxOrderClient = defaul
           orders = dedupeOrders([...orders, ...statusOrders]);
         }
         scannedWindows += 1;
+        if (scan.explicitWindow) break;
         moveRecentOrderWindowBack(state);
       }
 
       logger?.info('最近订单同步完成', {
+        mode: scan.mode,
         scannedWindowCount: scannedWindows,
         orderCount: orders.length,
       });

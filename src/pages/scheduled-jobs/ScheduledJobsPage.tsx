@@ -23,6 +23,7 @@ const jobTypeLabels: Record<ScheduledJob['jobType'], string> = {
   'listing.submitDrafts': '提交待审核商品',
   'orders.checkShipmentStatus': '检测发货状态',
   'orders.syncRecent': '同步近期订单',
+  'orders.backfillHistory': '补拉历史订单',
   'violation.scanProducts': '扫描违规商品',
 };
 

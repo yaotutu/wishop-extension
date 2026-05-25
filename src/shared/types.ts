@@ -11,6 +11,7 @@ export type ScheduledJobType =
   | 'listing.submitDrafts'
   | 'orders.checkShipmentStatus'
   | 'orders.syncRecent'
+  | 'orders.backfillHistory'
   | 'violation.scanProducts';
 export type ScheduledJobStatus = 'idle' | 'running' | 'waiting_user' | 'completed' | 'failed' | 'skipped';
 
@@ -40,6 +41,12 @@ export interface ScheduledJob<TPayload = unknown> {
   accountStats?: Record<string, ScheduledJobRunStats>;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface OrderHistoryBackfillPayload {
+  lookbackDays?: number;
+  cursorByAccountId?: Record<string, number>;
+  completedAt?: number;
 }
 
 export interface LogEntry {
@@ -469,7 +476,7 @@ export type OrderScope =
 
 export type OrderSearchSource = 'local' | 'remote';
 
-export type StoredOrderSource = 'autoSync' | 'manualRefresh' | 'remoteSearch' | 'detailRefresh';
+export type StoredOrderSource = 'autoSync' | 'manualRefresh' | 'historyBackfill' | 'remoteSearch' | 'detailRefresh';
 
 export interface StoredOrderSnapshot {
   accountId: string;
