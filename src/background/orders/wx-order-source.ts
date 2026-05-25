@@ -1,5 +1,8 @@
 import type { Order, OrderListParams, OrderSearchParams } from '../../shared/types';
 import { getClient } from '../wxshop/client-registry';
+import { getRecentOrderWindow, makeRecentOrderWindowState, moveRecentOrderWindowBack } from './recent-order-window';
+
+const MAX_EMPTY_RECENT_WINDOWS = 5;
 
 async function fetchOrderDetails(
   orderIds: string[],
@@ -22,9 +25,24 @@ export function createWxOrderSource(): WxOrderSource {
   return {
     async fetchRecentOrders(accountId: string): Promise<Order[]> {
       const api = await getClient(accountId);
-      const params: OrderListParams = { page_size: 50 };
-      const listResult = await api.getOrderList(params);
-      return fetchOrderDetails(listResult.order_id_list, api.getOrderDetail);
+      const state = makeRecentOrderWindowState();
+      let scannedEmptyWindows = 0;
+
+      while (scannedEmptyWindows < MAX_EMPTY_RECENT_WINDOWS) {
+        const timeRange = getRecentOrderWindow(state);
+        if (!timeRange) return [];
+        const params: OrderListParams = {
+          page_size: 50,
+          create_time_range: timeRange,
+        };
+        const listResult = await api.getOrderList(params);
+        const orders = await fetchOrderDetails(listResult.order_id_list, api.getOrderDetail);
+        if (orders.length > 0 || listResult.has_more) return orders;
+        scannedEmptyWindows += 1;
+        moveRecentOrderWindowBack(state);
+      }
+
+      return [];
     },
 
     async searchOrders(accountId: string, params: OrderSearchParams): Promise<Order[]> {

@@ -85,6 +85,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
   const [preparingTaobaoRefundOrderIds, setPreparingTaobaoRefundOrderIds] = useState<Set<string>>(new Set());
   const tableAreaRef = useRef<HTMLDivElement>(null);
   const refundSyncTimerIdsRef = useRef<number[]>([]);
+  const initialRefreshStartedRef = useRef<Set<string>>(new Set());
   const [scrollY, setScrollY] = useState(400);
   const ordersQuery = useOrdersQuery(scope, activeStatus, activeSearch, timeScope, searchSource);
   const syncStateQuery = useOrderSyncStateQuery(scope);
@@ -110,6 +111,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
   const realAddressCaches = realAddressCachesQuery.data || {};
   const orderError = ordersQuery.error instanceof Error ? ordersQuery.error.message : '';
   const error = orderError && orderError !== hiddenError ? orderError : null;
+  const scopeKey = scope.type === 'all' ? 'all' : `account:${scope.accountId}`;
 
   const scheduleTaobaoRefundStatusSync = useCallback((session: TaobaoRefundSession) => {
     message.success('淘宝退款申请已自动提交，稍后同步淘宝订单状态');
@@ -157,6 +159,26 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
     setDetailAccountId('');
     setDetailOrderId('');
   }, [scope]);
+
+  useEffect(() => {
+    if (!syncStateQuery.isSuccess) return;
+    if (ordersQuery.isLoading || ordersQuery.isFetching || refreshOrdersMutation.isPending || syncStateQuery.data?.running) return;
+    if (orders.length > 0 || syncStateQuery.data?.lastFinishedAt || initialRefreshStartedRef.current.has(scopeKey)) return;
+    initialRefreshStartedRef.current.add(scopeKey);
+    refreshOrdersMutation.mutate(undefined, {
+      onSuccess: () => {
+        void ordersQuery.refetch();
+      },
+      onError: (err: any) => message.error(`订单首次同步失败: ${err.message}`),
+    });
+  }, [
+    orders.length,
+    ordersQuery,
+    refreshOrdersMutation,
+    scopeKey,
+    syncStateQuery.data,
+    syncStateQuery.isSuccess,
+  ]);
 
   useEffect(() => {
     const errors = [
