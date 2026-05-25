@@ -779,7 +779,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
           size="small"
           loading={loading}
           pagination={false}
-          scroll={{ x: 1090, y: scrollY }}
+          scroll={{ x: 1146, y: scrollY }}
           styles={{
             content: { height: '100%', display: 'flex', flexDirection: 'column' },
             section: { flex: 1 },

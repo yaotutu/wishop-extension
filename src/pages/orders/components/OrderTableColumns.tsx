@@ -50,6 +50,17 @@ interface CreateOrderColumnsOptions {
 export function createOrderColumns(options: CreateOrderColumnsOptions) {
   const columns = [
     {
+      title: '序号',
+      key: 'serial',
+      width: 56,
+      align: 'center' as const,
+      render: (_: unknown, _record: OrderTableRecord, index: number) => (
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          {index + 1}
+        </Text>
+      ),
+    },
+    {
       title: '订单信息',
       key: 'order_info',
       width: 300,
