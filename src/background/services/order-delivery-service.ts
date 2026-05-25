@@ -173,6 +173,10 @@ export async function shipOrderFromPurchase(input: ShipOrderFromPurchaseInput): 
       runId,
       title: '手动回填微信小店发货失败',
       error: { message },
+      notification: {
+        topic: 'orders.shipment_failed',
+        urgency: 'important',
+      },
       metadata: {
         orderId: input.orderId,
         source: 'purchaseLookup',

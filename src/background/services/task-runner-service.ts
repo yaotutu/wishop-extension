@@ -42,6 +42,10 @@ export async function runTask(accountId: string, taskConfig: TaskConfig, taskSes
         runId,
         title: '单账号手动提审失败',
         error: { message: `配额检查失败: ${error.message}` },
+        notification: {
+          topic: 'listing.audit_failed',
+          urgency: 'important',
+        },
       });
       logger.error('配额检查失败:', error);
       return { scanned: 0, deleted: 0, listed: 0, errors: 0, skipped: 0, stopped: true, reason: `配额检查失败: ${error.message}` };
@@ -71,6 +75,12 @@ export async function runTask(accountId: string, taskConfig: TaskConfig, taskSes
       level: result.stopped || result.errors > 0 ? 'warning' : 'success',
       title: '单账号手动提审完成',
       detail: result.reason ? `原因：${result.reason}` : undefined,
+      ...(result.stopped || result.errors > 0 ? {
+        notification: {
+          topic: 'listing.audit_warning' as const,
+          urgency: 'normal' as const,
+        },
+      } : {}),
       summary: {
         scanned: result.scanned,
         listed: result.listed,
@@ -90,6 +100,10 @@ export async function runTask(accountId: string, taskConfig: TaskConfig, taskSes
       runId,
       title: '单账号手动提审异常',
       error: { message: error?.message || String(error) },
+      notification: {
+        topic: 'listing.audit_failed',
+        urgency: 'important',
+      },
     });
     throw error;
   } finally {

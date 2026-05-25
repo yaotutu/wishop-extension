@@ -313,6 +313,10 @@ export async function reportPurchaseLookupChallenge(
     ...purchaseLookupLogBase(next),
     title: '淘宝订单读取需要用户处理验证',
     detail: snapshot.reason || '淘宝工作页需要登录或安全验证。',
+    notification: {
+      topic: 'taobao.security_challenge',
+      urgency: 'important',
+    },
     metadata: {
       ...purchaseLookupLogBase(next).metadata,
       challengeKind: snapshot.kind,
@@ -371,6 +375,10 @@ export async function failPurchaseLookupSession(sessionId: string, error: string
     ...purchaseLookupLogBase(session),
     title: '淘宝订单读取失败',
     error: { message: error },
+    notification: {
+      topic: 'orders.purchase_lookup_failed',
+      urgency: 'important',
+    },
   });
   emitPurchaseLookupEvent('purchaseLookup:failed', {
     accountId: session.accountId,
@@ -403,6 +411,10 @@ export function installPurchaseLookupTabCleanup(): void {
       ...purchaseLookupLogBase(next),
       title: '淘宝订单读取失败',
       error: { message: errorMessage },
+      notification: {
+        topic: 'orders.purchase_lookup_failed',
+        urgency: 'important',
+      },
     });
     emitPurchaseLookupEvent('purchaseLookup:failed', {
       accountId: session.accountId,

@@ -17,17 +17,13 @@ function normalizePreference(value: unknown): NotificationPreference {
   const input = value as Partial<NotificationPreference> | undefined;
   return {
     inAppEnabled: input?.inAppEnabled ?? DEFAULT_NOTIFICATION_PREFERENCE.inAppEnabled,
-    levelEnabled: {
-      ...DEFAULT_NOTIFICATION_PREFERENCE.levelEnabled,
-      ...(input?.levelEnabled || {}),
+    topicEnabled: {
+      ...DEFAULT_NOTIFICATION_PREFERENCE.topicEnabled,
+      ...(input?.topicEnabled || {}),
     },
     moduleEnabled: {
       ...DEFAULT_NOTIFICATION_PREFERENCE.moduleEnabled,
       ...(input?.moduleEnabled || {}),
-    },
-    eventTypeEnabled: {
-      ...DEFAULT_NOTIFICATION_PREFERENCE.eventTypeEnabled,
-      ...(input?.eventTypeEnabled || {}),
     },
   };
 }
@@ -62,17 +58,13 @@ export async function setNotificationPreference(patch: Partial<NotificationPrefe
   const next = normalizePreference({
     ...current,
     ...patch,
-    levelEnabled: {
-      ...current.levelEnabled,
-      ...(patch.levelEnabled || {}),
+    topicEnabled: {
+      ...current.topicEnabled,
+      ...(patch.topicEnabled || {}),
     },
     moduleEnabled: {
       ...current.moduleEnabled,
       ...(patch.moduleEnabled || {}),
-    },
-    eventTypeEnabled: {
-      ...current.eventTypeEnabled,
-      ...(patch.eventTypeEnabled || {}),
     },
   });
   await chrome.storage.local.set({ [NOTIFICATION_PREFERENCE_KEY]: next });

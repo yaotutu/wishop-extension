@@ -72,6 +72,15 @@ const migrations: Record<number, Migration> = {
       storageVersion: 7,
     };
   },
+  8(store) {
+    return {
+      ...store,
+      globalLogs: [],
+      notifications: [],
+      notificationPreference: DEFAULT_NOTIFICATION_PREFERENCE,
+      storageVersion: 8,
+    };
+  },
 };
 
 export async function migrateStore(): Promise<void> {

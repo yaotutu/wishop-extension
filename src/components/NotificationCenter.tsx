@@ -3,7 +3,8 @@ import { Button, Drawer, Empty, FloatButton, List, Space, Switch, Tag, Typograph
 import { BellOutlined, CheckOutlined, ClearOutlined, ReloadOutlined, SettingOutlined } from '@ant-design/icons';
 import { useNotifications } from '../hooks/useIpc';
 import type { GlobalLogEventType, GlobalLogLevel, GlobalLogModule, GlobalLogTaskKind } from '../shared/global-log';
-import type { NotificationEntry, NotificationPreference } from '../shared/notification';
+import type { NotificationEntry, NotificationPreference, NotificationTopic } from '../shared/notification';
+import { NOTIFICATION_TOPIC_DEFINITIONS } from '../shared/notification';
 
 const { Text } = Typography;
 
@@ -47,6 +48,13 @@ const taskKindLabels: Record<GlobalLogTaskKind, string> = {
 };
 
 const notificationModules: GlobalLogModule[] = ['listing', 'orders', 'violation', 'store', 'scheduler', 'system'];
+const notificationTopicsByModule = NOTIFICATION_TOPIC_DEFINITIONS.reduce((acc, definition) => {
+  const current = acc[definition.module] || [];
+  return { ...acc, [definition.module]: [...current, definition.topic] };
+}, {} as Partial<Record<GlobalLogModule, NotificationTopic[]>>);
+const notificationTopicById = Object.fromEntries(
+  NOTIFICATION_TOPIC_DEFINITIONS.map(definition => [definition.topic, definition]),
+) as Record<NotificationTopic, typeof NOTIFICATION_TOPIC_DEFINITIONS[number]>;
 
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleString('zh-CN', {
@@ -69,16 +77,25 @@ function unreadSeverity(notifications: NotificationEntry[]): GlobalLogLevel | nu
 
 function PreferenceRow({
   label,
+  description,
   checked,
   onChange,
 }: {
   label: string;
+  description?: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-      <Text>{label}</Text>
+      <div style={{ minWidth: 0 }}>
+        <Text>{label}</Text>
+        {description && (
+          <div>
+            <Text type="secondary" style={{ fontSize: 12 }}>{description}</Text>
+          </div>
+        )}
+      </div>
       <Switch size="small" checked={checked} onChange={onChange} />
     </div>
   );
@@ -98,30 +115,6 @@ function NotificationPreferencePanel({
         checked={preference.inAppEnabled}
         onChange={checked => onChange({ inAppEnabled: checked })}
       />
-      <PreferenceRow
-        label="失败时通知"
-        checked={preference.levelEnabled.error}
-        onChange={checked => onChange({
-          levelEnabled: { ...preference.levelEnabled, error: checked },
-          eventTypeEnabled: { ...preference.eventTypeEnabled, failed: checked },
-        })}
-      />
-      <PreferenceRow
-        label="需要处理/警告时通知"
-        checked={preference.levelEnabled.warning}
-        onChange={checked => onChange({
-          levelEnabled: { ...preference.levelEnabled, warning: checked },
-          eventTypeEnabled: { ...preference.eventTypeEnabled, waiting_user: checked, skipped: checked },
-        })}
-      />
-      <PreferenceRow
-        label="成功时通知"
-        checked={preference.levelEnabled.success}
-        onChange={checked => onChange({
-          levelEnabled: { ...preference.levelEnabled, success: checked },
-          eventTypeEnabled: { ...preference.eventTypeEnabled, completed: checked },
-        })}
-      />
       <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 10, display: 'grid', gap: 8 }}>
         <Text type="secondary" style={{ fontSize: 12 }}>按模块接收</Text>
         {notificationModules.map(module => (
@@ -134,6 +127,32 @@ function NotificationPreferencePanel({
             })}
           />
         ))}
+      </div>
+      <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 10, display: 'grid', gap: 12 }}>
+        <Text type="secondary" style={{ fontSize: 12 }}>按业务场景接收</Text>
+        {notificationModules.map(module => {
+          const topics = notificationTopicsByModule[module] || [];
+          if (topics.length === 0) return null;
+          return (
+            <div key={module} style={{ display: 'grid', gap: 8 }}>
+              <Text strong style={{ fontSize: 13 }}>{moduleLabels[module]}</Text>
+              {topics.map(topic => {
+                const definition = notificationTopicById[topic];
+                return (
+                  <PreferenceRow
+                    key={topic}
+                    label={definition.label}
+                    description={definition.description}
+                    checked={preference.topicEnabled[topic] !== false}
+                    onChange={checked => onChange({
+                      topicEnabled: { ...preference.topicEnabled, [topic]: checked },
+                    })}
+                  />
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -160,6 +179,7 @@ function NotificationItem({
             <Tag color={levelColors[notification.level]} variant="filled">{levelLabels[notification.level]}</Tag>
             <Tag color={levelColors[notification.level]} variant="outlined">{eventLabels[notification.eventType]}</Tag>
             <Tag>{moduleLabels[notification.module]}</Tag>
+            <Tag>{notificationTopicById[notification.topic]?.label || notification.topic}</Tag>
             {notification.taskKind && <Tag>{taskKindLabels[notification.taskKind]}</Tag>}
             {!notification.readAt && <Tag color="red">未读</Tag>}
           </Space>

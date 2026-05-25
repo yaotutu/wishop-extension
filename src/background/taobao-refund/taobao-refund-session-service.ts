@@ -159,6 +159,10 @@ export async function reportTaobaoRefundChallenge(
     ...taobaoRefundLogBase(next),
     title: '淘宝退款申请需要用户处理验证',
     detail: snapshot.reason || '淘宝退款页需要登录或安全验证。',
+    notification: {
+      topic: 'taobao.security_challenge',
+      urgency: 'important',
+    },
     metadata: {
       ...taobaoRefundLogBase(next).metadata,
       challengeKind: snapshot.kind,
@@ -251,6 +255,10 @@ export async function failTaobaoRefundSession(sessionId: string, error: string):
     ...taobaoRefundLogBase(session),
     title: '淘宝退款申请准备失败',
     error: { message: error },
+    notification: {
+      topic: 'orders.refund_failed',
+      urgency: 'important',
+    },
   });
   emitTaobaoRefundEvent('taobaoRefund:failed', {
     accountId: session.accountId,
@@ -281,6 +289,10 @@ export function installTaobaoRefundTabCleanup(): void {
       ...taobaoRefundLogBase(next),
       title: '淘宝退款申请准备失败',
       error: { message: errorMessage },
+      notification: {
+        topic: 'orders.refund_failed',
+        urgency: 'important',
+      },
     });
     emitTaobaoRefundEvent('taobaoRefund:failed', {
       accountId: session.accountId,

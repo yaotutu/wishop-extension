@@ -1,3 +1,5 @@
+import type { GlobalLogNotificationIntent } from './notification';
+
 export type GlobalLogLevel = 'info' | 'success' | 'warning' | 'error';
 export type GlobalLogModule = 'listing' | 'violation' | 'orders' | 'store' | 'scheduler' | 'system';
 export type GlobalLogScope = 'global' | 'account';
@@ -34,6 +36,7 @@ export interface GlobalLogEntry {
   detail?: string;
   summary?: GlobalLogSummary;
   error?: GlobalLogError;
+  notification?: GlobalLogNotificationIntent;
   metadata?: Record<string, string | number | boolean | null>;
 }
 

@@ -171,6 +171,7 @@ PR 应包含清晰摘要、验证命令、关联 issue 或任务背景，以及 
 - 后台全局日志基础设施位于 `src/background/global-logs/`。
 - UI 通过 `src/hooks/useGlobalLogs.ts` 读取全局日志，并在 `src/components/GlobalLogDrawer.tsx` 中展示。
 - 业务模块必须通过 `src/background/global-logs/global-log-service.ts` 写入全局日志；不要在业务代码中直接写 `chrome.storage.local.globalLogs`。
+- 需要生成用户通知的业务事件，应在调用 `recordTaskFailed`、`recordTaskSkipped`、`recordTaskWaitingUser` 等全局日志方法时，通过 `notification.topic` 声明通知意图；不要在业务模块里直接调用通知中心。
 - 当前 sink 包括本地存储、runtime 事件通知和预留的云上传 sink。云上传失败绝不能阻断业务任务。
 
 全局日志适用于：
@@ -205,14 +206,18 @@ PR 应包含清晰摘要、验证命令、关联 issue 或任务背景，以及 
 - 后台通知中心位于 `src/background/notification-center/`。
 - 通知 IPC 位于 `src/background/runtime-handlers/notification-handlers.ts`，并通过 `src/shared/extension-api.ts` 暴露。
 - UI 入口位于 `src/components/NotificationCenter.tsx`。
+- 通知主题 `NotificationTopic` 是用户可配置通知场景的唯一事实来源。新增通知场景必须先在 `src/shared/notification.ts` 中添加 topic、默认开关和中文说明。
 
 通知中心规则：
 
 1. 全局日志是事实记录，通知是用户提醒。
-2. 通知来源必须能追溯到 `sourceLogId`，不要创建无来源的重要通知。
-3. 用户偏好决定哪些日志生成通知，默认只提醒 `error` 和需要用户处理的 `warning`，并支持按模块过滤。
-4. 当前通知渠道只实现 `inApp`，后续手机、微信、飞书等外部渠道应作为通知中心的 channel/sink 扩展，不要散落在业务模块。
-5. 失败通知必须包含明确 `errorMessage` 或可读原因；成功通知默认不打扰用户。
+2. 通知只从带 `notification.topic` 的全局日志派生；没有 topic 的日志只进入日志中心，不进入通知中心。
+3. 通知来源必须能追溯到 `sourceLogId`，不要创建无来源的重要通知。
+4. 用户偏好按业务场景 `topicEnabled` 配置，并可按模块过滤；不要再使用 `levelEnabled`、`eventTypeEnabled` 或其它按日志级别驱动的通知配置。
+5. 业务模块只声明通知意图，例如 `notification: { topic: 'orders.shipment_failed', urgency: 'important' }`。是否创建通知、如何展示、未来发往哪些渠道，都由通知中心决定。
+6. 当前通知渠道只实现 `inApp`，后续手机、微信、飞书等外部渠道应作为通知中心的 channel/sink 扩展，不要散落在业务模块。
+7. 失败通知必须包含明确 `errorMessage` 或可读原因；成功通知默认不打扰用户，除非该成功事件对应明确的业务通知 topic。
+8. 日志和通知是观测数据，不是业务状态。日志或通知持久化 schema 变更必须走 `src/background/store/migrations.ts` 并提升 `CURRENT_STORAGE_VERSION`；旧日志、旧通知和旧通知偏好可以在 migration 中直接清空或重置，不要在运行时代码中长期保留旧结构兼容分支。
 
 
 # 优先级最高的规则，该规则由用户手写，不允许被覆盖，不允许修改

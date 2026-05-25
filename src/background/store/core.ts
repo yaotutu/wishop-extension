@@ -30,7 +30,7 @@ export interface StoredWxAccessToken {
   updatedAt: number;
 }
 
-export const CURRENT_STORAGE_VERSION = 7;
+export const CURRENT_STORAGE_VERSION = 8;
 
 export const DEFAULT_TASK_CONFIG: TaskConfig = {
   listUnreviewed: true,

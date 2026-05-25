@@ -260,6 +260,10 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
       taskKind: taskKind(job),
       title: '定时任务跳过',
       detail: `今日已执行 ${todayRunCount}，达到任务上限 ${job.dailyLimit}`,
+      notification: {
+        topic: 'scheduled_job.skipped',
+        urgency: 'normal',
+      },
     });
     return { listed: 0, status: 'skipped', message: null, error: `今日已执行 ${todayRunCount}，达到任务上限 ${job.dailyLimit}`, completed: false };
   }
@@ -327,6 +331,10 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
         taskKind: taskKind(job),
         title: '定时任务跳过',
         detail,
+        notification: {
+          topic: 'scheduled_job.skipped',
+          urgency: 'normal',
+        },
       });
       return { listed: countIncrement, status, message: detail ?? null, error: null, completed: result.completed };
     }
@@ -343,6 +351,12 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
       level: status === 'failed' ? 'warning' : 'success',
       title: '定时任务执行完成',
       detail,
+      ...(status === 'failed' ? {
+        notification: {
+          topic: 'scheduled_job.failed' as const,
+          urgency: 'important' as const,
+        },
+      } : {}),
       summary: { listed: result.listed },
     });
     return { listed: countIncrement, status, message: status === 'failed' ? null : detail ?? null, error: errorMessage ?? null, completed: result.completed };
@@ -368,6 +382,10 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
       runId,
       title: '定时任务执行失败',
       error: { message },
+      notification: {
+        topic: 'scheduled_job.failed',
+        urgency: 'important',
+      },
     });
     return { listed: 1, status: 'failed', message: null, error: message, completed: false };
   }
