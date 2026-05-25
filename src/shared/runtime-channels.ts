@@ -31,6 +31,7 @@ import type {
   PurchaseLookupSession,
   QuotaResult,
   ScheduledJob,
+  ScheduledJobRunNowResult,
   ShippingSession,
   TaobaoRefundPrepareSnapshot,
   TaobaoRefundSession,
@@ -130,6 +131,7 @@ export interface RuntimeChannels {
   'scheduledJobs:add': { args: [job: Omit<ScheduledJob, 'id' | 'stats' | 'createdAt' | 'updatedAt'>]; result: ScheduledJob };
   'scheduledJobs:update': { args: [jobId: string, patch: Partial<ScheduledJob>]; result: void };
   'scheduledJobs:remove': { args: [jobId: string]; result: void };
+  'scheduledJobs:runNow': { args: [jobId: string]; result: ScheduledJobRunNowResult };
 
   'taskConfig:get': { args: [accountId: string]; result: TaskConfig };
   'taskConfig:set': { args: [accountId: string, config: TaskConfig]; result: void };

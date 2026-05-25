@@ -1,6 +1,12 @@
 import type { GlobalLogModule } from '../../shared/global-log';
 import type { GlobalLogScope, GlobalLogTaskKind } from '../../shared/global-log';
-import type { ScheduledJob, ScheduledJobRunStats, ScheduledJobStatus, ScheduledJobType } from '../../shared/types';
+import type {
+  ScheduledJob,
+  ScheduledJobRunNowResult,
+  ScheduledJobRunStats,
+  ScheduledJobStatus,
+  ScheduledJobType,
+} from '../../shared/types';
 import { getAccounts, getAccount } from '../store/account-repository';
 import {
   getScheduledJob,
@@ -204,8 +210,39 @@ export async function stopAllScheduledJobs(): Promise<void> {
   );
 }
 
-async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promise<void> {
-  if (!job.enabled) return;
+export async function getScheduledJobNextRunAt(job: ScheduledJob): Promise<number | undefined> {
+  if (!job.enabled) return undefined;
+  const alarms = await chrome.alarms.getAll();
+  if (job.scope === 'global') {
+    return alarms
+      .filter(alarm => alarm.name.startsWith(`${GLOBAL_JOB_ALARM_PREFIX}${job.id}:`))
+      .map(alarm => alarm.scheduledTime)
+      .sort((a, b) => a - b)[0];
+  }
+  return alarms.find(alarm => alarm.name === accountAlarmName(job.id))?.scheduledTime;
+}
+
+function aggregateRunResults(results: ScheduledJobRunNowResult[]): ScheduledJobRunNowResult {
+  if (results.length === 0) return { listed: 0, status: 'skipped', error: '没有可执行账号' };
+  const listed = results.reduce((sum, result) => sum + result.listed, 0);
+  const failed = results.filter(result => result.status === 'failed');
+  const completed = results.filter(result => result.status === 'completed');
+  const status: ScheduledJobStatus = failed.length === results.length
+    ? 'failed'
+    : completed.length > 0
+      ? 'completed'
+      : 'skipped';
+  return {
+    listed,
+    status,
+    error: failed.length > 0
+      ? `手动执行完成，失败 ${failed.length}/${results.length} 个账号：${failed.map(result => result.error).filter(Boolean).join('; ')}`
+      : results.map(result => result.error).filter(Boolean).join('; ') || undefined,
+  };
+}
+
+async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promise<ScheduledJobRunNowResult> {
+  if (!job.enabled) return { listed: 0, status: 'skipped', error: '任务已停用' };
   const targetAccountId = accountId || job.accountId;
   const stat = statsFor(job, targetAccountId);
   const currentDate = todayKey();
@@ -224,7 +261,7 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
       title: '定时任务跳过',
       detail: `今日已执行 ${todayRunCount}，达到任务上限 ${job.dailyLimit}`,
     });
-    return;
+    return { listed: 0, status: 'skipped', error: `今日已执行 ${todayRunCount}，达到任务上限 ${job.dailyLimit}` };
   }
 
   const runId = `${job.scope === 'global' ? 'global-job' : job.scope === 'system' ? 'system-job' : 'job'}-${job.id}-${Date.now()}`;
@@ -281,7 +318,7 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
         title: '定时任务跳过',
         detail: result?.error,
       });
-      return;
+      return { listed: countIncrement, status, error: result?.error };
     }
 
     await recordTaskCompleted({
@@ -298,6 +335,7 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
       detail: result?.error,
       summary: { listed: result?.listed },
     });
+    return { listed: countIncrement, status, error: result?.error };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await patchStatsFor(job, targetAccountId, {
@@ -319,7 +357,31 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
       title: '定时任务执行失败',
       error: { message },
     });
+    return { listed: 1, status: 'failed', error: message };
   }
+}
+
+export async function runScheduledJobNow(jobId: string): Promise<ScheduledJobRunNowResult> {
+  const job = await getScheduledJob(jobId);
+  if (!job) throw new Error('定时任务不存在');
+  if (!job.enabled) throw new Error('任务已停用，无法手动执行');
+
+  let result: ScheduledJobRunNowResult;
+  if (job.scope === 'global') {
+    const accounts = (await getAccounts()).filter(account => !(job.excludedAccountIds || []).includes(account.id));
+    const results: ScheduledJobRunNowResult[] = [];
+    for (const account of accounts) {
+      results.push(await executeScheduledJob(job, account.id));
+    }
+    result = aggregateRunResults(results);
+  } else {
+    result = await executeScheduledJob(job);
+  }
+
+  const latestJob = await getScheduledJob(jobId);
+  if (latestJob?.enabled) await startScheduledJob(latestJob);
+  else await stopScheduledJob(jobId);
+  return result;
 }
 
 export function installScheduledJobAlarmListener(): void {

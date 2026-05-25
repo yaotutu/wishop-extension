@@ -28,6 +28,7 @@ import type {
   PurchaseLookupSession,
   QuotaResult,
   ScheduledJob,
+  ScheduledJobRunNowResult,
   ShippingSession,
   StatusRule,
   TaobaoWorkspaceRole,
@@ -228,6 +229,7 @@ export const extensionApi = {
       invoke('scheduledJobs:add', job),
     update: (jobId: string, patch: Partial<ScheduledJob>): Promise<void> => invoke('scheduledJobs:update', jobId, patch),
     remove: (jobId: string): Promise<void> => invoke('scheduledJobs:remove', jobId),
+    runNow: (jobId: string): Promise<ScheduledJobRunNowResult> => invoke('scheduledJobs:runNow', jobId),
   },
   taskConfig: {
     get: (accountId: string): Promise<TaskConfig> => invoke('taskConfig:get', accountId),

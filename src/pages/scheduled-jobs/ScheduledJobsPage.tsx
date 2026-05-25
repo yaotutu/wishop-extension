@@ -1,11 +1,12 @@
-import React, { useMemo } from 'react';
-import { Button, Empty, Space, Table, Tag, Tooltip } from 'antd';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Button, Empty, Space, Table, Tag, Tooltip, message } from 'antd';
 import type { TableProps } from 'antd';
-import { ReloadOutlined } from '@ant-design/icons';
-import { useQuery } from '@tanstack/react-query';
+import { PlayCircleOutlined, ReloadOutlined } from '@ant-design/icons';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { extensionApi } from '../../shared/extension-api';
 import type { Account, ScheduledJob, ScheduledJobRunStats, ScheduledJobStatus } from '../../shared/types';
 import { queryKeys } from '../../query/query-keys';
+import { formatCron, nextRunCountdownText } from './scheduled-job-display';
 
 interface ScheduledJobsPageProps {
   accounts: Account[];
@@ -53,19 +54,6 @@ function formatTime(timestamp?: number): string {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function formatCron(cronExpression: string): string {
-  const daily = cronExpression.match(/^(\d+)\s+(\d+)\s+\*\s+\*\s+\*$/);
-  if (daily) return `每天 ${daily[2].padStart(2, '0')}:${daily[1].padStart(2, '0')}`;
-
-  const everyMinutes = cronExpression.match(/^\*\/(\d+)\s+\*\s+\*\s+\*\s+\*$/);
-  if (everyMinutes) return `每 ${everyMinutes[1]} 分钟`;
-
-  const hourly = cronExpression.match(/^(\d+)\s+\*\s+\*\s+\*\s+\*$/);
-  if (hourly) return `每小时第 ${hourly[1].padStart(2, '0')} 分钟`;
-
-  return cronExpression;
 }
 
 function todayKey(): string {
@@ -122,15 +110,47 @@ function effectiveStats(job: ScheduledJob): ScheduledJobRunStats {
 }
 
 const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
+  const queryClient = useQueryClient();
+  const [now, setNow] = useState(() => Date.now());
+  const [runningJobId, setRunningJobId] = useState('');
   const accountNameById = useMemo(
     () => new Map(accounts.map(account => [account.id, account.name])),
     [accounts],
   );
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const { data = [], isLoading, refetch, isFetching } = useQuery({
     queryKey: queryKeys.scheduledJobs.list,
     queryFn: () => extensionApi.scheduledJobs.list(),
     refetchInterval: 5000,
+  });
+
+  const runNowMutation = useMutation({
+    mutationFn: (jobId: string) => extensionApi.scheduledJobs.runNow(jobId),
+    onMutate: (jobId) => {
+      setRunningJobId(jobId);
+    },
+    onSuccess: (result) => {
+      if (result.status === 'failed') {
+        message.error(result.error || '任务执行失败');
+      } else if (result.status === 'skipped') {
+        message.warning(result.error || '任务已跳过');
+      } else {
+        message.success(result.error || `任务执行完成，处理 ${result.listed} 项`);
+      }
+      void queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.list });
+      void refetch();
+    },
+    onError: (err: any) => {
+      message.error(`任务执行失败: ${err?.message || String(err)}`);
+    },
+    onSettled: () => {
+      setRunningJobId('');
+    },
   });
 
   const rows = useMemo(
@@ -202,10 +222,13 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
     {
       title: '计划',
       key: 'schedule',
-      width: 170,
+      width: 190,
       render: (_, job) => (
         <Space size={4} vertical>
           <span>{formatCron(job.cronExpression)}</span>
+          <Tag color={job.enabled && job.nextRunAt ? 'geekblue' : 'default'}>
+            {nextRunCountdownText(job, now)}
+          </Tag>
           {job.scope === 'global' && <span style={{ color: '#999', fontSize: 12 }}>错峰 {job.staggerMinutes || 0} 分钟/账号</span>}
         </Space>
       ),
@@ -248,6 +271,23 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
       width: 140,
       render: (updatedAt: number) => formatTime(updatedAt),
     },
+    {
+      title: '操作',
+      key: 'actions',
+      width: 120,
+      fixed: 'right',
+      render: (_, job) => (
+        <Button
+          size="small"
+          icon={<PlayCircleOutlined />}
+          disabled={!job.enabled}
+          loading={runNowMutation.isPending && runningJobId === job.id}
+          onClick={() => runNowMutation.mutate(job.id)}
+        >
+          立即执行
+        </Button>
+      ),
+    },
   ];
 
   return (
@@ -272,7 +312,7 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
           columns={columns}
           dataSource={rows}
           pagination={{ pageSize: 20, showSizeChanger: false }}
-          scroll={{ x: 1160, y: 'calc(100vh - 190px)' }}
+          scroll={{ x: 1280, y: 'calc(100vh - 190px)' }}
           locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无调度任务" /> }}
         />
       </div>

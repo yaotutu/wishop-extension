@@ -39,8 +39,15 @@ export interface ScheduledJob<TPayload = unknown> {
   payload: TPayload;
   stats: ScheduledJobRunStats;
   accountStats?: Record<string, ScheduledJobRunStats>;
+  nextRunAt?: number;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface ScheduledJobRunNowResult {
+  listed: number;
+  status: ScheduledJobStatus;
+  error?: string;
 }
 
 export interface OrderHistoryBackfillPayload {

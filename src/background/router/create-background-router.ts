@@ -85,6 +85,7 @@ const FEATURE_CHANNELS = {
   'scheduledJobs:add': 'listing',
   'scheduledJobs:update': 'listing',
   'scheduledJobs:remove': 'listing',
+  'scheduledJobs:runNow': 'listing',
   'task:run': 'listing',
   'task:stop': 'listing',
   'taskConfig:get': 'listing',

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { ScheduledJob } from '../src/shared/types.ts';
+import { ORDER_HISTORY_BACKFILL_CRON } from '../src/background/orders/order-sync-schedule.ts';
 import { RECENT_ORDER_WINDOW_SECONDS } from '../src/background/orders/recent-order-window.ts';
 import { planOrderHistoryBackfillWindow } from '../src/background/orders/order-history-backfill-window.ts';
 
@@ -22,6 +23,10 @@ test('supports one-minute system-level order sync jobs', () => {
   assert.equal(job.scope, 'system');
   assert.equal(job.jobType, 'orders.syncRecent');
   assert.equal(job.cronExpression, '*/1 * * * *');
+});
+
+test('runs order history backfill every three minutes by default', () => {
+  assert.equal(ORDER_HISTORY_BACKFILL_CRON, '*/3 * * * *');
 });
 
 test('plans order history backfill one seven-day window behind incremental sync', () => {
