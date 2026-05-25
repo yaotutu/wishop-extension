@@ -29,6 +29,12 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function formatFailedAccounts(failedAccounts: OrderRefreshResult['failedAccounts']): string {
+  return failedAccounts
+    .map(item => `${item.accountName || item.accountId}: ${item.error}`)
+    .join('; ');
+}
+
 export function createOrderSyncService(deps: OrderSyncServiceDeps) {
   const now = deps.now || Date.now;
   const inFlightRefreshes = new Map<string, Promise<AccountRefreshResult>>();
@@ -44,7 +50,9 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
     if (existing) return existing;
     const promise = (async () => {
       await deps.store.markSyncStarted({ type: 'account', accountId: account.id });
-      const orders = await deps.source.fetchRecentOrders(account.id);
+      const orders = await deps.source.fetchRecentOrders(account.id, {
+        fallbackStatuses: source === 'manualRefresh',
+      });
       await deps.store.upsertMany(account.id, account.name, orders, source);
       return { account, orders };
     })();
@@ -101,6 +109,12 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
       finishedAt: now(),
     };
     await deps.store.markSyncFinished(scope, result);
+    if (accounts.length === 0) {
+      throw new Error(scope.type === 'account' ? `账号不存在: ${scope.accountId}` : '当前没有可刷新的账号');
+    }
+    if (failedAccounts.length === accounts.length) {
+      throw new Error(formatFailedAccounts(failedAccounts));
+    }
     return result;
   }
 

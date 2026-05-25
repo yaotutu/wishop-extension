@@ -164,3 +164,29 @@ test('all-account refresh keeps successful accounts when one account fails', asy
   assert.deepEqual(result.failedAccounts.map(item => [item.accountId, item.error]), [['bad', 'token invalid']]);
   assert.deepEqual(list.orders.map(item => item.orderId), ['good-order']);
 });
+
+test('all-account refresh rejects when every account fails', async () => {
+  const accounts = [makeAccount('bad-1', '异常店铺一'), makeAccount('bad-2', '异常店铺二')];
+  const store = createOrderStore(createMemoryStorage());
+  const sync = createOrderSyncService({
+    store,
+    source: {
+      async fetchRecentOrders(accountId) {
+        throw new Error(`${accountId} token invalid`);
+      },
+      async searchOrders() { return []; },
+      async getOrderDetail() { return makeOrder('unused'); },
+    },
+    getAccounts: async () => accounts,
+  });
+  const domain = createOrderDomainService({ store, sync });
+
+  await assert.rejects(
+    () => domain.refresh({ type: 'all' }),
+    /bad-1 token invalid.*bad-2 token invalid/,
+  );
+  const state = await store.getSyncState({ type: 'all' });
+
+  assert.match(state.lastError || '', /bad-1 token invalid/);
+  assert.match(state.lastError || '', /bad-2 token invalid/);
+});
