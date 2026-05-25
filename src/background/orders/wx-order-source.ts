@@ -1,4 +1,5 @@
 import type { Order, OrderListParams, OrderListResult, OrderSearchParams, OrderStatus } from '../../shared/types';
+import { createLogger } from '../utils/logger.ts';
 import { getRecentOrderWindow, makeRecentOrderWindowState, moveRecentOrderWindowBack } from './recent-order-window.ts';
 
 const MAX_EMPTY_RECENT_WINDOWS = 26;
@@ -47,6 +48,7 @@ export interface WxOrderSource {
 
 export interface FetchRecentOrdersOptions {
   fallbackStatuses?: boolean;
+  debug?: boolean;
 }
 
 export interface WxOrderClient {
@@ -62,11 +64,32 @@ async function defaultResolveWxOrderClient(accountId: string): Promise<WxOrderCl
   return getClient(accountId);
 }
 
+function assertValidTimeRange(
+  timeRange: NonNullable<OrderListParams['create_time_range']>,
+  accountId: string,
+  status: OrderStatus | undefined,
+): void {
+  if (
+    Number.isFinite(timeRange.start_time)
+    && Number.isFinite(timeRange.end_time)
+    && timeRange.start_time > 0
+    && timeRange.end_time >= timeRange.start_time
+  ) {
+    return;
+  }
+  throw new Error(`订单同步内部错误：订单列表请求缺少有效时间范围 accountId=${accountId}, status=${status ?? 'all'}, range=${JSON.stringify(timeRange)}`);
+}
+
 async function fetchWindowOrders(
   api: WxOrderClient,
+  accountId: string,
   timeRange: NonNullable<OrderListParams['create_time_range']>,
   status?: OrderStatus,
+  debug = false,
+  windowIndex = 0,
 ): Promise<Order[]> {
+  assertValidTimeRange(timeRange, accountId, status);
+  const logger = debug ? createLogger('OrderSource', accountId) : null;
   const orders: Order[] = [];
   let nextKey = '';
   let scannedPages = 0;
@@ -80,7 +103,34 @@ async function fetchWindowOrders(
     if (nextKey) params.next_key = nextKey;
     if (status !== undefined) params.status = status;
 
-    const listResult = await api.getOrderList(params);
+    logger?.info('订单列表请求', {
+      windowIndex,
+      page: scannedPages,
+      status: status ?? 'all',
+      create_time_range: timeRange,
+      hasNextKey: Boolean(nextKey),
+    });
+    let listResult: OrderListResult;
+    try {
+      listResult = await api.getOrderList(params);
+    } catch (error) {
+      logger?.error('订单列表请求失败', {
+        windowIndex,
+        page: scannedPages,
+        status: status ?? 'all',
+        create_time_range: timeRange,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+    logger?.info('订单列表响应', {
+      windowIndex,
+      page: scannedPages,
+      status: status ?? 'all',
+      orderIdCount: listResult.order_id_list.length,
+      hasMore: listResult.has_more,
+      hasNextKey: Boolean(listResult.next_key),
+    });
     orders.push(...await fetchOrderDetails(listResult.order_id_list, api.getOrderDetail));
     if (!listResult.has_more || !listResult.next_key || listResult.next_key === nextKey) break;
     nextKey = listResult.next_key;
@@ -91,11 +141,14 @@ async function fetchWindowOrders(
 
 async function fetchStatusWindowOrders(
   api: WxOrderClient,
+  accountId: string,
   timeRange: NonNullable<OrderListParams['create_time_range']>,
+  debug = false,
+  windowIndex = 0,
 ): Promise<Order[]> {
   const orders: Order[] = [];
   for (const status of RECENT_SYNC_FALLBACK_STATUSES) {
-    orders.push(...await fetchWindowOrders(api, timeRange, status));
+    orders.push(...await fetchWindowOrders(api, accountId, timeRange, status, debug, windowIndex));
   }
   return dedupeOrders(orders);
 }
@@ -106,14 +159,20 @@ export function createWxOrderSource(resolveClient: ResolveWxOrderClient = defaul
       const api = await resolveClient(accountId);
       const state = makeRecentOrderWindowState();
       let scannedEmptyWindows = 0;
+      const logger = options.debug ? createLogger('OrderSource', accountId) : null;
+      logger?.info('最近订单同步开始', { fallbackStatuses: Boolean(options.fallbackStatuses) });
 
       while (scannedEmptyWindows < MAX_EMPTY_RECENT_WINDOWS) {
         const timeRange = getRecentOrderWindow(state);
         if (!timeRange) return [];
-        const orders = await fetchWindowOrders(api, timeRange);
+        const orders = await fetchWindowOrders(api, accountId, timeRange, undefined, options.debug, scannedEmptyWindows + 1);
         if (orders.length > 0) return orders;
         if (options.fallbackStatuses && scannedEmptyWindows < MAX_STATUS_FALLBACK_WINDOWS) {
-          const statusOrders = await fetchStatusWindowOrders(api, timeRange);
+          logger?.info('无状态列表为空，开始按状态回退查询', {
+            windowIndex: scannedEmptyWindows + 1,
+            create_time_range: timeRange,
+          });
+          const statusOrders = await fetchStatusWindowOrders(api, accountId, timeRange, options.debug, scannedEmptyWindows + 1);
           if (statusOrders.length > 0) return statusOrders;
         }
         scannedEmptyWindows += 1;

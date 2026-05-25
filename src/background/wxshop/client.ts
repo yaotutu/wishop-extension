@@ -47,6 +47,18 @@ function normalizeOrderIds(orderIds: Array<string | number> = []): string[] {
   return orderIds.map(orderId => String(orderId).trim()).filter(Boolean);
 }
 
+function normalizeOrderTimeRange(
+  range: OrderListParams['create_time_range'],
+): NonNullable<OrderListParams['create_time_range']> | null {
+  if (!range) return null;
+  const startTime = Number(range.start_time);
+  const endTime = Number(range.end_time);
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || startTime <= 0 || endTime < startTime) {
+    return null;
+  }
+  return { start_time: startTime, end_time: endTime };
+}
+
 export function createWxShopClient(accountId: string) {
   async function request<T>(path: string, body: unknown): Promise<T> {
     const send = async (forceRefresh = false) => {
@@ -133,14 +145,40 @@ export function createWxShopClient(accountId: string) {
   }
 
   async function getOrderList(params: OrderListParams = {}): Promise<OrderListResult> {
+    const createTimeRange = normalizeOrderTimeRange(params.create_time_range);
+    const updateTimeRange = normalizeOrderTimeRange(params.update_time_range);
     const body: Record<string, unknown> = {
       page_size: params.page_size || 10,
     };
     if (params.next_key) body.next_key = params.next_key;
     if (params.status !== undefined) body.status = params.status;
-    if (params.create_time_range) body.create_time_range = params.create_time_range;
-    if (params.update_time_range) body.update_time_range = params.update_time_range;
+    if (params.create_time_range && !createTimeRange) {
+      console.error(`[WxShopOrderList:${accountId}] invalid create_time_range`, params.create_time_range);
+    }
+    if (params.update_time_range && !updateTimeRange) {
+      console.error(`[WxShopOrderList:${accountId}] invalid update_time_range`, params.update_time_range);
+    }
+    if (createTimeRange) body.create_time_range = createTimeRange;
+    if (updateTimeRange) body.update_time_range = updateTimeRange;
     if (params.order_id) body.order_id = params.order_id;
+    if (!createTimeRange && !updateTimeRange) {
+      console.error(`[WxShopOrderList:${accountId}] blocked request without valid time range`, {
+        page_size: body.page_size,
+        status: body.status,
+        hasNextKey: Boolean(body.next_key),
+        order_id: body.order_id ? '[present]' : '',
+        rawCreateTimeRange: params.create_time_range,
+        rawUpdateTimeRange: params.update_time_range,
+      });
+      throw new Error('订单列表请求缺少有效时间范围，已在本地拦截，未发送到微信接口');
+    }
+    console.info(`[WxShopOrderList:${accountId}] request`, {
+      page_size: body.page_size,
+      status: body.status ?? 'all',
+      hasNextKey: Boolean(body.next_key),
+      create_time_range: body.create_time_range,
+      update_time_range: body.update_time_range,
+    });
 
     const data = await request<any>('/channels/ec/order/list/get', body);
     if (data.errcode && data.errcode !== 0) {

@@ -6,6 +6,7 @@ import type {
   OrderSearchParams,
   StoredOrderSource,
 } from '../../shared/types';
+import { createLogger } from '../utils/logger.ts';
 import type { OrderStore } from './order-store.ts';
 import type { WxOrderSource } from './wx-order-source.ts';
 
@@ -49,11 +50,23 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
     const existing = inFlightRefreshes.get(account.id);
     if (existing) return existing;
     const promise = (async () => {
+      const logger = createLogger('OrderSync', account.id);
+      logger.info('账号订单刷新开始', {
+        accountName: account.name,
+        source,
+        fallbackStatuses: source === 'manualRefresh',
+      });
       await deps.store.markSyncStarted({ type: 'account', accountId: account.id });
       const orders = await deps.source.fetchRecentOrders(account.id, {
         fallbackStatuses: source === 'manualRefresh',
+        debug: source === 'manualRefresh',
       });
       await deps.store.upsertMany(account.id, account.name, orders, source);
+      logger.info('账号订单刷新完成', {
+        accountName: account.name,
+        orderCount: orders.length,
+        source,
+      });
       return { account, orders };
     })();
     inFlightRefreshes.set(account.id, promise);
@@ -67,8 +80,14 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
   async function refresh(scope: OrderScope, options: RefreshOptions = {}): Promise<OrderRefreshResult> {
     const reason = options.reason || 'manualRefresh';
     const startedAt = now();
+    const logger = createLogger('OrderSync');
     await deps.store.markSyncStarted(scope);
     const accounts = await resolveAccounts(scope);
+    logger.info('订单刷新任务开始', {
+      scope,
+      reason,
+      accountCount: accounts.length,
+    });
     const refreshedAccountIds: string[] = [];
     const failedAccounts: OrderRefreshResult['failedAccounts'] = [];
     let updatedOrderCount = 0;
@@ -88,6 +107,11 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
         });
       } catch (error) {
         const message = errorMessage(error);
+        createLogger('OrderSync', account.id).error('账号订单刷新失败', {
+          accountName: account.name,
+          source: reason,
+          error: message,
+        });
         failedAccounts.push({ accountId: account.id, accountName: account.name, error: message });
         await deps.store.markSyncFinished({ type: 'account', accountId: account.id }, {
           scope: { type: 'account', accountId: account.id },
@@ -109,6 +133,13 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
       finishedAt: now(),
     };
     await deps.store.markSyncFinished(scope, result);
+    logger.info('订单刷新任务结束', {
+      scope,
+      reason,
+      refreshedAccountCount: refreshedAccountIds.length,
+      failedAccountCount: failedAccounts.length,
+      updatedOrderCount,
+    });
     if (accounts.length === 0) {
       throw new Error(scope.type === 'account' ? `账号不存在: ${scope.accountId}` : '当前没有可刷新的账号');
     }

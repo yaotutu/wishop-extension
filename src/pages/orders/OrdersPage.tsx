@@ -730,8 +730,15 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
         onSearchKeywordChange={setSearchKeyword}
         onSearch={handleSearch}
         onRefresh={() => {
+          console.info('[wishop][orders:ui] manual refresh start', {
+            scope,
+            accountIds,
+            activeStatus: activeStatus ?? 'all',
+            searchSource,
+          });
           refreshOrdersMutation.mutate(undefined, {
             onSuccess: (result) => {
+              console.info('[wishop][orders:ui] manual refresh success', result);
               if (result.failedAccounts.length > 0 && result.refreshedAccountIds.length === 0) {
                 message.error(`订单刷新失败：${result.failedAccounts.map(item => item.error).join('; ')}`);
               } else if (result.updatedOrderCount === 0) {
@@ -741,7 +748,14 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
               }
               void ordersQuery.refetch();
             },
-            onError: (err: any) => message.error(`订单刷新失败: ${err.message}`),
+            onError: (err: any) => {
+              console.error('[wishop][orders:ui] manual refresh failed', {
+                scope,
+                accountIds,
+                error: err?.message || String(err),
+              });
+              message.error(`订单刷新失败: ${err.message}`);
+            },
           });
         }}
         onClearError={() => setHiddenError(orderError)}
