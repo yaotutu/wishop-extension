@@ -1,43 +1,43 @@
-# Scheduled Job Run Mode Refactor Design
+# 定时任务运行模式重构设计
 
-## Context
+## 背景
 
-The current scheduled job model represents every job as a recurring cron task. `orders.backfillHistory` behaves like a finite backfill job, but it currently implements that behavior inside its executor by updating its own scheduled job record and stopping its own alarm.
+当前 `ScheduledJob` 模型把所有任务都表达成 cron 周期任务。`orders.backfillHistory` 实际上是一个有限目标的历史补拉任务，但现在它是在自己的 executor 里直接更新任务记录、停掉自己的 alarm，从而模拟“执行完成后不再运行”。
 
-That works, but the lifecycle boundary is unclear:
+这能工作，但职责边界不清晰：
 
-- The scheduler center thinks the job is a normal recurring task.
-- The order backfill executor knows it should stop after completion.
-- The UI can only show the result as disabled, not as completed.
+- 调度中心认为它只是一个普通周期任务。
+- 订单历史补拉 executor 自己知道何时应该停止。
+- UI 只能显示它“已停用”，无法表达它是“已完成”。
 
-There is no history compatibility requirement for this refactor. The model should therefore prefer explicit required fields and precise TypeScript types over optional fields with implicit defaults.
+本次重构没有历史兼容包袱，因此模型应该优先使用明确必传字段和精确 TypeScript 类型，而不是用可选字段和隐式默认值兜底。
 
-## Goals
+## 目标
 
-- Make scheduled job lifecycle explicit in the shared model.
-- Support jobs that run repeatedly until their target is complete.
-- Keep lifecycle ownership inside the scheduler center, not business executors.
-- Make fields required when their value is always knowable.
-- Use discriminated unions for scope-specific fields instead of nullable placeholder fields.
-- Separate persisted scheduled jobs from runtime view data such as `nextRunAt`.
-- Make the scheduled jobs UI distinguish disabled jobs from completed finite jobs.
+- 明确表达定时任务生命周期。
+- 支持“重复执行直到整体目标完成”的任务。
+- 把生命周期管理放回调度中心，而不是让业务 executor 自己管理。
+- 能确定的字段必须显式必传。
+- 只对特定 scope 有意义的字段，使用 discriminated union 精确表达。
+- 区分持久化任务数据和运行时视图数据，例如 `nextRunAt`。
+- 让定时任务 UI 能区分“已停用”和“已完成”。
 
-## Non-Goals
+## 非目标
 
-- Add arbitrary one-shot jobs that run at one absolute timestamp.
-- Add a new scheduler backend beyond `chrome.alarms`.
-- Preserve old persisted scheduled job records through a complex migration.
-- Redesign all business task payloads.
+- 不实现按绝对时间只运行一次的任意 one-shot 任务。
+- 不替换 `chrome.alarms` 调度后端。
+- 不做复杂的旧数据兼容迁移。
+- 不重新设计所有业务任务 payload。
 
-## Type Model
+## 类型模型
 
-Add a required run mode:
+新增必传运行模式：
 
 ```ts
 export type ScheduledJobRunMode = 'recurring' | 'untilComplete';
 ```
 
-Use a required base model for fields that every scheduled job must know:
+所有任务都必须具备的基础字段放在 base 类型中：
 
 ```ts
 export interface ScheduledJobBase<TPayload = unknown> {
@@ -57,7 +57,7 @@ export interface ScheduledJobBase<TPayload = unknown> {
 }
 ```
 
-Use a discriminated union for scope-specific fields:
+scope 相关字段用 discriminated union 表达：
 
 ```ts
 export type AccountScheduledJob<TPayload = unknown> = ScheduledJobBase<TPayload> & {
@@ -82,9 +82,9 @@ export type ScheduledJob<TPayload = unknown> =
   | SystemScheduledJob<TPayload>;
 ```
 
-This keeps required fields strict without forcing meaningless placeholders. For example, `accountId` exists only when `scope === 'account'`, and `staggerMinutes` plus `accountStats` exist only when `scope === 'global'`.
+这样既保持严格必传，又不会强迫无意义字段存在。例如 `accountId` 只在 `scope === 'account'` 时存在，`staggerMinutes` 和 `accountStats` 只在 `scope === 'global'` 时存在。
 
-Keep runtime-only alarm data out of persistence:
+`nextRunAt` 是从 `chrome.alarms` 现场计算出来的运行时字段，不进入持久化模型：
 
 ```ts
 export type ScheduledJobView<TPayload = unknown> = ScheduledJob<TPayload> & {
@@ -92,11 +92,11 @@ export type ScheduledJobView<TPayload = unknown> = ScheduledJob<TPayload> & {
 };
 ```
 
-`scheduledJobs:list` should return `ScheduledJobView[]`. The repository should persist only `ScheduledJob[]`.
+`scheduledJobs:list` 返回 `ScheduledJobView[]`。仓储层只持久化 `ScheduledJob[]`。
 
-## Executor Contract
+## Executor 契约
 
-Make executor results explicit and complete:
+executor 返回值改成完整必传结构：
 
 ```ts
 export interface ScheduledJobExecutorResult {
@@ -108,26 +108,26 @@ export interface ScheduledJobExecutorResult {
 }
 ```
 
-Rules:
+规则：
 
-- Every executor must return a complete `ScheduledJobExecutorResult`.
-- Recurring jobs must return `completed: false`.
-- `untilComplete` jobs return `completed: true` only when their whole target has been completed, not merely when a single run succeeds.
-- If a recurring job returns `completed: true`, the scheduler center treats this as an executor contract violation and records the run as failed.
-- If an `untilComplete` job returns `completed: true`, the scheduler center disables the job, writes `completedAt`, and clears its alarm.
+- 每个 executor 都必须返回完整的 `ScheduledJobExecutorResult`。
+- `recurring` 任务必须返回 `completed: false`。
+- `untilComplete` 任务只有在整体目标完成时才返回 `completed: true`，不能把单次运行成功当成整体完成。
+- 如果 `recurring` 任务返回 `completed: true`，调度中心应视为 executor 契约错误，并把本次运行记录为失败。
+- 如果 `untilComplete` 任务返回 `completed: true`，调度中心统一停用任务、写入 `completedAt`，并清除 alarm。
 
-## Scheduler Center Lifecycle
+## 调度中心职责
 
-The scheduler center owns scheduled job lifecycle:
+调度中心统一负责任务生命周期：
 
-1. Validate the job cron.
-2. Create and clear `chrome.alarms`.
-3. Execute registered job executors.
-4. Update stats.
-5. Write global logs.
-6. For `untilComplete` jobs, finalize the job when the executor returns `completed: true`.
+1. 校验 cron。
+2. 创建和清理 `chrome.alarms`。
+3. 执行已注册的 executor。
+4. 更新运行统计。
+5. 写全局日志。
+6. 当 `untilComplete` 任务返回 `completed: true` 时，完成并停用该任务。
 
-Finalize means:
+完成任务的动作由调度中心统一执行：
 
 ```ts
 await updateScheduledJob(job.id, {
@@ -137,11 +137,11 @@ await updateScheduledJob(job.id, {
 await stopScheduledJob(job.id);
 ```
 
-Business executors should not call `stopScheduledJob()` or update their own lifecycle fields. They may update their own payload when they need progress state.
+业务 executor 不应该调用 `stopScheduledJob()`，也不应该更新自己的生命周期字段。业务 executor 仍然可以更新自己的 payload，因为 payload 可能保存业务进度，例如历史补拉 cursor。
 
-## Order History Backfill
+## 订单历史补拉
 
-`orders.backfillHistory` becomes an `untilComplete` system job:
+`orders.backfillHistory` 改成 `untilComplete` 系统任务：
 
 ```ts
 {
@@ -161,18 +161,18 @@ Business executors should not call `stopScheduledJob()` or update their own life
 }
 ```
 
-Its executor keeps the existing business behavior:
+它的 executor 保持现有业务行为：
 
-- Read all accounts.
-- For each account, calculate the next historical seven-day window.
-- Fetch and upsert orders for that window.
-- Advance `cursorByAccountId` for successful accounts.
-- Persist the updated payload.
-- Return `completed: true` only when all accounts are fully backfilled.
+- 读取所有账号。
+- 为每个账号计算下一个历史 7 天窗口。
+- 拉取并 upsert 该窗口内的订单。
+- 成功后推进 `cursorByAccountId`。
+- 持久化更新后的 payload。
+- 只有所有账号都补拉完成时，才返回 `completed: true`。
 
-The executor no longer disables the job or stops alarms directly.
+executor 不再直接停用任务，也不再直接停止 alarm。
 
-`orders.syncRecent` remains a recurring system job:
+`orders.syncRecent` 保持为 `recurring` 系统任务：
 
 ```ts
 {
@@ -189,55 +189,57 @@ The executor no longer disables the job or stops alarms directly.
 }
 ```
 
-## Repository Behavior
+## 仓储行为
 
-`addScheduledJob()` should accept a fully explicit scheduled job input. It should only generate infrastructure fields:
+`addScheduledJob()` 应接受显式完整的任务输入。它只负责生成基础设施字段：
 
 - `id`
 - `stats`
 - `createdAt`
 - `updatedAt`
 
-It should not silently infer `runMode`, `dailyLimit`, `completedAt`, or scope-specific fields.
+它不应该静默推断 `runMode`、`dailyLimit`、`completedAt` 或 scope 相关字段。
 
-`updateScheduledJob()` should preserve union correctness. Callers must not be able to turn a system job into a partial global or account job by writing only one scope field. If needed, expose narrower helpers for lifecycle updates and payload updates.
+`updateScheduledJob()` 需要保持 union 正确性。调用方不能通过只写一部分字段，把 system 任务改成不完整的 global 或 account 任务。必要时可以增加更窄的 helper，例如专门用于生命周期更新或 payload 更新的函数。
 
 ## Runtime IPC
 
-Update runtime channel types:
+更新 runtime channel 类型：
 
-- `scheduledJobs:list` returns `ScheduledJobView[]`.
-- `scheduledJobs:add` accepts explicit job input with required lifecycle fields.
-- `scheduledJobs:update` remains available but should be used carefully. UI-level edits should pass complete, valid patches.
-- `scheduledJobs:runNow` returns the explicit `ScheduledJobExecutorResult` shape.
+- `scheduledJobs:list` 返回 `ScheduledJobView[]`。
+- `scheduledJobs:add` 接收包含必传生命周期字段的显式任务输入。
+- `scheduledJobs:update` 保留，但应谨慎使用。UI 编辑应传入完整、合法的 patch。
+- `scheduledJobs:runNow` 返回完整的 `ScheduledJobExecutorResult` 结构。
 
-## UI Behavior
+## UI 行为
 
-The scheduled jobs table should show lifecycle clearly:
+定时任务列表应明确显示生命周期：
 
-- `enabled === true`: show `已启用`.
-- `enabled === false && completedAt !== null`: show `已完成`.
-- `enabled === false && completedAt === null`: show `已停用`.
+- `enabled === true`：显示 `已启用`。
+- `enabled === false && completedAt !== null`：显示 `已完成`。
+- `enabled === false && completedAt === null`：显示 `已停用`。
 
-Add a run mode tag:
+增加运行模式标签：
 
-- `recurring`: `周期任务`
-- `untilComplete`: `执行至完成`
+- `recurring`：`周期任务`
+- `untilComplete`：`执行至完成`
 
-For completed finite jobs, show the completed time in the recent run or schedule area. `nextRunAt` should be `null` for disabled and completed jobs.
+对于已完成的有限任务，展示完成时间。停用或完成的任务，`nextRunAt` 应为 `null`。
 
-## Validation
+## 验证
 
-Run after implementation:
+实现后运行：
 
 - `npm run compile`
-- `npm run build` because this changes shared types, background scheduling, runtime IPC, and extension packaging behavior.
+- `npm run build`
 
-Manual checks:
+需要运行 `npm run build`，因为本次改动涉及共享类型、后台调度、runtime IPC 和插件打包行为。
 
-- Starting the background creates explicit `orders.syncRecent` and `orders.backfillHistory` jobs.
-- `orders.syncRecent` remains enabled after successful runs.
-- `orders.backfillHistory` advances cursor state across runs.
-- When backfill completes, the scheduler center disables the job and writes `completedAt`.
-- Scheduled jobs UI displays completed backfill as `已完成`, not merely `已停用`.
-- A recurring executor returning `completed: true` is treated as an implementation error.
+手动验证：
+
+- 后台启动后会创建显式的 `orders.syncRecent` 和 `orders.backfillHistory` 任务。
+- `orders.syncRecent` 成功运行后仍保持启用。
+- `orders.backfillHistory` 会跨多次运行推进 cursor。
+- 历史补拉全部完成后，由调度中心停用任务并写入 `completedAt`。
+- 定时任务 UI 将完成后的历史补拉显示为 `已完成`，而不是单纯 `已停用`。
+- 如果 recurring executor 返回 `completed: true`，调度中心会把它作为实现错误处理。
