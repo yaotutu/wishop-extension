@@ -14,7 +14,6 @@ const RECENT_SYNC_FALLBACK_STATUSES = [
   12,
   13,
   100,
-  200,
   250,
 ] as OrderStatus[];
 

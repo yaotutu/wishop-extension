@@ -1,6 +1,6 @@
 import axios from 'axios';
 import type { DraftProduct, QuotaResult, Order, OrderListParams, OrderListResult, OrderSearchParams, OrderAddressInfo } from '../../shared/types';
-import { normalizeOrderListTimeRange } from '../../shared/order-time-range.ts';
+import { normalizeOrderListPageSize, normalizeOrderListTimeRange } from '../../shared/order-time-range.ts';
 import { getAccessToken, isAccessTokenInvalidError, removeAccessToken } from './access-token-service';
 
 export type { DraftProduct, QuotaResult };
@@ -137,9 +137,9 @@ export function createWxShopClient(accountId: string) {
     const createTimeRange = normalizeOrderListTimeRange(params.create_time_range);
     const updateTimeRange = normalizeOrderListTimeRange(params.update_time_range);
     const body: Record<string, unknown> = {
-      page_size: params.page_size || 10,
+      page_size: normalizeOrderListPageSize(params.page_size),
+      next_key: params.next_key || '',
     };
-    if (params.next_key) body.next_key = params.next_key;
     if (params.status !== undefined) body.status = params.status;
     if (params.create_time_range && !createTimeRange) {
       console.error(`[WxShopOrderList:${accountId}] invalid create_time_range`, params.create_time_range);

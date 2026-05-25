@@ -63,6 +63,7 @@ test('manual recent sync falls back to status-scoped order lists when the unfilt
 
   assert.deepEqual(orders.map(order => order.order_id), ['status-order']);
   assert.ok(listCalls.some(call => call.status === PENDING_SHIPMENT));
+  assert.equal(listCalls.some(call => call.status === 200), false);
 });
 
 test('recent sync always sends a concrete seven-day create time range', async () => {
@@ -88,6 +89,6 @@ test('recent sync always sends a concrete seven-day create time range', async ()
     assert.equal(call.update_time_range, undefined);
     assert.ok(Number.isFinite(call.create_time_range.start_time));
     assert.ok(Number.isFinite(call.create_time_range.end_time));
-    assert.ok(call.create_time_range.end_time - call.create_time_range.start_time < 7 * 24 * 60 * 60);
+    assert.ok(call.create_time_range.end_time - call.create_time_range.start_time <= 7 * 24 * 60 * 60);
   }
 });
