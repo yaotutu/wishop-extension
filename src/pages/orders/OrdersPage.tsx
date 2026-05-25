@@ -14,6 +14,7 @@ import {
   useShipOrderFromPurchaseMutation,
 } from '../../hooks/useIpc';
 import { extensionApi } from '../../shared/extension-api';
+import { ORDER_MODULE_BUILD } from '../../shared/build-info.ts';
 import { OrderStatus as OrderStatusEnum } from '../../shared/types';
 import type { Account, DeliveryCompanyOption, Order, OrderScope, OrderSearchSource, OrderStatus, OrderProductInfo, OrderSearchParams, OrderRealAddressCache, OrderAssociation, ProductSourceItem, OrderTimeScope, TaobaoRefundSession } from '../../shared/types';
 import { getDeliveryCompanyUnmatchedMessage, isDeliveryCompanyUnmatchedError } from '../../shared/errors';
@@ -111,8 +112,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
   const orderAssociations = orderAssociationsQuery.data || {};
   const realAddressCaches = realAddressCachesQuery.data || {};
   const orderError = ordersQuery.error instanceof Error ? ordersQuery.error.message : '';
-  const syncError = syncStateQuery.data?.lastError || '';
-  const visibleError = refreshError || syncError || orderError;
+  const visibleError = refreshError || orderError;
   const error = visibleError && visibleError !== hiddenError ? visibleError : null;
   const scopeKey = scope.type === 'all' ? 'all' : `account:${scope.accountId}`;
 
@@ -739,16 +739,22 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
             accountIds,
             activeStatus: activeStatus ?? 'all',
             searchSource,
+            build: ORDER_MODULE_BUILD,
           });
           refreshOrdersMutation.mutate(undefined, {
             onSuccess: (result) => {
               console.info('[wishop][orders:ui] manual refresh success', result);
-              setRefreshError('');
               if (result.failedAccounts.length > 0 && result.refreshedAccountIds.length === 0) {
+                setRefreshError(`订单刷新失败：${result.failedAccounts.map(item => `${item.accountName || item.accountId}: ${item.error}`).join('; ')}`);
                 message.error(`订单刷新失败：${result.failedAccounts.map(item => item.error).join('; ')}`);
+              } else if (result.failedAccounts.length > 0) {
+                setRefreshError(`部分账号刷新失败：${result.failedAccounts.map(item => `${item.accountName || item.accountId}: ${item.error}`).join('; ')}`);
+                message.warning(`部分账号刷新失败，已同步 ${result.updatedOrderCount} 条订单`);
               } else if (result.updatedOrderCount === 0) {
+                setRefreshError('');
                 message.warning('本次未同步到订单，已扫描近约 180 天订单窗口');
               } else {
+                setRefreshError('');
                 message.success(`订单刷新完成，同步 ${result.updatedOrderCount} 条订单`);
               }
               void ordersQuery.refetch();
