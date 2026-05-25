@@ -138,7 +138,7 @@ const AccountModuleContent: React.FC<{
 
 const Layout: React.FC = () => {
   const [version, setVersion] = useState('');
-  const [orderScopeType, setOrderScopeType] = useState<OrderScope['type']>('account');
+  const [orderScopeType, setOrderScopeType] = useState<OrderScope['type']>('all');
   const { accounts, activeAccountId, fetchAccounts, addAccount, removeAccount, updateAccount, switchAccount } = useAccounts();
   const {
     activeModule,
