@@ -1,13 +1,12 @@
 import type { OrderHistoryBackfillPayload, ScheduledJob } from '../../shared/types';
 import { planOrderHistoryBackfillWindow } from '../orders/order-history-backfill-window.ts';
-import { ORDER_HISTORY_BACKFILL_CRON } from '../orders/order-sync-schedule.ts';
+import { ORDER_HISTORY_BACKFILL_CRON, ORDER_RECENT_SYNC_CRON } from '../orders/order-sync-schedule.ts';
 import { getAccounts } from '../store/account-repository';
 import { addScheduledJob, getScheduledJobs, updateScheduledJob } from '../store/scheduled-job-repository';
 import { orderSyncService } from '../orders/order-domain';
 import { registerScheduledJobExecutor, stopScheduledJob } from './scheduler-center';
 
 const DEFAULT_ORDER_SYNC_JOB_NAME = '订单自动同步';
-const DEFAULT_ORDER_SYNC_CRON = '*/1 * * * *';
 const DEFAULT_HISTORY_BACKFILL_JOB_NAME = '订单历史补拉';
 const DEFAULT_HISTORY_BACKFILL_LOOKBACK_DAYS = 182;
 
@@ -16,7 +15,7 @@ export async function ensureOrderSyncScheduledJob(): Promise<ScheduledJob | null
   const existing = jobs.find(job => job.jobType === 'orders.syncRecent' && job.scope === 'system');
   if (existing) {
     const patch: Partial<ScheduledJob> = {};
-    if (existing.cronExpression !== DEFAULT_ORDER_SYNC_CRON) patch.cronExpression = DEFAULT_ORDER_SYNC_CRON;
+    if (existing.cronExpression !== ORDER_RECENT_SYNC_CRON) patch.cronExpression = ORDER_RECENT_SYNC_CRON;
     if (!existing.enabled) patch.enabled = true;
     if (Object.keys(patch).length > 0) {
       const updatedAt = Date.now();
@@ -32,7 +31,7 @@ export async function ensureOrderSyncScheduledJob(): Promise<ScheduledJob | null
     module: 'orders',
     jobType: 'orders.syncRecent',
     scope: 'system',
-    cronExpression: DEFAULT_ORDER_SYNC_CRON,
+    cronExpression: ORDER_RECENT_SYNC_CRON,
     dailyLimit: 0,
     payload: {},
   });
