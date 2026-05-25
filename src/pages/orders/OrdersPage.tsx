@@ -514,9 +514,8 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
             <div>淘宝读取快递单号：{trackingNumber || '-'}</div>
           </div>
           <Select
-            showSearch
+            showSearch={{ optionFilterProp: 'label' }}
             placeholder="选择微信小店快递公司"
-            optionFilterProp="label"
             options={companies.map(company => ({
               value: company.deliveryId,
               label: `${company.deliveryName}（${company.deliveryId}）`,
@@ -670,7 +669,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
   }, [realAddressCaches, shipSourceOrder, shipSourceProduct]);
 
   const columns = useMemo(() => createOrderColumns({
-    showAccountColumn: scope.type === 'all',
+    showAccountInfo: scope.type === 'all',
     realAddressCaches,
     decodingOrderIds,
     productSources,
@@ -780,7 +779,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
           size="small"
           loading={loading}
           pagination={false}
-          scroll={{ x: 1050, y: scrollY }}
+          scroll={{ x: 1090, y: scrollY }}
           styles={{
             content: { height: '100%', display: 'flex', flexDirection: 'column' },
             section: { flex: 1 },

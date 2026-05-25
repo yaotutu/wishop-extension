@@ -20,7 +20,7 @@ function scopedKey(record: OrderTableRecord, id: string): string {
 }
 
 interface CreateOrderColumnsOptions {
-  showAccountColumn?: boolean;
+  showAccountInfo?: boolean;
   realAddressCaches: Record<string, OrderRealAddressCache>;
   decodingOrderIds: Set<string>;
   productSources: Record<string, ProductSourceItem[]>;
@@ -49,37 +49,52 @@ interface CreateOrderColumnsOptions {
  */
 export function createOrderColumns(options: CreateOrderColumnsOptions) {
   const columns = [
-    ...(options.showAccountColumn ? [{
-      title: '账号',
-      key: 'account',
-      width: 110,
-      render: (_: unknown, record: OrderTableRecord) => (
-        <Tag color="blue" style={{ maxWidth: 96, overflow: 'hidden', textOverflow: 'ellipsis' }} title={record.accountName}>
-          {record.accountName || record.accountId}
-        </Tag>
-      ),
-    }] : []),
     {
       title: '订单信息',
       key: 'order_info',
-      width: 280,
+      width: 300,
       render: (_: unknown, record: OrderTableRecord) => {
         const product = firstProduct(record);
         const ext = record.order_detail?.ext_info;
         const customerNote = ext?.customer_notes?.trim();
         const merchantNote = ext?.merchant_notes?.trim();
         const specs = product?.sku_attrs?.map(a => a.attr_value).filter(Boolean).join(', ') || '';
+        const accountLabel = record.accountName || record.accountId;
         return (
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
             {product?.thumb_img && (
               <Image src={product.thumb_img} width={50} height={50} alt={product.title || '商品图片'} style={{ borderRadius: 4, objectFit: 'cover', flexShrink: 0 }} preview={false} />
             )}
             <div style={{ minWidth: 0, flex: 1 }}>
-              <Space size={4} align="center">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                {options.showAccountInfo && (
+                  <Tag
+                    color="blue"
+                    title={accountLabel}
+                    style={{
+                      maxWidth: 88,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      marginInlineEnd: 0,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {accountLabel}
+                  </Tag>
+                )}
                 <Text
                   type="secondary"
+                  ellipsis
+                  title={record.order_id}
                   onClick={() => options.onCopyText(record.order_id, '订单号')}
-                  style={{ fontSize: 12, cursor: 'pointer' }}
+                  style={{
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    minWidth: 0,
+                    flex: '1 1 auto',
+                    display: 'inline-block',
+                  }}
                 >
                   {record.order_id}
                 </Text>
@@ -88,9 +103,9 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
                   size="small"
                   icon={<CopyOutlined />}
                   onClick={() => options.onCopyText(record.order_id, '订单号')}
-                  style={{ width: 18, height: 18, minWidth: 18, padding: 0 }}
+                  style={{ width: 18, height: 18, minWidth: 18, padding: 0, flexShrink: 0 }}
                 />
-              </Space>
+              </div>
               <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{product?.title || '-'}</div>
               <Space size={4} style={{ marginTop: 2 }}>
                 <Button
