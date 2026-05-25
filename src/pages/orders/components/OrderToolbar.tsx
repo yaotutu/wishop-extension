@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, Button, Flex, Input, Select, Space, Tag, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import type { OrderSearchParams, OrderSearchSource, OrderStatus, OrderSyncState, OrderTimeScope } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
+import { orderSyncCountdownText } from '../order-sync-countdown';
 
 const { Text } = Typography;
 
@@ -70,9 +71,13 @@ export const OrderToolbar: React.FC<Props> = ({
   onRefresh,
   onClearError,
 }) => {
-  const nextSyncSeconds = syncState?.nextSyncAt
-    ? Math.max(0, Math.ceil((syncState.nextSyncAt - Date.now()) / 1000))
-    : null;
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   return (
     <Flex vertical gap={8} style={{ flexShrink: 0, borderBottom: '1px solid #f0f0f0', paddingBottom: 10 }}>
       <Tag.CheckableTagGroup
@@ -120,11 +125,7 @@ export const OrderToolbar: React.FC<Props> = ({
         />
         <Button size="small" icon={<ReloadOutlined />} loading={refreshing} onClick={onRefresh}>立即更新</Button>
         <Text type="secondary" style={{ fontSize: 12 }}>
-          {syncState?.running
-            ? '正在同步订单'
-            : nextSyncSeconds !== null
-              ? `${nextSyncSeconds} 秒后自动更新`
-              : '等待自动更新'}
+          {orderSyncCountdownText(syncState, now)}
         </Text>
       </Flex>
       {error && (
