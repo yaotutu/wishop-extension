@@ -23,3 +23,18 @@ test('recent order windows scan backwards in seven-day chunks', () => {
     end_time: 1700000000 - 7 * 24 * 60 * 60,
   });
 });
+
+test('default recent order window covers the same horizon as legacy order loading', () => {
+  const state = makeRecentOrderWindowState(1700000000);
+  const windows: Array<{ start_time: number; end_time: number }> = [];
+
+  for (let i = 0; i < 26; i += 1) {
+    const window = getRecentOrderWindow(state);
+    if (!window) break;
+    windows.push(window);
+    moveRecentOrderWindowBack(state);
+  }
+
+  assert.equal(windows.length, 26);
+  assert.ok(windows[25].start_time <= 1700000000 - 181 * 24 * 60 * 60);
+});

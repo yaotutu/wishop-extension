@@ -5,7 +5,7 @@ export interface RecentOrderWindowState {
 
 export const RECENT_ORDER_WINDOW_SECONDS = 7 * 24 * 60 * 60;
 
-export function makeRecentOrderWindowState(nowSeconds = Math.floor(Date.now() / 1000), lookbackDays = 30): RecentOrderWindowState {
+export function makeRecentOrderWindowState(nowSeconds = Math.floor(Date.now() / 1000), lookbackDays = 182): RecentOrderWindowState {
   return {
     windowEndTime: nowSeconds,
     minStartTime: nowSeconds - lookbackDays * 24 * 60 * 60,

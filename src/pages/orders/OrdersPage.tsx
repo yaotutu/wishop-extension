@@ -731,8 +731,14 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
         onSearch={handleSearch}
         onRefresh={() => {
           refreshOrdersMutation.mutate(undefined, {
-            onSuccess: () => {
-              message.success('订单刷新完成');
+            onSuccess: (result) => {
+              if (result.failedAccounts.length > 0 && result.refreshedAccountIds.length === 0) {
+                message.error(`订单刷新失败：${result.failedAccounts.map(item => item.error).join('; ')}`);
+              } else if (result.updatedOrderCount === 0) {
+                message.warning('本次未同步到订单，已扫描近约 180 天订单窗口');
+              } else {
+                message.success(`订单刷新完成，同步 ${result.updatedOrderCount} 条订单`);
+              }
               void ordersQuery.refetch();
             },
             onError: (err: any) => message.error(`订单刷新失败: ${err.message}`),

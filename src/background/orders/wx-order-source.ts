@@ -2,7 +2,7 @@ import type { Order, OrderListParams, OrderSearchParams } from '../../shared/typ
 import { getClient } from '../wxshop/client-registry';
 import { getRecentOrderWindow, makeRecentOrderWindowState, moveRecentOrderWindowBack } from './recent-order-window';
 
-const MAX_EMPTY_RECENT_WINDOWS = 5;
+const MAX_EMPTY_RECENT_WINDOWS = 26;
 
 async function fetchOrderDetails(
   orderIds: string[],
@@ -10,9 +10,13 @@ async function fetchOrderDetails(
 ): Promise<Order[]> {
   if (orderIds.length === 0) return [];
   const settled = await Promise.allSettled(orderIds.map(orderId => getOrderDetail(orderId)));
-  return settled
+  const orders = settled
     .map(result => result.status === 'fulfilled' ? result.value : null)
     .filter((order): order is Order => order !== null);
+  if (orderIds.length > 0 && orders.length === 0) {
+    throw new Error(`订单列表已返回 ${orderIds.length} 个订单号，但订单详情全部获取失败，请稍后重试`);
+  }
+  return orders;
 }
 
 export interface WxOrderSource {
