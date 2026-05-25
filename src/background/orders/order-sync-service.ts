@@ -6,7 +6,6 @@ import type {
   OrderSearchParams,
   StoredOrderSource,
 } from '../../shared/types';
-import { ORDER_MODULE_BUILD } from '../../shared/build-info.ts';
 import { createLogger } from '../utils/logger.ts';
 import type { OrderStore } from './order-store.ts';
 import type { WxOrderSource } from './wx-order-source.ts';
@@ -88,7 +87,6 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
       scope,
       reason,
       accountCount: accounts.length,
-      build: ORDER_MODULE_BUILD,
     });
     const refreshedAccountIds: string[] = [];
     const failedAccounts: OrderRefreshResult['failedAccounts'] = [];

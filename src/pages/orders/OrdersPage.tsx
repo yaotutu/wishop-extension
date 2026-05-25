@@ -14,7 +14,6 @@ import {
   useShipOrderFromPurchaseMutation,
 } from '../../hooks/useIpc';
 import { extensionApi } from '../../shared/extension-api';
-import { ORDER_MODULE_BUILD } from '../../shared/build-info.ts';
 import { OrderStatus as OrderStatusEnum } from '../../shared/types';
 import type { Account, DeliveryCompanyOption, Order, OrderScope, OrderSearchSource, OrderStatus, OrderProductInfo, OrderSearchParams, OrderRealAddressCache, OrderAssociation, ProductSourceItem, OrderTimeScope, TaobaoRefundSession } from '../../shared/types';
 import { getDeliveryCompanyUnmatchedMessage, isDeliveryCompanyUnmatchedError } from '../../shared/errors';
@@ -739,7 +738,6 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
             accountIds,
             activeStatus: activeStatus ?? 'all',
             searchSource,
-            build: ORDER_MODULE_BUILD,
           });
           refreshOrdersMutation.mutate(undefined, {
             onSuccess: (result) => {
