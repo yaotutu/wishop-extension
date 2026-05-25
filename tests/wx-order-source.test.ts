@@ -92,3 +92,30 @@ test('recent sync always sends a concrete seven-day create time range', async ()
     assert.ok(call.create_time_range.end_time - call.create_time_range.start_time <= 7 * 24 * 60 * 60);
   }
 });
+
+test('recent sync continues scanning older windows after a non-empty recent window', async () => {
+  const listCalls: OrderListParams[] = [];
+  const source = createWxOrderSource(async () => ({
+    async getOrderList(params: OrderListParams) {
+      listCalls.push(params);
+      if (listCalls.length === 1) {
+        return { order_id_list: ['recent-order'], next_key: '', has_more: false };
+      }
+      if (listCalls.length === 2) {
+        return { order_id_list: ['older-order'], next_key: '', has_more: false };
+      }
+      return { order_id_list: [], next_key: '', has_more: false };
+    },
+    async getOrderDetail(orderId: string) {
+      return makeOrder(orderId);
+    },
+    async searchOrders(_params: OrderSearchParams) {
+      return { order_id_list: [], next_key: '', has_more: false };
+    },
+  }));
+
+  const orders = await source.fetchRecentOrders('account-1');
+
+  assert.deepEqual(orders.map(order => order.order_id), ['recent-order', 'older-order']);
+  assert.equal(listCalls.length > 2, true);
+});

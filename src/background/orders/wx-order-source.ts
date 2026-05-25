@@ -3,9 +3,10 @@ import { normalizeOrderListTimeRange } from '../../shared/order-time-range.ts';
 import { createLogger } from '../utils/logger.ts';
 import { getRecentOrderWindow, makeRecentOrderWindowState, moveRecentOrderWindowBack } from './recent-order-window.ts';
 
-const MAX_EMPTY_RECENT_WINDOWS = 26;
+const MAX_RECENT_WINDOWS = 26;
 const MAX_STATUS_FALLBACK_WINDOWS = 5;
 const MAX_PAGES_PER_WINDOW = 10;
+const MAX_RECENT_SYNC_ORDERS = 500;
 const RECENT_SYNC_FALLBACK_STATUSES = [
   20,
   21,
@@ -151,28 +152,35 @@ export function createWxOrderSource(resolveClient: ResolveWxOrderClient = defaul
     async fetchRecentOrders(accountId: string, options: FetchRecentOrdersOptions = {}): Promise<Order[]> {
       const api = await resolveClient(accountId);
       const state = makeRecentOrderWindowState();
-      let scannedEmptyWindows = 0;
+      let scannedWindows = 0;
+      let orders: Order[] = [];
       const logger = options.debug ? createLogger('OrderSource', accountId) : null;
       logger?.info('最近订单同步开始', { fallbackStatuses: Boolean(options.fallbackStatuses) });
 
-      while (scannedEmptyWindows < MAX_EMPTY_RECENT_WINDOWS) {
+      while (scannedWindows < MAX_RECENT_WINDOWS && orders.length < MAX_RECENT_SYNC_ORDERS) {
         const timeRange = getRecentOrderWindow(state);
-        if (!timeRange) return [];
-        const orders = await fetchWindowOrders(api, accountId, timeRange, undefined, options.debug, scannedEmptyWindows + 1);
-        if (orders.length > 0) return orders;
-        if (options.fallbackStatuses && scannedEmptyWindows < MAX_STATUS_FALLBACK_WINDOWS) {
+        if (!timeRange) break;
+        const windowIndex = scannedWindows + 1;
+        const windowOrders = await fetchWindowOrders(api, accountId, timeRange, undefined, options.debug, windowIndex);
+        orders = dedupeOrders([...orders, ...windowOrders]).slice(0, MAX_RECENT_SYNC_ORDERS);
+        if (options.fallbackStatuses && windowOrders.length === 0 && scannedWindows < MAX_STATUS_FALLBACK_WINDOWS) {
           logger?.info('无状态列表为空，开始按状态回退查询', {
-            windowIndex: scannedEmptyWindows + 1,
+            windowIndex,
             create_time_range: timeRange,
           });
-          const statusOrders = await fetchStatusWindowOrders(api, accountId, timeRange, options.debug, scannedEmptyWindows + 1);
-          if (statusOrders.length > 0) return statusOrders;
+          const statusOrders = await fetchStatusWindowOrders(api, accountId, timeRange, options.debug, windowIndex);
+          orders = dedupeOrders([...orders, ...statusOrders]).slice(0, MAX_RECENT_SYNC_ORDERS);
         }
-        scannedEmptyWindows += 1;
+        scannedWindows += 1;
         moveRecentOrderWindowBack(state);
       }
 
-      return [];
+      logger?.info('最近订单同步完成', {
+        scannedWindowCount: scannedWindows,
+        orderCount: orders.length,
+        capped: orders.length >= MAX_RECENT_SYNC_ORDERS,
+      });
+      return orders;
     },
 
     async searchOrders(accountId: string, params: OrderSearchParams): Promise<Order[]> {
