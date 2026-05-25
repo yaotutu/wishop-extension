@@ -79,6 +79,7 @@ function paginate(snapshots: StoredOrderSnapshot[], filters: OrderListFilters): 
   return {
     orders: page,
     hasMore: end < snapshots.length,
+    total: snapshots.length,
     nextCursor: end < snapshots.length ? String(end) : undefined,
   };
 }

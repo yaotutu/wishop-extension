@@ -66,11 +66,13 @@ export function useOrdersQuery(
     [query.data],
   );
   const hasMore = query.hasNextPage ?? false;
+  const total = query.data?.pages[0]?.total ?? 0;
 
   return {
     ...query,
     orders,
     hasMore,
+    total,
     loading: query.isFetching || query.isLoading,
   };
 }

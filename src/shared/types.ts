@@ -494,6 +494,7 @@ export interface OrderListFilters {
 export interface LocalOrderListResult {
   orders: StoredOrderSnapshot[];
   hasMore: boolean;
+  total: number;
   nextCursor?: string;
 }
 

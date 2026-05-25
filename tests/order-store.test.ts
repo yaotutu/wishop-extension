@@ -126,3 +126,17 @@ test('keeps only the newest orders per account', async () => {
 
   assert.deepEqual(result.orders.map(item => item.orderId), ['new', 'middle']);
 });
+
+test('paginated order lists return the filtered total count', async () => {
+  const store = createOrderStore(createMemoryStorage());
+  await store.upsertMany('account-1', '店铺一', Array.from({ length: 55 }, (_, index) => (
+    makeOrder(`order-${index + 1}`, { update_time: 1700000000 + index })
+  )), 'autoSync');
+
+  const firstPage = await store.list({ type: 'all' }, { pageSize: 50 });
+
+  assert.equal(firstPage.orders.length, 50);
+  assert.equal(firstPage.hasMore, true);
+  assert.equal(firstPage.nextCursor, '50');
+  assert.equal(firstPage.total, 55);
+});

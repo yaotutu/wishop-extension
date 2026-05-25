@@ -106,6 +106,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
     accountName: snapshot.accountName || accountNameById.get(snapshot.accountId) || snapshot.accountId,
   })), [accountNameById, ordersQuery.orders]);
   const hasMore = ordersQuery.hasMore;
+  const totalOrders = ordersQuery.total;
   const loading = ordersQuery.loading;
   const productSources = productSourcesQuery.data || {};
   const orderAssociations = orderAssociationsQuery.data || {};
@@ -789,13 +790,16 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
             if (loading) return null;
             if (hasMore) {
               return (
-                <div style={{ textAlign: 'center', padding: '8px 0' }}>
+                <div style={{ textAlign: 'center', padding: '8px 0', display: 'grid', gap: 6, justifyItems: 'center' }}>
+                  <span style={{ color: '#8c8c8c', fontSize: 12 }}>
+                    已显示 {orders.length} / 共 {totalOrders} 条
+                  </span>
                   <Button size="small" loading={loading} onClick={handleLoadMore}>加载更多</Button>
                 </div>
               );
             }
             if (orders.length === 0) return null;
-            return <div style={{ textAlign: 'center', color: '#bbb', fontSize: 12, padding: '8px 0' }}>— 没有更多订单 —</div>;
+            return <div style={{ textAlign: 'center', color: '#bbb', fontSize: 12, padding: '8px 0' }}>— 已显示全部 {totalOrders || orders.length} 条订单 —</div>;
           }}
         />
       </div>
