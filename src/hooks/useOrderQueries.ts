@@ -1,10 +1,11 @@
-import type { InfiniteData } from '@tanstack/react-query';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import { extensionApi } from '../shared/extension-api';
 import { isCredentialError } from '../shared/errors';
 import type {
   OrderAssociation,
+  OrderScope,
+  OrderSearchSource,
   OrderRealAddressCache,
   OrderSearchParams,
   OrderStatus,
@@ -12,18 +13,10 @@ import type {
   ProductSourceBinding,
   ProductSourceItem,
   ShipOrderFromPurchaseInput,
+  StoredOrderSnapshot,
 } from '../shared/types';
 import { useCredentialError } from '../contexts/CredentialErrorContext';
 import { queryKeys } from '../query/query-keys';
-import {
-  createOrderListSnapshot,
-  getOrderListCacheKey,
-  normalizeOrderListData,
-  ordersToInfiniteData,
-  readCachedOrderList,
-  writeCachedOrderList,
-  type OrderListPage,
-} from './order-list-cache';
 
 function useReportQueryError() {
   const { reportCredentialError } = useCredentialError();
@@ -33,101 +26,71 @@ function useReportQueryError() {
 }
 
 export function useOrdersQuery(
-  accountId: string,
+  scope: OrderScope,
   status?: OrderStatus,
   search?: OrderSearchParams | null,
   timeScope: OrderTimeScope = 'all',
+  searchSource: OrderSearchSource = 'local',
 ) {
   const reportError = useReportQueryError();
-  const queryClient = useQueryClient();
   const queryKey = useMemo(
-    () => queryKeys.orders.list(accountId, status, search, timeScope),
-    [accountId, search, status, timeScope],
+    () => search?.keyword?.trim()
+      ? queryKeys.orders.search(scope, search, searchSource)
+      : queryKeys.orders.list(scope, status, search, timeScope),
+    [scope, search, searchSource, status, timeScope],
   );
-  const storageKey = useMemo(() => getOrderListCacheKey(queryKey), [queryKey]);
-  const lastSignatureRef = useRef('');
-  const [cacheHydrated, setCacheHydrated] = useState(false);
-  const [hasCachedData, setHasCachedData] = useState(false);
   const query = useInfiniteQuery({
     queryKey,
-    enabled: !!accountId,
-    initialPageParam: true,
+    initialPageParam: undefined as string | undefined,
     queryFn: async ({ pageParam }) => {
       try {
         if (search?.keyword?.trim()) {
-          return await extensionApi.orders.search(accountId, search);
+          return await extensionApi.orders.search(scope, { ...search, page_size: 50, next_key: pageParam }, searchSource);
         }
-        return await extensionApi.orders.list(accountId, status, 50, pageParam, timeScope);
+        return await extensionApi.orders.list(scope, {
+          status,
+          timeScope,
+          pageSize: 50,
+          cursor: pageParam,
+        });
       } catch (error) {
         reportError(error);
         throw error;
       }
     },
-    getNextPageParam: (lastPage) => {
-      if (search?.keyword?.trim()) return undefined;
-      return lastPage.hasMore ? false : undefined;
-    },
+    getNextPageParam: lastPage => lastPage.nextCursor,
   });
-
-  useEffect(() => {
-    let cancelled = false;
-    lastSignatureRef.current = '';
-    setCacheHydrated(false);
-    setHasCachedData(false);
-    if (!accountId) return;
-
-    readCachedOrderList(storageKey)
-      .then((cached) => {
-        if (cancelled || !cached) return;
-        lastSignatureRef.current = cached.signature;
-        setHasCachedData(cached.orders.length > 0);
-        queryClient.setQueryData<InfiniteData<OrderListPage, unknown>>(queryKey, current => (
-          current ?? ordersToInfiniteData(cached)
-        ));
-        void queryClient.invalidateQueries({ queryKey, exact: true });
-      })
-      .finally(() => {
-        if (!cancelled) setCacheHydrated(true);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [accountId, queryClient, queryKey, storageKey]);
-
-  useEffect(() => {
-    if (!query.data) return;
-    const mergedData = normalizeOrderListData(query.data);
-    const currentSnapshot = createOrderListSnapshot(query.data);
-    const snapshot = createOrderListSnapshot(mergedData);
-
-    if (snapshot.signature === lastSignatureRef.current) {
-      if (snapshot.signature !== currentSnapshot.signature) {
-        queryClient.setQueryData(queryKey, mergedData);
-      }
-      return;
-    }
-
-    lastSignatureRef.current = snapshot.signature;
-    writeCachedOrderList(storageKey, snapshot);
-
-    if (snapshot.signature !== currentSnapshot.signature) {
-      queryClient.setQueryData(queryKey, mergedData);
-    }
-  }, [query.data, queryClient, queryKey, storageKey]);
 
   const orders = useMemo(
     () => query.data?.pages.flatMap(page => page.orders) ?? [],
     [query.data],
   );
-  const hasMore = !search?.keyword?.trim() && (query.hasNextPage ?? false);
+  const hasMore = query.hasNextPage ?? false;
 
   return {
     ...query,
     orders,
     hasMore,
-    loading: query.isFetching || (!hasCachedData && (!cacheHydrated || query.isLoading)),
+    loading: query.isFetching || query.isLoading,
   };
+}
+
+export function useOrderSyncStateQuery(scope: OrderScope) {
+  return useQuery({
+    queryKey: queryKeys.orders.syncState(scope),
+    queryFn: () => extensionApi.orders.syncState(scope),
+    refetchInterval: 1000,
+  });
+}
+
+export function useRefreshOrdersMutation(scope: OrderScope) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => extensionApi.orders.refresh(scope),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
 }
 
 export function useOrderDetailQuery(accountId: string, orderId?: string) {
@@ -146,113 +109,115 @@ export function useOrderDetailQuery(accountId: string, orderId?: string) {
   });
 }
 
-export function useProductSourcesQuery(accountId: string) {
+export function useProductSourcesQuery(accountIds: string[]) {
   return useQuery({
-    queryKey: queryKeys.productSources.list(accountId),
-    enabled: !!accountId,
-    queryFn: () => extensionApi.productSources.list(accountId),
+    queryKey: ['productSources', ...accountIds],
+    enabled: accountIds.length > 0,
+    queryFn: async () => {
+      const entries = await Promise.all(accountIds.map(async accountId => ({
+        accountId,
+        bindings: await extensionApi.productSources.list(accountId),
+      })));
+      return entries.flatMap(entry => entry.bindings.map(binding => ({ ...binding, accountId: entry.accountId })));
+    },
     select: bindingsToRecord,
   });
 }
 
-export function useOrderAssociationsQuery(accountId: string) {
+export function useOrderAssociationsQuery(accountIds: string[]) {
   return useQuery({
-    queryKey: queryKeys.orderAssociations.list(accountId),
-    enabled: !!accountId,
-    queryFn: () => extensionApi.orderAssociations.list(accountId),
+    queryKey: ['orderAssociations', ...accountIds],
+    enabled: accountIds.length > 0,
+    queryFn: async () => {
+      const entries = await Promise.all(accountIds.map(async accountId => ({
+        accountId,
+        associations: await extensionApi.orderAssociations.list(accountId),
+      })));
+      return entries.flatMap(entry => entry.associations.map(association => ({ ...association, accountId: entry.accountId })));
+    },
     select: associationsToRecord,
   });
 }
 
-export function useRealAddressCachesQuery(accountId: string) {
+export function useRealAddressCachesQuery(accountIds: string[]) {
   return useQuery({
-    queryKey: queryKeys.realAddresses.list(accountId),
-    enabled: !!accountId,
-    queryFn: () => extensionApi.orderRealAddresses.list(accountId),
+    queryKey: ['orderRealAddresses', ...accountIds],
+    enabled: accountIds.length > 0,
+    queryFn: async () => {
+      const entries = await Promise.all(accountIds.map(async accountId => ({
+        accountId,
+        caches: await extensionApi.orderRealAddresses.list(accountId),
+      })));
+      return entries.flatMap(entry => entry.caches.map(cache => ({ ...cache, accountId: entry.accountId })));
+    },
     select: realAddressCachesToRecord,
   });
 }
 
-export function useSaveProductSourcesMutation(accountId: string) {
+export function useSaveProductSourcesMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ productId, sources }: { productId: string; sources: ProductSourceItem[] }) =>
+    mutationFn: ({ accountId, productId, sources }: { accountId: string; productId: string; sources: ProductSourceItem[] }) =>
       extensionApi.productSources.set(accountId, productId, sources),
-    onSuccess: (binding) => {
-      queryClient.setQueryData<ProductSourceBinding[]>(
-        queryKeys.productSources.list(accountId),
-        (current = []) => [
-          ...current.filter(item => item.productId !== binding.productId),
-          binding,
-        ],
-      );
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['productSources'] });
     },
   });
 }
 
-export function useSaveOrderAssociationMutation(accountId: string) {
+export function useSaveOrderAssociationMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ orderId, input }: {
+    mutationFn: ({ accountId, orderId, input }: {
+      accountId: string;
       orderId: string;
       input: Pick<OrderAssociation, 'internalRemark' | 'linkedOrders'>;
     }) => extensionApi.orderAssociations.set(accountId, orderId, input),
-    onSuccess: (association) => {
-      queryClient.setQueryData<OrderAssociation[]>(
-        queryKeys.orderAssociations.list(accountId),
-        (current = []) => {
-          const next = current.filter(item => item.orderId !== association.orderId);
-          if (association.internalRemark || association.linkedOrders.length > 0) {
-            next.push(association);
-          }
-          return next;
-        },
-      );
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['orderAssociations'] });
     },
   });
 }
 
-export function useShipOrderFromPurchaseMutation(accountId: string) {
+export function useShipOrderFromPurchaseMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: Omit<ShipOrderFromPurchaseInput, 'accountId'>) =>
-      extensionApi.orders.shipFromPurchase({ ...input, accountId }),
-    onSuccess: (result) => {
-      void queryClient.invalidateQueries({ queryKey: ['orders', accountId] });
-      queryClient.setQueryData(queryKeys.orders.detail(accountId, result.order.order_id), result.order);
+    mutationFn: (input: ShipOrderFromPurchaseInput) =>
+      extensionApi.orders.shipFromPurchase(input),
+    onSuccess: (result, input) => {
+      void queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.setQueryData(queryKeys.orders.detail(input.accountId, result.order.order_id), result.order);
     },
   });
 }
 
-export function useFetchRealAddressMutation(accountId: string) {
+export function useFetchRealAddressMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ orderId, refresh }: { orderId: string; refresh: boolean }) => (
+    mutationFn: ({ accountId, orderId, refresh }: { accountId: string; orderId: string; refresh: boolean }) => (
       refresh
         ? extensionApi.orderRealAddresses.refresh(accountId, orderId)
         : extensionApi.orderRealAddresses.fetch(accountId, orderId)
     ),
-    onSuccess: (cache) => {
-      queryClient.setQueryData<OrderRealAddressCache[]>(
-        queryKeys.realAddresses.list(accountId),
-        (current = []) => [
-          ...current.filter(item => item.orderId !== cache.orderId),
-          cache,
-        ],
-      );
-      queryClient.setQueryData(queryKeys.realAddresses.item(accountId, cache.orderId), cache);
+    onSuccess: (cache, input) => {
+      void queryClient.invalidateQueries({ queryKey: ['orderRealAddresses'] });
+      queryClient.setQueryData(queryKeys.realAddresses.item(input.accountId, cache.orderId), cache);
     },
   });
 }
 
-function bindingsToRecord(bindings: ProductSourceBinding[]): Record<string, ProductSourceItem[]> {
-  return Object.fromEntries(bindings.map(binding => [binding.productId, binding.sources]));
+function scopedKey(accountId: string, id: string): string {
+  return `${accountId}:${id}`;
 }
 
-function associationsToRecord(associations: OrderAssociation[]): Record<string, OrderAssociation> {
-  return Object.fromEntries(associations.map(item => [item.orderId, item]));
+function bindingsToRecord(bindings: Array<ProductSourceBinding & { accountId: string }>): Record<string, ProductSourceItem[]> {
+  return Object.fromEntries(bindings.map(binding => [scopedKey(binding.accountId, binding.productId), binding.sources]));
 }
 
-function realAddressCachesToRecord(caches: OrderRealAddressCache[]): Record<string, OrderRealAddressCache> {
-  return Object.fromEntries(caches.map(item => [item.orderId, item]));
+function associationsToRecord(associations: Array<OrderAssociation & { accountId: string }>): Record<string, OrderAssociation> {
+  return Object.fromEntries(associations.map(item => [scopedKey(item.accountId, item.orderId), item]));
+}
+
+function realAddressCachesToRecord(caches: Array<OrderRealAddressCache & { accountId: string }>): Record<string, OrderRealAddressCache> {
+  return Object.fromEntries(caches.map(item => [scopedKey(item.accountId, item.orderId), item]));
 }

@@ -14,10 +14,14 @@ import type {
   Order,
   OrderAddressInfo,
   OrderAssociation,
+  OrderListFilters,
+  LocalOrderListResult,
+  OrderRefreshResult,
   OrderRealAddressCache,
   OrderSearchParams,
-  OrderStatus,
-  OrderTimeScope,
+  OrderScope,
+  OrderSearchSource,
+  OrderSyncState,
   ShipOrderFromPurchaseInput,
   ShipOrderFromPurchaseResult,
   CreatePurchaseLookupSessionInput,
@@ -54,11 +58,16 @@ export interface RuntimeChannels {
   'drafts:list': { args: [accountId: string, productId: string]; result: { success: boolean; error?: string } };
 
   'orders:list': {
-    args: [accountId: string, status?: OrderStatus, pageSize?: number, reset?: boolean, timeScope?: OrderTimeScope];
-    result: { orders: Order[]; hasMore: boolean };
+    args: [scope: OrderScope, filters?: OrderListFilters];
+    result: LocalOrderListResult;
   };
-  'orders:detail': { args: [accountId: string, orderId: string]; result: Order };
-  'orders:search': { args: [accountId: string, params: OrderSearchParams]; result: { orders: Order[]; hasMore: boolean } };
+  'orders:detail': { args: [accountId: string, orderId: string, options?: { refresh?: boolean }]; result: Order };
+  'orders:search': {
+    args: [scope: OrderScope, params: OrderSearchParams, source: OrderSearchSource];
+    result: LocalOrderListResult;
+  };
+  'orders:refresh': { args: [scope: OrderScope]; result: OrderRefreshResult };
+  'orders:syncState': { args: [scope: OrderScope]; result: OrderSyncState };
   'orders:decodeAddress': { args: [accountId: string, orderId: string]; result: OrderAddressInfo };
   'orders:listDeliveryCompanies': { args: [accountId: string]; result: DeliveryCompanyOption[] };
   'orders:shipFromPurchase': { args: [input: ShipOrderFromPurchaseInput]; result: ShipOrderFromPurchaseResult };

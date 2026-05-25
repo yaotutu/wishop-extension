@@ -4,21 +4,23 @@ import {
   useFetchRealAddressMutation,
   useOrderAssociationsQuery,
   useOrderDetailQuery,
+  useOrderSyncStateQuery,
   useOrdersQuery,
   useProductSourcesQuery,
   useRealAddressCachesQuery,
+  useRefreshOrdersMutation,
   useSaveOrderAssociationMutation,
   useSaveProductSourcesMutation,
   useShipOrderFromPurchaseMutation,
 } from '../../hooks/useIpc';
 import { extensionApi } from '../../shared/extension-api';
 import { OrderStatus as OrderStatusEnum } from '../../shared/types';
-import type { DeliveryCompanyOption, Order, OrderStatus, OrderProductInfo, OrderSearchParams, OrderRealAddressCache, OrderAssociation, ProductSourceItem, OrderTimeScope, TaobaoRefundSession } from '../../shared/types';
+import type { Account, DeliveryCompanyOption, Order, OrderScope, OrderSearchSource, OrderStatus, OrderProductInfo, OrderSearchParams, OrderRealAddressCache, OrderAssociation, ProductSourceItem, OrderTimeScope, TaobaoRefundSession } from '../../shared/types';
 import { getDeliveryCompanyUnmatchedMessage, isDeliveryCompanyUnmatchedError } from '../../shared/errors';
 import { formatOrderAddressForCopy } from '../../shared/address-format';
 import { newProductSourceRow, ShippingSourceModal, SourceManagementModal } from './components/ProductSourceModals';
 import { OrderDetailModal } from './components/OrderDetailModal';
-import { createOrderColumns } from './components/OrderTableColumns';
+import { createOrderColumns, type OrderTableRecord } from './components/OrderTableColumns';
 import { OrderToolbar } from './components/OrderToolbar';
 import { OrderAssociationModal } from './components/OrderAssociationModal';
 import { getEstimatedCommissionFee } from './order-display';
@@ -47,23 +49,36 @@ async function convertImageBlobToPng(blob: Blob): Promise<Blob> {
   });
 }
 
-const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
+function scopedKey(accountId: string, id: string): string {
+  return `${accountId}:${id}`;
+}
+
+const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, accounts }) => {
+  const accountNameById = useMemo(() => new Map(accounts.map(account => [account.id, account.name])), [accounts]);
+  const accountIds = useMemo(
+    () => scope.type === 'all' ? accounts.map(account => account.id) : [scope.accountId],
+    [accounts, scope],
+  );
+  const accountIdSet = useMemo(() => new Set(accountIds), [accountIds]);
   const [activeStatus, setActiveStatus] = useState<OrderStatus | undefined>(undefined);
   const [timeScope, setTimeScope] = useState<OrderTimeScope>('all');
   const [searchType, setSearchType] = useState<OrderSearchParams['search_type']>('order_id');
+  const [searchSource, setSearchSource] = useState<OrderSearchSource>('local');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [activeSearch, setActiveSearch] = useState<OrderSearchParams | null>(null);
   const [hiddenError, setHiddenError] = useState('');
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [detailAccountId, setDetailAccountId] = useState('');
   const [detailOrderId, setDetailOrderId] = useState('');
   const [decodingOrderIds, setDecodingOrderIds] = useState<Set<string>>(new Set());
   const [associationModalOpen, setAssociationModalOpen] = useState(false);
-  const [associationOrder, setAssociationOrder] = useState<Order | null>(null);
+  const [associationOrder, setAssociationOrder] = useState<OrderTableRecord | null>(null);
   const [sourceModalOpen, setSourceModalOpen] = useState(false);
+  const [sourceAccountId, setSourceAccountId] = useState('');
   const [sourceProduct, setSourceProduct] = useState<OrderProductInfo | null>(null);
   const [sourceRows, setSourceRows] = useState<ProductSourceItem[]>([]);
   const [shipSourceModalOpen, setShipSourceModalOpen] = useState(false);
-  const [shipSourceOrder, setShipSourceOrder] = useState<Order | null>(null);
+  const [shipSourceOrder, setShipSourceOrder] = useState<OrderTableRecord | null>(null);
   const [shipSourceProduct, setShipSourceProduct] = useState<OrderProductInfo | null>(null);
   const [checkingPurchaseOrderIds, setCheckingPurchaseOrderIds] = useState<Set<string>>(new Set());
   const [shippingFromPurchaseOrderIds, setShippingFromPurchaseOrderIds] = useState<Set<string>>(new Set());
@@ -71,17 +86,23 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const tableAreaRef = useRef<HTMLDivElement>(null);
   const refundSyncTimerIdsRef = useRef<number[]>([]);
   const [scrollY, setScrollY] = useState(400);
-  const ordersQuery = useOrdersQuery(accountId, activeStatus, activeSearch, timeScope);
-  const detailQuery = useOrderDetailQuery(accountId, detailOrderId);
-  const productSourcesQuery = useProductSourcesQuery(accountId);
-  const orderAssociationsQuery = useOrderAssociationsQuery(accountId);
+  const ordersQuery = useOrdersQuery(scope, activeStatus, activeSearch, timeScope, searchSource);
+  const syncStateQuery = useOrderSyncStateQuery(scope);
+  const refreshOrdersMutation = useRefreshOrdersMutation(scope);
+  const detailQuery = useOrderDetailQuery(detailAccountId, detailOrderId);
+  const productSourcesQuery = useProductSourcesQuery(accountIds);
+  const orderAssociationsQuery = useOrderAssociationsQuery(accountIds);
   const refetchOrderAssociations = orderAssociationsQuery.refetch;
-  const realAddressCachesQuery = useRealAddressCachesQuery(accountId);
-  const saveProductSourcesMutation = useSaveProductSourcesMutation(accountId);
-  const saveOrderAssociationMutation = useSaveOrderAssociationMutation(accountId);
-  const shipOrderFromPurchaseMutation = useShipOrderFromPurchaseMutation(accountId);
-  const fetchRealAddressMutation = useFetchRealAddressMutation(accountId);
-  const orders = ordersQuery.orders;
+  const realAddressCachesQuery = useRealAddressCachesQuery(accountIds);
+  const saveProductSourcesMutation = useSaveProductSourcesMutation();
+  const saveOrderAssociationMutation = useSaveOrderAssociationMutation();
+  const shipOrderFromPurchaseMutation = useShipOrderFromPurchaseMutation();
+  const fetchRealAddressMutation = useFetchRealAddressMutation();
+  const orders = useMemo<OrderTableRecord[]>(() => ordersQuery.orders.map(snapshot => ({
+    ...snapshot.order,
+    accountId: snapshot.accountId,
+    accountName: snapshot.accountName || accountNameById.get(snapshot.accountId) || snapshot.accountId,
+  })), [accountNameById, ordersQuery.orders]);
   const hasMore = ordersQuery.hasMore;
   const loading = ordersQuery.loading;
   const productSources = productSourcesQuery.data || {};
@@ -93,9 +114,10 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const scheduleTaobaoRefundStatusSync = useCallback((session: TaobaoRefundSession) => {
     message.success('淘宝退款申请已自动提交，稍后同步淘宝订单状态');
     const timer = window.setTimeout(() => {
-      setCheckingPurchaseOrderIds(previous => new Set(previous).add(session.orderId));
+      const key = scopedKey(session.accountId, session.orderId);
+      setCheckingPurchaseOrderIds(previous => new Set(previous).add(key));
       extensionApi.purchaseLookup.open({
-        accountId,
+        accountId: session.accountId,
         orderId: session.orderId,
         platformOrderId: session.platformOrderId,
       })
@@ -105,14 +127,14 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         .catch((err: any) => {
           setCheckingPurchaseOrderIds(previous => {
             const next = new Set(previous);
-            next.delete(session.orderId);
+            next.delete(key);
             return next;
           });
           message.error(`同步淘宝订单状态失败: ${err.message}`);
         });
     }, 4000);
     refundSyncTimerIdsRef.current.push(timer);
-  }, [accountId]);
+  }, []);
 
   useEffect(() => {
     const el = tableAreaRef.current;
@@ -132,8 +154,9 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     setTimeScope('all');
     setActiveSearch(null);
     setSearchKeyword('');
+    setDetailAccountId('');
     setDetailOrderId('');
-  }, [accountId]);
+  }, [scope]);
 
   useEffect(() => {
     const errors = [
@@ -151,63 +174,63 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     const offCompleted = extensionApi.purchaseLookup.onCompleted((association) => {
       setCheckingPurchaseOrderIds(previous => {
         const next = new Set(previous);
-        next.delete(association.orderId);
+        for (const accountId of accountIds) next.delete(scopedKey(accountId, association.orderId));
         return next;
       });
       void refetchOrderAssociations();
       message.success('淘宝订单信息已回填到采购单详情');
     });
     const offFailed = extensionApi.purchaseLookup.onFailed((payload) => {
-      if (payload.accountId !== accountId) return;
+      if (!accountIdSet.has(payload.accountId)) return;
       setCheckingPurchaseOrderIds(previous => {
         const next = new Set(previous);
-        next.delete(payload.orderId);
+        next.delete(scopedKey(payload.accountId, payload.orderId));
         return next;
       });
       message.error(`淘宝订单读取失败: ${payload.error}`);
     });
     const offChallenge = extensionApi.purchaseLookup.onChallenge((payload) => {
-      if (payload.accountId !== accountId) return;
+      if (!accountIdSet.has(payload.accountId)) return;
       message.warning(`淘宝工作页需要处理验证: ${payload.reason}`);
     });
     const offRefundPrepared = extensionApi.taobaoRefund.onPrepared((session) => {
-      if (session.accountId !== accountId) return;
+      if (!accountIdSet.has(session.accountId)) return;
       setPreparingTaobaoRefundOrderIds(previous => {
         const next = new Set(previous);
-        next.delete(session.orderId);
+        next.delete(scopedKey(session.accountId, session.orderId));
         return next;
       });
       message.success('淘宝退款页已选择“不想要了”，请人工确认后手动提交');
     });
     const offRefundSubmitted = extensionApi.taobaoRefund.onSubmitted((session) => {
-      if (session.accountId !== accountId) return;
+      if (!accountIdSet.has(session.accountId)) return;
       setPreparingTaobaoRefundOrderIds(previous => {
         const next = new Set(previous);
-        next.delete(session.orderId);
+        next.delete(scopedKey(session.accountId, session.orderId));
         return next;
       });
       scheduleTaobaoRefundStatusSync(session);
     });
     const offRefundFailed = extensionApi.taobaoRefund.onFailed((payload) => {
-      if (payload.accountId !== accountId) return;
+      if (!accountIdSet.has(payload.accountId)) return;
       setPreparingTaobaoRefundOrderIds(previous => {
         const next = new Set(previous);
-        next.delete(payload.orderId);
+        next.delete(scopedKey(payload.accountId, payload.orderId));
         return next;
       });
       message.error(`淘宝退款申请准备失败: ${payload.error}`);
     });
     const offRefundChallenge = extensionApi.taobaoRefund.onChallenge((payload) => {
-      if (payload.accountId !== accountId) return;
+      if (!accountIdSet.has(payload.accountId)) return;
       message.warning(`淘宝退款页需要处理验证: ${payload.reason}`);
     });
     const offShippingAssociated = extensionApi.shipping.onPurchaseAssociated((payload) => {
-      if (payload.session.accountId !== accountId) return;
+      if (!accountIdSet.has(payload.session.accountId)) return;
       void refetchOrderAssociations();
       message.success(`淘宝订单已关联：${payload.session.linkedPlatformOrderId || '-'}`);
     });
     const offShippingFailed = extensionApi.shipping.onPurchaseAssociationFailed((session) => {
-      if (session.accountId !== accountId) return;
+      if (!accountIdSet.has(session.accountId)) return;
       message.error(session.purchaseAssociationMessage || '淘宝订单自动关联失败');
     });
     return () => {
@@ -223,7 +246,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       refundSyncTimerIdsRef.current.forEach(timer => window.clearTimeout(timer));
       refundSyncTimerIdsRef.current = [];
     };
-  }, [accountId, refetchOrderAssociations, scheduleTaobaoRefundStatusSync]);
+  }, [accountIdSet, accountIds, refetchOrderAssociations, scheduleTaobaoRefundStatusSync]);
 
   const handleStatusChange = useCallback((val: string | number | null) => {
     if (val === null) return;
@@ -253,15 +276,17 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     void ordersQuery.fetchNextPage();
   }, [ordersQuery]);
 
-  const handleViewDetail = useCallback((orderId: string) => {
+  const handleViewDetail = useCallback((order: OrderTableRecord) => {
     setDetailModalOpen(true);
-    setDetailOrderId(orderId);
+    setDetailAccountId(order.accountId);
+    setDetailOrderId(order.order_id);
   }, []);
 
-  const handleDecodeAddress = useCallback(async (orderId: string) => {
-    setDecodingOrderIds(prev => new Set(prev).add(orderId));
+  const handleDecodeAddress = useCallback(async (order: OrderTableRecord) => {
+    const key = scopedKey(order.accountId, order.order_id);
+    setDecodingOrderIds(prev => new Set(prev).add(key));
     try {
-      const cache = await fetchRealAddressMutation.mutateAsync({ orderId, refresh: false });
+      const cache = await fetchRealAddressMutation.mutateAsync({ accountId: order.accountId, orderId: order.order_id, refresh: false });
       if (cache) {
         const text = formatOrderAddressForCopy(cache.address);
         navigator.clipboard.writeText(text).then(() => message.success('真实地址已显示并复制')).catch(() => message.success('真实地址已显示'));
@@ -269,19 +294,20 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     } catch (err: any) {
       message.error(`获取真实地址失败: ${err.message}`);
     } finally {
-      setDecodingOrderIds(prev => { const s = new Set(prev); s.delete(orderId); return s; });
+      setDecodingOrderIds(prev => { const s = new Set(prev); s.delete(key); return s; });
     }
   }, [fetchRealAddressMutation]);
 
-  const handleRefreshAddress = useCallback(async (orderId: string) => {
-    setDecodingOrderIds(prev => new Set(prev).add(orderId));
+  const handleRefreshAddress = useCallback(async (order: OrderTableRecord) => {
+    const key = scopedKey(order.accountId, order.order_id);
+    setDecodingOrderIds(prev => new Set(prev).add(key));
     try {
-      await fetchRealAddressMutation.mutateAsync({ orderId, refresh: true });
+      await fetchRealAddressMutation.mutateAsync({ accountId: order.accountId, orderId: order.order_id, refresh: true });
       message.success('真实地址已刷新');
     } catch (err: any) {
       message.error(`刷新真实地址失败: ${err.message}`);
     } finally {
-      setDecodingOrderIds(prev => { const s = new Set(prev); s.delete(orderId); return s; });
+      setDecodingOrderIds(prev => { const s = new Set(prev); s.delete(key); return s; });
     }
   }, [fetchRealAddressMutation]);
 
@@ -318,32 +344,33 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     }
   }, []);
 
-  const openSourceManager = useCallback((product: OrderProductInfo) => {
+  const openSourceManager = useCallback((order: OrderTableRecord, product: OrderProductInfo) => {
+    setSourceAccountId(order.accountId);
     setSourceProduct(product);
-    const sources = (productSources[product.product_id] || []).map(source => ({ ...source }));
+    const sources = (productSources[scopedKey(order.accountId, product.product_id)] || []).map(source => ({ ...source }));
     setSourceRows(sources.length > 0 ? sources : [newProductSourceRow()]);
     setSourceModalOpen(true);
   }, [productSources]);
 
-  const openShipSources = useCallback((order: Order, product: OrderProductInfo) => {
+  const openShipSources = useCallback((order: OrderTableRecord, product: OrderProductInfo) => {
     setShipSourceOrder(order);
     setShipSourceProduct(product);
     setShipSourceModalOpen(true);
   }, []);
 
   const handleSaveSources = useCallback(async () => {
-    if (!sourceProduct) return;
+    if (!sourceProduct || !sourceAccountId) return;
     const sourcesToSave = sourceRows.filter(source => source.url.trim());
     try {
-      await saveProductSourcesMutation.mutateAsync({ productId: sourceProduct.product_id, sources: sourcesToSave });
+      await saveProductSourcesMutation.mutateAsync({ accountId: sourceAccountId, productId: sourceProduct.product_id, sources: sourcesToSave });
       setSourceModalOpen(false);
       message.success('货源已保存');
     } catch (err: any) {
       message.error(`保存货源失败: ${err.message}`);
     }
-  }, [saveProductSourcesMutation, sourceProduct, sourceRows]);
+  }, [saveProductSourcesMutation, sourceAccountId, sourceProduct, sourceRows]);
 
-  const openAssociationEditor = useCallback((order: Order) => {
+  const openAssociationEditor = useCallback((order: OrderTableRecord) => {
     setAssociationOrder(order);
     setAssociationModalOpen(true);
   }, []);
@@ -351,7 +378,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const handleSaveAssociation = useCallback(async (input: Pick<OrderAssociation, 'internalRemark' | 'linkedOrders'>) => {
     if (!associationOrder) return;
     try {
-      await saveOrderAssociationMutation.mutateAsync({ orderId: associationOrder.order_id, input });
+      await saveOrderAssociationMutation.mutateAsync({ accountId: associationOrder.accountId, orderId: associationOrder.order_id, input });
       setAssociationModalOpen(false);
       message.success('内部关联已保存');
     } catch (err: any) {
@@ -369,7 +396,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       async onOk() {
         try {
           const session = await extensionApi.purchaseLookup.open({
-            accountId,
+            accountId: associationOrder.accountId,
             orderId: associationOrder.order_id,
             platformOrderId,
           });
@@ -381,20 +408,21 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         }
       },
     });
-  }, [accountId, associationOrder]);
+  }, [associationOrder]);
 
-  const handleCheckPurchaseOrder = useCallback(async (order: Order) => {
-    const linked = orderAssociations[order.order_id]?.linkedOrders[0];
+  const handleCheckPurchaseOrder = useCallback(async (order: OrderTableRecord) => {
+    const key = scopedKey(order.accountId, order.order_id);
+    const linked = orderAssociations[key]?.linkedOrders[0];
     const platformOrderId = linked?.platform === 'taobao' ? linked.platformOrderId?.trim() : '';
     if (!platformOrderId) {
       message.warning('当前订单还没有关联淘宝订单号');
       return;
     }
 
-    setCheckingPurchaseOrderIds(previous => new Set(previous).add(order.order_id));
+    setCheckingPurchaseOrderIds(previous => new Set(previous).add(key));
     try {
       const session = await extensionApi.purchaseLookup.open({
-        accountId,
+        accountId: order.accountId,
         orderId: order.order_id,
         platformOrderId,
       });
@@ -402,22 +430,24 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     } catch (err: any) {
       setCheckingPurchaseOrderIds(previous => {
         const next = new Set(previous);
-        next.delete(order.order_id);
+        next.delete(key);
         return next;
       });
       message.error(`检查淘宝发货状态失败: ${err.message}`);
     }
-  }, [accountId, orderAssociations]);
+  }, [orderAssociations]);
 
   const submitShipFromPurchase = useCallback(async (
-    order: Order,
+    order: OrderTableRecord,
     logisticsCompany: string,
     trackingNumber: string,
     deliveryId?: string,
   ) => {
-    setShippingFromPurchaseOrderIds(previous => new Set(previous).add(order.order_id));
+    const key = scopedKey(order.accountId, order.order_id);
+    setShippingFromPurchaseOrderIds(previous => new Set(previous).add(key));
     try {
       const result = await shipOrderFromPurchaseMutation.mutateAsync({
+        accountId: order.accountId,
         orderId: order.order_id,
         logisticsCompany,
         trackingNumber,
@@ -428,14 +458,14 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     } finally {
       setShippingFromPurchaseOrderIds(previous => {
         const next = new Set(previous);
-        next.delete(order.order_id);
+        next.delete(key);
         return next;
       });
     }
   }, [ordersQuery, shipOrderFromPurchaseMutation]);
 
   const openDeliveryCompanySelector = useCallback(async (
-    order: Order,
+    order: OrderTableRecord,
     logisticsCompany: string,
     trackingNumber: string,
     reason: string,
@@ -443,7 +473,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     let selectedDeliveryId = '';
     let companies: DeliveryCompanyOption[] = [];
     try {
-      companies = await extensionApi.orders.listDeliveryCompanies(accountId);
+      companies = await extensionApi.orders.listDeliveryCompanies(order.accountId);
     } catch (err: any) {
       message.error(`获取微信小店快递公司列表失败: ${err.message}`);
       return;
@@ -488,10 +518,10 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         }
       },
     });
-  }, [accountId, submitShipFromPurchase]);
+  }, [submitShipFromPurchase]);
 
-  const handleShipFromPurchase = useCallback((order: Order) => {
-    const linked = orderAssociations[order.order_id]?.linkedOrders[0];
+  const handleShipFromPurchase = useCallback((order: OrderTableRecord) => {
+    const linked = orderAssociations[scopedKey(order.accountId, order.order_id)]?.linkedOrders[0];
     const logisticsCompany = linked?.logisticsCompany?.trim() || '';
     const trackingNumber = linked?.trackingNumber?.trim() || '';
     if (!logisticsCompany || !trackingNumber) {
@@ -523,8 +553,8 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     });
   }, [openDeliveryCompanySelector, orderAssociations, submitShipFromPurchase]);
 
-  const handlePrepareTaobaoRefund = useCallback((order: Order) => {
-    const linked = orderAssociations[order.order_id]?.linkedOrders[0];
+  const handlePrepareTaobaoRefund = useCallback((order: OrderTableRecord) => {
+    const linked = orderAssociations[scopedKey(order.accountId, order.order_id)]?.linkedOrders[0];
     const platformOrderId = linked?.platform === 'taobao' ? linked.platformOrderId?.trim() : '';
     if (!platformOrderId) {
       message.warning('当前订单还没有关联淘宝订单号');
@@ -548,10 +578,11 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       okText: autoSubmit ? '自动提交退款' : '打开并选择原因',
       cancelText: '取消',
       async onOk() {
-        setPreparingTaobaoRefundOrderIds(previous => new Set(previous).add(order.order_id));
+        const key = scopedKey(order.accountId, order.order_id);
+        setPreparingTaobaoRefundOrderIds(previous => new Set(previous).add(key));
         try {
           const session = await extensionApi.taobaoRefund.open({
-            accountId,
+            accountId: order.accountId,
             orderId: order.order_id,
             platformOrderId,
             reason: '不想要了',
@@ -563,7 +594,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         } catch (err: any) {
           setPreparingTaobaoRefundOrderIds(previous => {
             const next = new Set(previous);
-            next.delete(order.order_id);
+            next.delete(key);
             return next;
           });
           message.error(`打开淘宝退款页失败: ${err.message}`);
@@ -571,11 +602,11 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         }
       },
     });
-  }, [accountId, orderAssociations]);
+  }, [orderAssociations]);
 
   const handleOpenShippingSession = useCallback(async (source: ProductSourceItem) => {
     if (!shipSourceOrder || !shipSourceProduct) return;
-    const address = realAddressCaches[shipSourceOrder.order_id]?.address;
+    const address = realAddressCaches[scopedKey(shipSourceOrder.accountId, shipSourceOrder.order_id)]?.address;
 
     /**
      * 发货会话是 dashboard 到淘宝 content script 的唯一桥梁。
@@ -583,7 +614,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
      * 未解密订单会在淘宝浮窗里提供显式按钮，由用户确认后再消耗额度。
      */
     await extensionApi.shipping.open({
-      accountId,
+      accountId: shipSourceOrder.accountId,
       orderId: shipSourceOrder.order_id,
       productId: shipSourceProduct.product_id,
       source: {
@@ -611,9 +642,10 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     });
     setShipSourceModalOpen(false);
     message.success(address ? '已打开淘宝发货页' : '已打开淘宝发货页，真实地址需手动获取');
-  }, [accountId, realAddressCaches, shipSourceOrder, shipSourceProduct]);
+  }, [realAddressCaches, shipSourceOrder, shipSourceProduct]);
 
   const columns = useMemo(() => createOrderColumns({
+    showAccountColumn: scope.type === 'all',
     realAddressCaches,
     decodingOrderIds,
     productSources,
@@ -635,6 +667,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     onPrepareTaobaoRefund: handlePrepareTaobaoRefund,
   }), [
     realAddressCaches,
+    scope.type,
     decodingOrderIds,
     productSources,
     orderAssociations,
@@ -662,15 +695,27 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         timeScope={timeScope}
         searchActive={!!activeSearch?.keyword.trim()}
         searchType={searchType}
+        searchSource={searchSource}
         searchKeyword={searchKeyword}
         loading={loading}
+        refreshing={refreshOrdersMutation.isPending}
         error={error}
+        syncState={syncStateQuery.data}
         onStatusChange={handleStatusChange}
         onTimeScopeChange={handleTimeScopeChange}
         onSearchTypeChange={setSearchType}
+        onSearchSourceChange={setSearchSource}
         onSearchKeywordChange={setSearchKeyword}
         onSearch={handleSearch}
-        onRefresh={() => ordersQuery.refetch()}
+        onRefresh={() => {
+          refreshOrdersMutation.mutate(undefined, {
+            onSuccess: () => {
+              message.success('订单刷新完成');
+              void ordersQuery.refetch();
+            },
+            onError: (err: any) => message.error(`订单刷新失败: ${err.message}`),
+          });
+        }}
         onClearError={() => setHiddenError(orderError)}
       />
 
@@ -678,7 +723,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         <Table
           dataSource={orders}
           columns={columns}
-          rowKey="order_id"
+          rowKey={(record) => scopedKey(record.accountId, record.order_id)}
           size="small"
           loading={loading}
           pagination={false}
@@ -707,7 +752,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         open={detailModalOpen}
         loading={detailQuery.isLoading || detailQuery.isFetching}
         order={detailQuery.data || null}
-        realAddressCache={detailQuery.data ? realAddressCaches[detailQuery.data.order_id] : undefined}
+        realAddressCache={detailQuery.data ? realAddressCaches[scopedKey(detailAccountId, detailQuery.data.order_id)] : undefined}
         onCancel={() => setDetailModalOpen(false)}
       />
 
@@ -724,13 +769,13 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       <ShippingSourceModal
         open={shipSourceModalOpen}
         product={shipSourceProduct}
-        sources={shipSourceProduct ? productSources[shipSourceProduct.product_id] || [] : []}
+        sources={shipSourceOrder && shipSourceProduct ? productSources[scopedKey(shipSourceOrder.accountId, shipSourceProduct.product_id)] || [] : []}
         onCancel={() => setShipSourceModalOpen(false)}
         onOpenShipping={handleOpenShippingSession}
       />
       <OrderAssociationModal
         open={associationModalOpen}
-        association={associationOrder ? orderAssociations[associationOrder.order_id] : undefined}
+        association={associationOrder ? orderAssociations[scopedKey(associationOrder.accountId, associationOrder.order_id)] : undefined}
         saving={saveOrderAssociationMutation.isPending}
         onCancel={() => setAssociationModalOpen(false)}
         onSave={handleSaveAssociation}

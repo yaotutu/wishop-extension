@@ -10,7 +10,17 @@ import { canPrepareTaobaoRefund as canPrepareTaobaoRefundForOrder, isLinkedPurch
 
 const { Text } = Typography;
 
+export type OrderTableRecord = Order & {
+  accountId: string;
+  accountName: string;
+};
+
+function scopedKey(record: OrderTableRecord, id: string): string {
+  return `${record.accountId}:${id}`;
+}
+
 interface CreateOrderColumnsOptions {
+  showAccountColumn?: boolean;
   realAddressCaches: Record<string, OrderRealAddressCache>;
   decodingOrderIds: Set<string>;
   productSources: Record<string, ProductSourceItem[]>;
@@ -21,15 +31,15 @@ interface CreateOrderColumnsOptions {
   onCopyText: (text: string | undefined, label: string) => void;
   onCopyImage: (imageUrl?: string) => void;
   onCopyAddress: (cache: OrderRealAddressCache) => void;
-  onDecodeAddress: (orderId: string) => void;
-  onRefreshAddress: (orderId: string) => void;
-  onViewDetail: (orderId: string) => void;
-  onOpenSourceManager: (product: OrderProductInfo) => void;
-  onOpenShipSources: (order: Order, product: OrderProductInfo) => void;
-  onEditAssociation: (order: Order) => void;
-  onCheckPurchaseOrder: (order: Order) => void;
-  onShipFromPurchase: (order: Order) => void;
-  onPrepareTaobaoRefund: (order: Order) => void;
+  onDecodeAddress: (order: OrderTableRecord) => void;
+  onRefreshAddress: (order: OrderTableRecord) => void;
+  onViewDetail: (order: OrderTableRecord) => void;
+  onOpenSourceManager: (order: OrderTableRecord, product: OrderProductInfo) => void;
+  onOpenShipSources: (order: OrderTableRecord, product: OrderProductInfo) => void;
+  onEditAssociation: (order: OrderTableRecord) => void;
+  onCheckPurchaseOrder: (order: OrderTableRecord) => void;
+  onShipFromPurchase: (order: OrderTableRecord) => void;
+  onPrepareTaobaoRefund: (order: OrderTableRecord) => void;
 }
 
 /**
@@ -38,12 +48,22 @@ interface CreateOrderColumnsOptions {
  * dense, repetitive cell rendering.
  */
 export function createOrderColumns(options: CreateOrderColumnsOptions) {
-  return [
+  const columns = [
+    ...(options.showAccountColumn ? [{
+      title: '账号',
+      key: 'account',
+      width: 110,
+      render: (_: unknown, record: OrderTableRecord) => (
+        <Tag color="blue" style={{ maxWidth: 96, overflow: 'hidden', textOverflow: 'ellipsis' }} title={record.accountName}>
+          {record.accountName || record.accountId}
+        </Tag>
+      ),
+    }] : []),
     {
       title: '订单信息',
       key: 'order_info',
       width: 280,
-      render: (_: unknown, record: Order) => {
+      render: (_: unknown, record: OrderTableRecord) => {
         const product = firstProduct(record);
         const ext = record.order_detail?.ext_info;
         const customerNote = ext?.customer_notes?.trim();
@@ -149,7 +169,7 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
       title: '实付款',
       key: 'price',
       width: 130,
-      render: (_: unknown, record: Order) => {
+      render: (_: unknown, record: OrderTableRecord) => {
         const pi = record.order_detail?.price_info;
         const estimatedCommissionFee = getEstimatedCommissionFee(record);
         if (!pi) return '-';
@@ -177,7 +197,7 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
       title: '订单状态',
       key: 'status',
       width: 170,
-      render: (_: unknown, record: Order) => {
+      render: (_: unknown, record: OrderTableRecord) => {
         const cfg = STATUS_CONFIG[record.status] || { color: 'default', text: `未知(${record.status})` };
         const payInfo = record.order_detail?.pay_info;
         const deliveryInfos = record.order_detail?.delivery_info?.delivery_product_info;
@@ -213,15 +233,15 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
       title: '收货地址',
       key: 'address',
       width: 180,
-      render: (_: unknown, record: Order) => {
+      render: (_: unknown, record: OrderTableRecord) => {
         const masked = record.order_detail?.delivery_info?.address_info;
-        const real = options.realAddressCaches[record.order_id];
+        const real = options.realAddressCaches[scopedKey(record, record.order_id)];
         const addr = real?.address || masked;
         if (!addr) return '-';
         const fullAddr = formatOrderAddressLine(addr);
         const phone = getOrderPhoneDisplay(addr);
         const isDecoded = !!real;
-        const isDecoding = options.decodingOrderIds.has(record.order_id);
+        const isDecoding = options.decodingOrderIds.has(scopedKey(record, record.order_id));
         const fetchedAt = real ? new Date(real.fetchedAt).toLocaleString('zh-CN', {
           month: '2-digit',
           day: '2-digit',
@@ -245,7 +265,7 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
               <div style={{ fontSize: 12, color: '#8c8c8c' }}>获取：{fetchedAt}</div>
             )}
             {!isDecoded && hasAddressInfo(record) && (
-              <Button type="link" size="small" loading={isDecoding} onClick={() => options.onDecodeAddress(record.order_id)} style={{ padding: 0, height: 'auto', fontSize: 12 }}>
+              <Button type="link" size="small" loading={isDecoding} onClick={() => options.onDecodeAddress(record)} style={{ padding: 0, height: 'auto', fontSize: 12 }}>
                 查看真实地址
               </Button>
             )}
@@ -254,7 +274,7 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
                 <Button type="link" size="small" onClick={() => options.onCopyAddress(real)} style={{ padding: 0, height: 'auto', fontSize: 12 }}>
                   复制地址
                 </Button>
-                <Button type="link" size="small" loading={isDecoding} onClick={() => options.onRefreshAddress(record.order_id)} style={{ padding: 0, height: 'auto', fontSize: 12 }}>
+                <Button type="link" size="small" loading={isDecoding} onClick={() => options.onRefreshAddress(record)} style={{ padding: 0, height: 'auto', fontSize: 12 }}>
                   刷新
                 </Button>
               </Space>
@@ -267,8 +287,8 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
       title: '采购单详情',
       key: 'purchase_detail',
       width: 190,
-      render: (_: unknown, record: Order) => {
-        const association = options.orderAssociations[record.order_id];
+      render: (_: unknown, record: OrderTableRecord) => {
+        const association = options.orderAssociations[scopedKey(record, record.order_id)];
         const linked = association?.linkedOrders[0] ? normalizeLinkedPurchaseOrder(association.linkedOrders[0]) : undefined;
         const internalRemark = association?.internalRemark?.trim();
         const canShipFromPurchase = record.status === OrderStatusEnum.PendingShipment
@@ -305,7 +325,7 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
                     type="link"
                     size="small"
                     icon={<SyncOutlined />}
-                    loading={options.checkingPurchaseOrderIds.has(record.order_id)}
+                    loading={options.checkingPurchaseOrderIds.has(scopedKey(record, record.order_id))}
                     onClick={() => options.onCheckPurchaseOrder(record)}
                     style={{ padding: 0, height: 18, fontSize: 12, justifySelf: 'start' }}
                   >
@@ -318,7 +338,7 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
                     size="small"
                     icon={<SendOutlined />}
                     disabled={!canShipFromPurchase}
-                    loading={options.shippingFromPurchaseOrderIds.has(record.order_id)}
+                    loading={options.shippingFromPurchaseOrderIds.has(scopedKey(record, record.order_id))}
                     onClick={() => options.onShipFromPurchase(record)}
                     title={!canShipFromPurchase ? '仅待发货订单且已读取快递公司和快递单号时可回填' : undefined}
                     style={{ padding: 0, height: 18, fontSize: 12, justifySelf: 'start' }}
@@ -332,7 +352,7 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
                     size="small"
                     danger
                     icon={<RollbackOutlined />}
-                    loading={options.preparingTaobaoRefundOrderIds.has(record.order_id)}
+                    loading={options.preparingTaobaoRefundOrderIds.has(scopedKey(record, record.order_id))}
                     onClick={() => options.onPrepareTaobaoRefund(record)}
                     style={{ padding: 0, height: 18, fontSize: 12, justifySelf: 'start' }}
                   >
@@ -357,12 +377,12 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
       title: '操作',
       key: 'action',
       width: 120,
-      render: (_: unknown, record: Order) => {
+      render: (_: unknown, record: OrderTableRecord) => {
         const product = firstProduct(record);
-        const sources = product?.product_id ? options.productSources[product.product_id] || [] : [];
+        const sources = product?.product_id ? options.productSources[scopedKey(record, product.product_id)] || [] : [];
         return (
           <Flex vertical align="flex-start">
-            <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => options.onViewDetail(record.order_id)}>
+            <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => options.onViewDetail(record)}>
               详情
             </Button>
             <Button
@@ -370,7 +390,7 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
               size="small"
               icon={<LinkOutlined />}
               disabled={!product?.product_id}
-              onClick={() => product && options.onOpenSourceManager(product)}
+              onClick={() => product && options.onOpenSourceManager(record, product)}
             >
               管理货源
             </Button>
@@ -384,4 +404,5 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
       },
     },
   ];
+  return columns;
 }

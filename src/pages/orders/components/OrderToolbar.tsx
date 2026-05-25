@@ -1,7 +1,7 @@
 import React from 'react';
 import { Alert, Button, Flex, Input, Select, Space, Tag, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
-import type { OrderSearchParams, OrderStatus, OrderTimeScope } from '../../../shared/types';
+import type { OrderSearchParams, OrderSearchSource, OrderStatus, OrderSyncState, OrderTimeScope } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
 
 const { Text } = Typography;
@@ -34,12 +34,16 @@ interface Props {
   timeScope: OrderTimeScope;
   searchActive: boolean;
   searchType: OrderSearchParams['search_type'];
+  searchSource: OrderSearchSource;
   searchKeyword: string;
   loading: boolean;
+  refreshing: boolean;
   error: string | null;
+  syncState?: OrderSyncState;
   onStatusChange: (value: string | number | null) => void;
   onTimeScopeChange: (value: OrderTimeScope) => void;
   onSearchTypeChange: (value: OrderSearchParams['search_type']) => void;
+  onSearchSourceChange: (value: OrderSearchSource) => void;
   onSearchKeywordChange: (value: string) => void;
   onSearch: (value: string) => void;
   onRefresh: () => void;
@@ -51,17 +55,24 @@ export const OrderToolbar: React.FC<Props> = ({
   timeScope,
   searchActive,
   searchType,
+  searchSource,
   searchKeyword,
   loading,
+  refreshing,
   error,
+  syncState,
   onStatusChange,
   onTimeScopeChange,
   onSearchTypeChange,
+  onSearchSourceChange,
   onSearchKeywordChange,
   onSearch,
   onRefresh,
   onClearError,
 }) => {
+  const nextSyncSeconds = syncState?.nextSyncAt
+    ? Math.max(0, Math.ceil((syncState.nextSyncAt - Date.now()) / 1000))
+    : null;
   return (
     <Flex vertical gap={8} style={{ flexShrink: 0, borderBottom: '1px solid #f0f0f0', paddingBottom: 10 }}>
       <Tag.CheckableTagGroup
@@ -77,6 +88,16 @@ export const OrderToolbar: React.FC<Props> = ({
             onChange={onSearchTypeChange}
             options={SEARCH_TYPE_OPTIONS}
             style={{ width: 120 }}
+          />
+          <Select
+            size="small"
+            value={searchSource}
+            onChange={onSearchSourceChange}
+            options={[
+              { value: 'local', label: '本地搜索' },
+              { value: 'remote', label: '服务器最新' },
+            ]}
+            style={{ width: 112 }}
           />
           <Input.Search
             size="small"
@@ -97,8 +118,14 @@ export const OrderToolbar: React.FC<Props> = ({
           disabled={searchActive}
           style={{ width: 112 }}
         />
-        <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={onRefresh}>刷新</Button>
-        <Text type="secondary" style={{ fontSize: 12 }}>列表每页加载 50 条；搜索不受时间范围限制</Text>
+        <Button size="small" icon={<ReloadOutlined />} loading={refreshing} onClick={onRefresh}>立即更新</Button>
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          {syncState?.running
+            ? '正在同步订单'
+            : nextSyncSeconds !== null
+              ? `${nextSyncSeconds} 秒后自动更新`
+              : '等待自动更新'}
+        </Text>
       </Flex>
       {error && (
         <Alert type="error" title={error} showIcon closable={{ onClose: onClearError }} />

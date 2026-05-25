@@ -1,4 +1,5 @@
 import type { GlobalLogModule } from '../../shared/global-log';
+import type { GlobalLogScope, GlobalLogTaskKind } from '../../shared/global-log';
 import type { ScheduledJob, ScheduledJobRunStats, ScheduledJobStatus, ScheduledJobType } from '../../shared/types';
 import { getAccounts, getAccount } from '../store/account-repository';
 import {
@@ -66,6 +67,16 @@ function parseAccountAlarm(name: string): string | null {
 
 function logModule(job: ScheduledJob): GlobalLogModule {
   return job.module;
+}
+
+function logScope(job: ScheduledJob): GlobalLogScope {
+  return job.scope === 'account' ? 'account' : 'global';
+}
+
+function taskKind(job: ScheduledJob): GlobalLogTaskKind {
+  if (job.scope === 'global') return 'globalScheduled';
+  if (job.scope === 'system') return 'background';
+  return 'scheduled';
 }
 
 async function updateRunStats(
@@ -204,19 +215,19 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
   if ((job.dailyLimit || 0) > 0 && todayRunCount >= (job.dailyLimit || 0)) {
     await recordTaskSkipped({
       module: logModule(job),
-      scope: job.scope,
+      scope: logScope(job),
       accountId: targetAccountId,
       accountName: account?.name,
       taskId: job.id,
       taskName: job.name,
-      taskKind: job.scope === 'global' ? 'globalScheduled' : 'scheduled',
+      taskKind: taskKind(job),
       title: '定时任务跳过',
       detail: `今日已执行 ${todayRunCount}，达到任务上限 ${job.dailyLimit}`,
     });
     return;
   }
 
-  const runId = `${job.scope === 'global' ? 'global-job' : 'job'}-${job.id}-${Date.now()}`;
+  const runId = `${job.scope === 'global' ? 'global-job' : job.scope === 'system' ? 'system-job' : 'job'}-${job.id}-${Date.now()}`;
   const startedAt = Date.now();
   await patchStatsFor(job, targetAccountId, {
     lastRunDate: currentDate,
@@ -228,12 +239,12 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
 
   await recordTaskStarted({
     module: logModule(job),
-    scope: job.scope,
+    scope: logScope(job),
     accountId: targetAccountId,
     accountName: account?.name,
     taskId: job.id,
     taskName: job.name,
-    taskKind: job.scope === 'global' ? 'globalScheduled' : 'scheduled',
+    taskKind: taskKind(job),
     runId,
     title: '定时任务开始执行',
     detail: `任务类型：${job.jobType}`,
@@ -261,12 +272,12 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
     if (status === 'skipped') {
       await recordTaskSkipped({
         module: logModule(job),
-        scope: job.scope,
+        scope: logScope(job),
         accountId: targetAccountId,
         accountName: account?.name,
         taskId: job.id,
         taskName: job.name,
-        taskKind: job.scope === 'global' ? 'globalScheduled' : 'scheduled',
+        taskKind: taskKind(job),
         title: '定时任务跳过',
         detail: result?.error,
       });
@@ -275,12 +286,12 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
 
     await recordTaskCompleted({
       module: logModule(job),
-      scope: job.scope,
+      scope: logScope(job),
       accountId: targetAccountId,
       accountName: account?.name,
       taskId: job.id,
       taskName: job.name,
-      taskKind: job.scope === 'global' ? 'globalScheduled' : 'scheduled',
+      taskKind: taskKind(job),
       runId,
       level: status === 'failed' ? 'warning' : 'success',
       title: '定时任务执行完成',
@@ -298,12 +309,12 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
     });
     await recordTaskFailed({
       module: logModule(job),
-      scope: job.scope,
+      scope: logScope(job),
       accountId: targetAccountId,
       accountName: account?.name,
       taskId: job.id,
       taskName: job.name,
-      taskKind: job.scope === 'global' ? 'globalScheduled' : 'scheduled',
+      taskKind: taskKind(job),
       runId,
       title: '定时任务执行失败',
       error: { message },

@@ -6,10 +6,11 @@ export interface Config {
 }
 
 export type ScheduledJobModule = 'listing' | 'orders' | 'violation' | 'store' | 'system';
-export type ScheduledJobScope = 'account' | 'global';
+export type ScheduledJobScope = 'account' | 'global' | 'system';
 export type ScheduledJobType =
   | 'listing.submitDrafts'
   | 'orders.checkShipmentStatus'
+  | 'orders.syncRecent'
   | 'violation.scanProducts';
 export type ScheduledJobStatus = 'idle' | 'running' | 'waiting_user' | 'completed' | 'failed' | 'skipped';
 
@@ -460,6 +461,71 @@ export interface OrderSearchParams {
   status?: OrderStatus;
   next_key?: string;
   page_size?: number;
+}
+
+export type OrderScope =
+  | { type: 'all' }
+  | { type: 'account'; accountId: string };
+
+export type OrderSearchSource = 'local' | 'remote';
+
+export type StoredOrderSource = 'autoSync' | 'manualRefresh' | 'remoteSearch' | 'detailRefresh';
+
+export interface StoredOrderSnapshot {
+  accountId: string;
+  accountName: string;
+  orderId: string;
+  order: Order;
+  indexedText: string;
+  lastFetchedAt: number;
+  lastChangedAt: number;
+  source: StoredOrderSource;
+}
+
+export interface OrderListFilters {
+  status?: OrderStatus;
+  search?: OrderSearchParams | null;
+  timeScope?: OrderTimeScope;
+  pageSize?: number;
+  cursor?: string;
+  nowSeconds?: number;
+}
+
+export interface LocalOrderListResult {
+  orders: StoredOrderSnapshot[];
+  hasMore: boolean;
+  nextCursor?: string;
+}
+
+export interface OrderSyncAccountState {
+  accountId: string;
+  accountName?: string;
+  running: boolean;
+  lastStartedAt?: number;
+  lastFinishedAt?: number;
+  lastSuccessAt?: number;
+  lastError?: string;
+  nextSyncAt?: number;
+}
+
+export interface OrderSyncState {
+  scope: OrderScope;
+  running: boolean;
+  lastStartedAt?: number;
+  lastFinishedAt?: number;
+  lastSuccessAt?: number;
+  lastError?: string;
+  nextSyncAt?: number;
+  accountStates: OrderSyncAccountState[];
+}
+
+export interface OrderRefreshResult {
+  scope: OrderScope;
+  refreshedAccountIds: string[];
+  failedAccounts: Array<{ accountId: string; accountName?: string; error: string }>;
+  updatedOrderCount: number;
+  startedAt: number;
+  finishedAt: number;
 }
 
 export interface ViolationMatch {

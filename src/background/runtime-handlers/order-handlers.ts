@@ -1,29 +1,30 @@
-import type { OrderSearchParams, OrderStatus, OrderTimeScope, ShipOrderFromPurchaseInput } from '../../shared/types';
+import type { OrderListFilters, OrderScope, OrderSearchParams, OrderSearchSource, ShipOrderFromPurchaseInput } from '../../shared/types';
 import { getClient } from '../wxshop/client-registry';
 import type { RuntimeHandlerMap } from '../router/runtime-router';
 import { shipOrderFromPurchase } from '../services/order-delivery-service';
+import type { OrderDomainService } from '../orders/order-domain-service';
+import { orderDomainService } from '../orders/order-domain';
 
 interface OrderHandlerDeps {
-  listOrders: (accountId: string, status?: OrderStatus, pageSize?: number, reset?: boolean, timeScope?: OrderTimeScope) => Promise<unknown>;
-  searchOrders: (accountId: string, params: OrderSearchParams) => Promise<unknown>;
+  domain: OrderDomainService;
 }
 
-export function createOrderRuntimeHandlers(deps: OrderHandlerDeps): RuntimeHandlerMap {
+export function createOrderRuntimeHandlers(deps: OrderHandlerDeps = { domain: orderDomainService }): RuntimeHandlerMap {
   return {
     async 'orders:list'(args) {
-      return deps.listOrders(
-        args[0] as string,
-        args[1] as OrderStatus | undefined,
-        args[2] as number | undefined,
-        args[3] as boolean | undefined,
-        args[4] as OrderTimeScope | undefined,
-      );
+      return deps.domain.list(args[0] as OrderScope, args[1] as OrderListFilters | undefined);
     },
     async 'orders:detail'(args) {
-      return (await getClient(args[0] as string)).getOrderDetail(args[1] as string);
+      return deps.domain.detail(args[0] as string, args[1] as string, args[2] as { refresh?: boolean } | undefined);
     },
     async 'orders:search'(args) {
-      return deps.searchOrders(args[0] as string, args[1] as OrderSearchParams);
+      return deps.domain.search(args[0] as OrderScope, args[1] as OrderSearchParams, args[2] as OrderSearchSource);
+    },
+    async 'orders:refresh'(args) {
+      return deps.domain.refresh(args[0] as OrderScope);
+    },
+    async 'orders:syncState'(args) {
+      return deps.domain.syncState(args[0] as OrderScope);
     },
     async 'orders:decodeAddress'(args) {
       return (await getClient(args[0] as string)).decodeOrderSensitiveInfo(args[1] as string);

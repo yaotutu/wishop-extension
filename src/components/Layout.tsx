@@ -5,6 +5,7 @@ import GlobalLogDrawer from './GlobalLogDrawer';
 import NotificationCenter from './NotificationCenter';
 import { useAccounts } from '../hooks/useAccounts';
 import type { Account } from '../shared/types';
+import type { OrderScope } from '../shared/types';
 import { CredentialErrorProvider } from '../contexts/CredentialErrorContext';
 import {
   useDashboardUiPreferencesStore,
@@ -44,21 +45,26 @@ const AccountSider: React.FC<{
   accounts: Account[];
   activeAccountId: string;
   activeModule: DashboardModuleType;
+  orderScopeType: OrderScope['type'];
+  setOrderScopeType: (scope: OrderScope['type']) => void;
   productReviewScope: ProductReviewScope;
   setProductReviewScope: (scope: ProductReviewScope) => void;
   switchAccount: (id: string) => void;
-}> = ({ accounts, activeAccountId, activeModule, productReviewScope, setProductReviewScope, switchAccount }) => (
+}> = ({ accounts, activeAccountId, activeModule, orderScopeType, setOrderScopeType, productReviewScope, setProductReviewScope, switchAccount }) => (
   <Sider width={180} theme="light" style={{ borderRight: '1px solid #f0f0f0' }}>
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {activeModule === 'commonFunctions' && (
+      {(activeModule === 'commonFunctions' || activeModule === 'orders') && (
         <div style={{ padding: '8px 8px 10px', borderBottom: '1px solid #f0f0f0' }}>
           <div
-            onClick={() => setProductReviewScope('global')}
+            onClick={() => {
+              if (activeModule === 'orders') setOrderScopeType('all');
+              else setProductReviewScope('global');
+            }}
             style={{
               padding: '8px 10px',
               cursor: 'pointer',
-              background: productReviewScope === 'global' ? '#e6f4ff' : '#fafafa',
-              border: productReviewScope === 'global' ? '1px solid #91caff' : '1px solid #f0f0f0',
+              background: (activeModule === 'orders' ? orderScopeType === 'all' : productReviewScope === 'global') ? '#e6f4ff' : '#fafafa',
+              border: (activeModule === 'orders' ? orderScopeType === 'all' : productReviewScope === 'global') ? '1px solid #91caff' : '1px solid #f0f0f0',
               borderRadius: 6,
               fontSize: 13,
               fontWeight: 500,
@@ -78,13 +84,14 @@ const AccountSider: React.FC<{
             key={account.id}
             onClick={() => {
               if (activeModule === 'commonFunctions') setProductReviewScope('account');
+              if (activeModule === 'orders') setOrderScopeType('account');
               switchAccount(account.id);
             }}
             style={{
               padding: '8px 16px',
               cursor: 'pointer',
-              background: (activeModule !== 'commonFunctions' || productReviewScope === 'account') && account.id === activeAccountId ? '#e6f4ff' : 'transparent',
-              borderLeft: (activeModule !== 'commonFunctions' || productReviewScope === 'account') && account.id === activeAccountId ? '3px solid #1677ff' : '3px solid transparent',
+              background: (activeModule === 'orders' ? orderScopeType === 'account' : activeModule !== 'commonFunctions' || productReviewScope === 'account') && account.id === activeAccountId ? '#e6f4ff' : 'transparent',
+              borderLeft: (activeModule === 'orders' ? orderScopeType === 'account' : activeModule !== 'commonFunctions' || productReviewScope === 'account') && account.id === activeAccountId ? '3px solid #1677ff' : '3px solid transparent',
               fontSize: 13,
               userSelect: 'none',
               transition: 'background 0.2s',
@@ -103,8 +110,9 @@ const AccountModuleContent: React.FC<{
   accounts: Account[];
   activeAccountId: string;
   activeModule: DashboardModuleType;
+  orderScopeType: OrderScope['type'];
   productReviewScope: ProductReviewScope;
-}> = ({ accounts, activeAccountId, activeModule, productReviewScope }) => {
+}> = ({ accounts, activeAccountId, activeModule, orderScopeType, productReviewScope }) => {
   if (accounts.length === 0) {
     return (
       <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -116,9 +124,12 @@ const AccountModuleContent: React.FC<{
     return <ListingPage accountId={activeAccountId} accounts={accounts} scope="global" />;
   }
   const activeAccount = accounts.find(account => account.id === activeAccountId) || accounts[0];
+  const orderScope: OrderScope = orderScopeType === 'all'
+    ? { type: 'all' }
+    : { type: 'account', accountId: activeAccount.id };
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {activeModule === 'orders' && <OrdersPage accountId={activeAccount.id} />}
+      {activeModule === 'orders' && <OrdersPage scope={orderScope} accounts={accounts} />}
       {activeModule === 'commonFunctions' && <ListingPage accountId={activeAccount.id} accounts={accounts} scope="account" />}
       {activeModule === 'violation' && <ViolationPage accountId={activeAccount.id} />}
     </div>
@@ -127,6 +138,7 @@ const AccountModuleContent: React.FC<{
 
 const Layout: React.FC = () => {
   const [version, setVersion] = useState('');
+  const [orderScopeType, setOrderScopeType] = useState<OrderScope['type']>('account');
   const { accounts, activeAccountId, fetchAccounts, addAccount, removeAccount, updateAccount, switchAccount } = useAccounts();
   const {
     activeModule,
@@ -180,6 +192,8 @@ const Layout: React.FC = () => {
               accounts={accounts}
               activeAccountId={activeAccountId}
               activeModule={activeModule}
+              orderScopeType={orderScopeType}
+              setOrderScopeType={setOrderScopeType}
               productReviewScope={productReviewScope}
               setProductReviewScope={setProductReviewScope}
               switchAccount={switchAccount}
@@ -192,6 +206,7 @@ const Layout: React.FC = () => {
                   accounts={accounts}
                   activeAccountId={activeAccountId}
                   activeModule={activeModule}
+                  orderScopeType={orderScopeType}
                   productReviewScope={productReviewScope}
                 />
               </div>
