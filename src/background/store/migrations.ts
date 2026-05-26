@@ -81,7 +81,31 @@ const migrations: Record<number, Migration> = {
       storageVersion: 8,
     };
   },
+  9(store) {
+    return {
+      ...store,
+      storageVersion: 9,
+    };
+  },
 };
+
+const LEGACY_BUSINESS_KEYS = [
+  'accounts',
+  'scheduledJobs',
+  'skipKeywords',
+  'blacklistRules',
+  'statusRules',
+  'notificationPreference',
+  'appSettings',
+  'globalLogs',
+  'notifications',
+  'orderSnapshots',
+  'orderSyncStates',
+];
+
+function legacyCacheKeys(store: RawStore): string[] {
+  return Object.keys(store).filter(key => key.startsWith('ordersListCache:'));
+}
 
 export async function migrateStore(): Promise<void> {
   const store = await chrome.storage.local.get(null) as RawStore;
@@ -98,4 +122,9 @@ export async function migrateStore(): Promise<void> {
   }
 
   await chrome.storage.local.set(nextStore);
+  const localStorage = chrome.storage.local as typeof chrome.storage.local & {
+    remove(keys: string | string[]): Promise<void>;
+  };
+  await localStorage.remove([...LEGACY_BUSINESS_KEYS, ...legacyCacheKeys(store)]);
+  await chrome.storage.local.set({ storageVersion: CURRENT_STORAGE_VERSION });
 }

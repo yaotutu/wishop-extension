@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import 'fake-indexeddb/auto';
 import type { Order, OrderStatus } from '../src/shared/types.ts';
-import { createOrderStore } from '../src/background/orders/order-store.ts';
+import { extensionDb } from '../src/background/db/extension-db.ts';
+import { createOrderStore, orderStore } from '../src/background/orders/order-store.ts';
 
 const PENDING_SHIPMENT = 20 as OrderStatus;
 const COMPLETED = 100 as OrderStatus;
@@ -79,6 +81,11 @@ function makeOrder(orderId: string, patch: Partial<Order> = {}): Order {
     },
     ...patch,
   };
+}
+
+async function resetDb(): Promise<void> {
+  await extensionDb.delete();
+  await extensionDb.open();
 }
 
 test('stores account metadata and lists all-account orders newest first', async () => {
@@ -175,4 +182,15 @@ test('paginated order lists return the filtered total count', async () => {
   assert.equal(firstPage.hasMore, true);
   assert.equal(firstPage.nextCursor, '50');
   assert.equal(firstPage.total, 55);
+});
+
+test('default order store persists order snapshots in IndexedDB', async () => {
+  await resetDb();
+
+  await orderStore.upsertMany('account-1', '店铺一', [makeOrder('order-1')], 'autoSync');
+
+  const stored = await extensionDb.orders.get(['account-1', 'order-1']);
+  assert.equal(stored?.accountId, 'account-1');
+  assert.equal(stored?.accountName, '店铺一');
+  assert.equal(stored?.orderId, 'order-1');
 });

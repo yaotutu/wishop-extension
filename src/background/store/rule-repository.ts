@@ -1,14 +1,21 @@
 import type { BlacklistRule, StatusRule } from '../../shared/types';
-import { DEFAULT_BLACKLIST, DEFAULT_STATUS_RULES, readStore, updateAccountData, writeStore } from './core';
-import { getAccount } from './account-repository';
+import { DEFAULT_BLACKLIST, DEFAULT_STATUS_RULES } from './core.ts';
+import {
+  ensureAccountWorkspace,
+  mergeBlacklistRules,
+  mergeStatusRules,
+  updateAccountWorkspace,
+} from './workspace-repository.ts';
+
+const GLOBAL_RULE_WORKSPACE_ID = '__global_rules__';
 
 export async function getViolationWords(accountId: string): Promise<string[]> {
-  return (await getAccount(accountId))?.violationWords || [];
+  return (await ensureAccountWorkspace(accountId)).rules.violationWords;
 }
 
 export async function setViolationWords(accountId: string, words: string[]): Promise<void> {
-  await updateAccountData(accountId, account => {
-    account.violationWords = words;
+  await updateAccountWorkspace(accountId, workspace => {
+    workspace.rules.violationWords = words;
   });
 }
 
@@ -17,34 +24,36 @@ export function getDefaultBlacklistCodes(): number[] {
 }
 
 export async function getBlacklistRules(): Promise<BlacklistRule[]> {
-  const stored = (await readStore()).blacklistRules;
-  if (!stored) return DEFAULT_BLACKLIST;
-  const codeSet = new Set(stored.map(rule => rule.code));
-  return [...stored, ...DEFAULT_BLACKLIST.filter(rule => !codeSet.has(rule.code))];
+  const stored = (await ensureAccountWorkspace(GLOBAL_RULE_WORKSPACE_ID)).rules.blacklistRules;
+  return stored.length > 0 ? mergeBlacklistRules(stored) : DEFAULT_BLACKLIST;
 }
 
 export async function setBlacklistRules(rules: BlacklistRule[]): Promise<void> {
   const defaultCodes = new Set(DEFAULT_BLACKLIST.map(rule => rule.code));
-  await writeStore({ blacklistRules: rules.filter(rule => !defaultCodes.has(rule.code)) });
+  await updateAccountWorkspace(GLOBAL_RULE_WORKSPACE_ID, workspace => {
+    workspace.rules.blacklistRules = rules.filter(rule => !defaultCodes.has(rule.code));
+  });
 }
 
 export async function getSkipKeywords(): Promise<string[]> {
-  return (await readStore()).skipKeywords || [];
+  return (await ensureAccountWorkspace(GLOBAL_RULE_WORKSPACE_ID)).rules.skipKeywords;
 }
 
 export async function setSkipKeywords(keywords: string[]): Promise<void> {
-  await writeStore({ skipKeywords: keywords });
+  await updateAccountWorkspace(GLOBAL_RULE_WORKSPACE_ID, workspace => {
+    workspace.rules.skipKeywords = keywords;
+  });
 }
 
 export async function getStatusRules(): Promise<StatusRule[]> {
-  const stored = (await readStore()).statusRules;
-  if (!stored) return DEFAULT_STATUS_RULES;
-  const statusSet = new Set(stored.map(rule => rule.editStatus));
-  return [...stored, ...DEFAULT_STATUS_RULES.filter(rule => !statusSet.has(rule.editStatus))];
+  const stored = (await ensureAccountWorkspace(GLOBAL_RULE_WORKSPACE_ID)).rules.statusRules;
+  return stored.length > 0 ? mergeStatusRules(stored) : DEFAULT_STATUS_RULES;
 }
 
 export async function setStatusRules(rules: StatusRule[]): Promise<void> {
-  await writeStore({ statusRules: rules });
+  await updateAccountWorkspace(GLOBAL_RULE_WORKSPACE_ID, workspace => {
+    workspace.rules.statusRules = rules;
+  });
 }
 
 export function getDefaultStatusRules(): StatusRule[] {

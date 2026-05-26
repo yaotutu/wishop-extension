@@ -16,6 +16,6 @@ Rules:
 
 Current sinks:
 
-- `local-log-sink`: persists to `chrome.storage.local.globalLogs`.
+- `local-log-sink`: persists global log records in IndexedDB `accountLogs`.
 - `runtime-event-sink`: notifies the dashboard through `globalLog:added`.
 - `cloud-log-sink`: reserved no-op for future analytics upload.

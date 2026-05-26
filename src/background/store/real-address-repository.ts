@@ -1,9 +1,8 @@
 import type { OrderAddressInfo, OrderRealAddressCache } from '../../shared/types';
-import { getAccount } from './account-repository';
-import { updateAccountData } from './core';
+import { ensureAccountWorkspace, updateAccountWorkspace } from './workspace-repository.ts';
 
 export async function getRealAddressCaches(accountId: string): Promise<OrderRealAddressCache[]> {
-  return (await getAccount(accountId))?.realAddressCaches || [];
+  return (await ensureAccountWorkspace(accountId)).realAddressCaches;
 }
 
 export async function getRealAddressCache(accountId: string, orderId: string): Promise<OrderRealAddressCache | null> {
@@ -22,9 +21,9 @@ export async function setRealAddressCache(
     fetchedAt: now,
     updatedAt: now,
   };
-  await updateAccountData(accountId, account => {
-    const caches = account.realAddressCaches || [];
-    account.realAddressCaches = [...caches.filter(item => item.orderId !== orderId), cache];
+  await updateAccountWorkspace(accountId, workspace => {
+    const caches = workspace.realAddressCaches || [];
+    workspace.realAddressCaches = [...caches.filter(item => item.orderId !== orderId), cache];
   });
   return cache;
 }

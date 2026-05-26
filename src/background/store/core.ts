@@ -7,7 +7,7 @@ import type {
 } from '../../shared/types';
 import type { NotificationPreference } from '../../shared/notification';
 import type { AppSettings } from '../../shared/settings';
-import { DEFAULT_APP_SETTINGS, normalizeAppSettings } from '../../shared/settings';
+import { DEFAULT_APP_SETTINGS, normalizeAppSettings } from '../../shared/settings.ts';
 
 export interface StoreSchema {
   storageVersion: number;
@@ -30,7 +30,7 @@ export interface StoredWxAccessToken {
   updatedAt: number;
 }
 
-export const CURRENT_STORAGE_VERSION = 8;
+export const CURRENT_STORAGE_VERSION = 9;
 
 export const DEFAULT_TASK_CONFIG: TaskConfig = {
   listUnreviewed: true,

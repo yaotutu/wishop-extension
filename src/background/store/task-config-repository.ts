@@ -1,13 +1,13 @@
 import type { TaskConfig } from '../../shared/types';
-import { getAccount } from './account-repository';
-import { DEFAULT_TASK_CONFIG, updateAccountData } from './core';
+import { DEFAULT_TASK_CONFIG } from './core.ts';
+import { ensureAccountWorkspace, updateAccountWorkspace } from './workspace-repository.ts';
 
 export async function getTaskConfig(accountId: string): Promise<TaskConfig> {
-  return (await getAccount(accountId))?.taskConfig || DEFAULT_TASK_CONFIG;
+  return (await ensureAccountWorkspace(accountId)).taskConfig || DEFAULT_TASK_CONFIG;
 }
 
 export async function setTaskConfig(accountId: string, taskConfig: TaskConfig): Promise<void> {
-  await updateAccountData(accountId, account => {
-    account.taskConfig = taskConfig;
+  await updateAccountWorkspace(accountId, workspace => {
+    workspace.taskConfig = taskConfig;
   });
 }

@@ -33,8 +33,8 @@ export function createAccountRuntimeHandlers(deps: AccountHandlerDeps): RuntimeH
     async 'accounts:remove'(args) {
       const accountId = args[0] as string;
       await stopAllScheduledJobs();
-      await removeAccount(accountId);
       await removeScheduledJobsForAccount(accountId);
+      await removeAccount(accountId);
       await startAllScheduledJobs();
       removeClient(accountId);
       await removeAccessToken(accountId);

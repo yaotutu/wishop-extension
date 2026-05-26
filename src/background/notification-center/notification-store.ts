@@ -1,8 +1,10 @@
 import type { NotificationEntry, NotificationPreference } from '../../shared/notification';
 import { DEFAULT_NOTIFICATION_PREFERENCE } from '../../shared/notification';
+import { extensionDb } from '../db/extension-db.ts';
+import { markAccountDirty } from '../store/account-sync-state-repository.ts';
+import { ensureAccountWorkspace, updateAccountWorkspace } from '../store/workspace-repository.ts';
 
-const NOTIFICATIONS_KEY = 'notifications';
-const NOTIFICATION_PREFERENCE_KEY = 'notificationPreference';
+const NOTIFICATION_ACCOUNT_ID = '__notifications__';
 const MAX_NOTIFICATIONS = 200;
 const RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -29,13 +31,26 @@ function normalizePreference(value: unknown): NotificationPreference {
 }
 
 export async function getNotifications(): Promise<NotificationEntry[]> {
-  const data = await chrome.storage.local.get(NOTIFICATIONS_KEY);
-  return pruneNotifications(Array.isArray(data.notifications) ? data.notifications : []);
+  const records = await extensionDb.accountLogs.where('kind').equals('notification').toArray();
+  return pruneNotifications(records.map(record => record.entry as NotificationEntry));
 }
 
 export async function setNotifications(notifications: NotificationEntry[]): Promise<NotificationEntry[]> {
   const next = pruneNotifications(notifications);
-  await chrome.storage.local.set({ [NOTIFICATIONS_KEY]: next });
+  await extensionDb.transaction('rw', extensionDb.accountLogs, async () => {
+    await extensionDb.accountLogs.where('kind').equals('notification').delete();
+    if (next.length > 0) {
+      await extensionDb.accountLogs.bulkPut(next.map(notification => ({
+        id: notification.id,
+        accountId: notification.accountId || NOTIFICATION_ACCOUNT_ID,
+        kind: 'notification',
+        timestamp: notification.timestamp,
+        entry: notification,
+      })));
+    }
+  });
+  await Promise.all([...new Set(next.map(notification => notification.accountId).filter(Boolean) as string[])]
+    .map(accountId => markAccountDirty(accountId)));
   return next;
 }
 
@@ -45,12 +60,12 @@ export async function appendNotification(notification: NotificationEntry): Promi
 }
 
 export async function clearNotifications(): Promise<void> {
-  await chrome.storage.local.set({ [NOTIFICATIONS_KEY]: [] });
+  await extensionDb.accountLogs.where('kind').equals('notification').delete();
 }
 
 export async function getNotificationPreference(): Promise<NotificationPreference> {
-  const data = await chrome.storage.local.get(NOTIFICATION_PREFERENCE_KEY);
-  return normalizePreference(data.notificationPreference);
+  const workspace = await ensureAccountWorkspace(NOTIFICATION_ACCOUNT_ID);
+  return normalizePreference(workspace.notificationPreference);
 }
 
 export async function setNotificationPreference(patch: Partial<NotificationPreference>): Promise<NotificationPreference> {
@@ -67,6 +82,8 @@ export async function setNotificationPreference(patch: Partial<NotificationPrefe
       ...(patch.moduleEnabled || {}),
     },
   });
-  await chrome.storage.local.set({ [NOTIFICATION_PREFERENCE_KEY]: next });
+  await updateAccountWorkspace(NOTIFICATION_ACCOUNT_ID, workspace => {
+    workspace.notificationPreference = next;
+  });
   return next;
 }
