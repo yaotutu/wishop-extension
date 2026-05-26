@@ -12,7 +12,6 @@ export type NotificationTopic =
   | 'listing.audit_failed'
   | 'listing.audit_warning'
   | 'scheduled_job.failed'
-  | 'scheduled_job.skipped'
   | 'system.credential_invalid';
 
 export interface GlobalLogNotificationIntent {
@@ -59,7 +58,6 @@ export const DEFAULT_NOTIFICATION_PREFERENCE: NotificationPreference = {
     'listing.audit_failed': true,
     'listing.audit_warning': true,
     'scheduled_job.failed': true,
-    'scheduled_job.skipped': true,
     'system.credential_invalid': true,
   },
   moduleEnabled: {
@@ -129,13 +127,6 @@ export const NOTIFICATION_TOPIC_DEFINITIONS: NotificationTopicDefinition[] = [
     label: '定时任务失败',
     description: '调度中心执行定时任务失败。',
     defaultUrgency: 'important',
-  },
-  {
-    topic: 'scheduled_job.skipped',
-    module: 'scheduler',
-    label: '定时任务跳过',
-    description: '定时任务因上限、停用或业务条件不满足被跳过。',
-    defaultUrgency: 'normal',
   },
   {
     topic: 'system.credential_invalid',

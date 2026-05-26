@@ -4,6 +4,7 @@ import type { ScheduledJob } from '../src/shared/types.ts';
 import { ORDER_HISTORY_BACKFILL_CRON, ORDER_RECENT_SYNC_CRON } from '../src/background/orders/order-sync-schedule.ts';
 import { RECENT_ORDER_WINDOW_SECONDS } from '../src/background/orders/recent-order-window.ts';
 import { planOrderHistoryBackfillWindow } from '../src/background/orders/order-history-backfill-window.ts';
+import { nextUntilCompleteRunSchedule } from '../src/background/scheduler/scheduled-job-alarm-schedule.ts';
 
 test('supports five-minute system-level order sync jobs', () => {
   const job: ScheduledJob = {
@@ -31,6 +32,10 @@ test('supports five-minute system-level order sync jobs', () => {
 
 test('runs order history backfill every three minutes by default', () => {
   assert.equal(ORDER_HISTORY_BACKFILL_CRON, '*/3 * * * *');
+});
+
+test('schedules incomplete order history backfill to continue immediately', () => {
+  assert.deepEqual(nextUntilCompleteRunSchedule(1700000000000), { when: 1700000001000 });
 });
 
 test('plans order history backfill one seven-day window behind incremental sync', () => {

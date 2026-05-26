@@ -9,7 +9,7 @@ import type {
 import { enqueueCloudGlobalLog } from './sinks/cloud-log-sink';
 import { writeLocalGlobalLog } from './sinks/local-log-sink';
 import { emitGlobalLogAdded } from './sinks/runtime-event-sink';
-import { createNotificationForGlobalLog } from '../notification-center/notification-service';
+import { writeNotificationFromGlobalLog } from './sinks/notification-sink';
 
 function levelForEvent(eventType: GlobalLogEventType): GlobalLogLevel {
   if (eventType === 'completed') return 'success';
@@ -44,7 +44,7 @@ export async function recordGlobalLog(input: GlobalLogInput): Promise<GlobalLogE
   await Promise.allSettled([
     writeLocalGlobalLog(entry),
     emitGlobalLogAdded(entry),
-    createNotificationForGlobalLog(entry),
+    writeNotificationFromGlobalLog(entry),
     enqueueCloudGlobalLog(entry),
   ]);
 

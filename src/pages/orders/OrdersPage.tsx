@@ -15,6 +15,7 @@ import {
   useShipOrderFromPurchaseMutation,
 } from '../../hooks/useIpc';
 import { extensionApi } from '../../shared/extension-api';
+import { latestOrderSyncFinishedAt } from '../../shared/order-sync-state';
 import { OrderStatus as OrderStatusEnum } from '../../shared/types';
 import type { Account, DeliveryCompanyOption, Order, OrderScope, OrderSearchSource, OrderStatus, OrderProductInfo, OrderSearchParams, OrderRealAddressCache, OrderAssociation, ProductSourceItem, OrderTimeScope, TaobaoRefundSession } from '../../shared/types';
 import { getDeliveryCompanyUnmatchedMessage, isDeliveryCompanyUnmatchedError } from '../../shared/errors';
@@ -88,9 +89,11 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
   const tableAreaRef = useRef<HTMLDivElement>(null);
   const refundSyncTimerIdsRef = useRef<number[]>([]);
   const initialRefreshStartedRef = useRef<Set<string>>(new Set());
+  const observedSyncFinishedAtRef = useRef(0);
   const [scrollY, setScrollY] = useState(400);
   const ordersQuery = useOrdersQuery(scope, activeStatus, activeSearch, timeScope, searchSource);
   const syncStateQuery = useOrderSyncStateQuery(scope);
+  const latestSyncFinishedAt = latestOrderSyncFinishedAt(syncStateQuery.data);
   const autoSyncJobQuery = useOrderAutoSyncJobQuery();
   const refreshOrdersMutation = useRefreshOrdersMutation(scope);
   const detailQuery = useOrderDetailQuery(detailAccountId, detailOrderId);
@@ -185,6 +188,12 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
     syncStateQuery.data,
     syncStateQuery.isSuccess,
   ]);
+
+  useEffect(() => {
+    if (!latestSyncFinishedAt || latestSyncFinishedAt <= observedSyncFinishedAtRef.current) return;
+    observedSyncFinishedAtRef.current = latestSyncFinishedAt;
+    void ordersQuery.refetch();
+  }, [latestSyncFinishedAt, ordersQuery]);
 
   useEffect(() => {
     const errors = [

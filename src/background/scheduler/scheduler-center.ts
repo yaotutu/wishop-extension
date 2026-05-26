@@ -23,6 +23,7 @@ import {
   recordTaskSkipped,
   recordTaskStarted,
 } from '../global-logs/global-log-service';
+import { nextUntilCompleteRunSchedule } from './scheduled-job-alarm-schedule.ts';
 
 const JOB_ALARM_PREFIX = 'scheduled-job:';
 const GLOBAL_JOB_ALARM_PREFIX = 'scheduled-job-global:';
@@ -172,11 +173,14 @@ export async function startScheduledJob(job: ScheduledJob): Promise<boolean> {
     return true;
   }
 
-  const schedule = parseJobAlarmSchedule(job.cronExpression);
-  if (!schedule) {
+  const cronSchedule = parseJobAlarmSchedule(job.cronExpression);
+  if (!cronSchedule) {
     logger.warn(`[${job.id}] 不支持的 cron 表达式: ${job.cronExpression}`);
     return false;
   }
+  const schedule = job.runMode === 'untilComplete' && job.completedAt == null
+    ? nextUntilCompleteRunSchedule()
+    : cronSchedule;
   await chrome.alarms.create(accountAlarmName(job.id), schedule);
   logger.info(`[${job.id}] 已启动账号任务 "${job.name}"`);
   return true;
@@ -260,10 +264,6 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
       taskKind: taskKind(job),
       title: '定时任务跳过',
       detail: `今日已执行 ${todayRunCount}，达到任务上限 ${job.dailyLimit}`,
-      notification: {
-        topic: 'scheduled_job.skipped',
-        urgency: 'normal',
-      },
     });
     return { listed: 0, status: 'skipped', message: null, error: `今日已执行 ${todayRunCount}，达到任务上限 ${job.dailyLimit}`, completed: false };
   }
@@ -318,6 +318,11 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
     if (job.runMode === 'untilComplete' && result.completed) {
       await completeScheduledJob(job.id);
       await stopScheduledJob(job.id);
+    } else if (job.runMode === 'untilComplete' && job.scope !== 'global') {
+      const nextSchedule = status === 'completed'
+        ? nextUntilCompleteRunSchedule()
+        : parseJobAlarmSchedule(job.cronExpression);
+      if (nextSchedule) await chrome.alarms.create(accountAlarmName(job.id), nextSchedule);
     }
 
     if (status === 'skipped') {
@@ -331,10 +336,6 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
         taskKind: taskKind(job),
         title: '定时任务跳过',
         detail,
-        notification: {
-          topic: 'scheduled_job.skipped',
-          urgency: 'normal',
-        },
       });
       return { listed: countIncrement, status, message: detail ?? null, error: null, completed: result.completed };
     }
@@ -351,12 +352,6 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
       level: status === 'failed' ? 'warning' : 'success',
       title: '定时任务执行完成',
       detail,
-      ...(status === 'failed' ? {
-        notification: {
-          topic: 'scheduled_job.failed' as const,
-          urgency: 'important' as const,
-        },
-      } : {}),
       summary: { listed: result.listed },
     });
     return { listed: countIncrement, status, message: status === 'failed' ? null : detail ?? null, error: errorMessage ?? null, completed: result.completed };

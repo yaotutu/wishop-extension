@@ -163,61 +163,47 @@ PR 应包含清晰摘要、验证命令、关联 issue 或任务背景，以及 
 
 不要提交真实 app 凭证、access token 或客户数据。账号配置和微信 API 客户端值都应视为敏感信息。新增 `wxt.config.ts` host permissions 时保持范围尽量窄，并在 PR 中解释权限变化。
 
-## 全局日志中心指南
+## 工作台日志中心指南
 
-全局日志中心是结构化重要事件流，不是通用 debug 日志，也不是模块页面明细日志。
+工作台日志中心是全局唯一的日志与通知入口。日志模块和通知模块不是两套系统；通知只是日志中心里带有 `notification` 意图的日志视图。
 
-- 共享全局日志类型位于 `src/shared/global-log.ts`。
-- 后台全局日志基础设施位于 `src/background/global-logs/`。
-- UI 通过 `src/hooks/useGlobalLogs.ts` 读取全局日志，并在 `src/components/GlobalLogDrawer.tsx` 中展示。
-- 业务模块必须通过 `src/background/global-logs/global-log-service.ts` 写入全局日志；不要在业务代码中直接写 `chrome.storage.local.globalLogs`。
-- 需要生成用户通知的业务事件，应在调用 `recordTaskFailed`、`recordTaskSkipped`、`recordTaskWaitingUser` 等全局日志方法时，通过 `notification.topic` 声明通知意图；不要在业务模块里直接调用通知中心。
-- 当前 sink 包括本地存储、runtime 事件通知和预留的云上传 sink。云上传失败绝不能阻断业务任务。
-
-全局日志适用于：
-
-- 自动化任务，例如定时任务和全账号任务。
-- 用户离开当前页面后仍可能完成的后台任务。
-- 模块主动上报的重要事件，例如失败、跳过、等待用户处理、授权失效、配额耗尽和重要任务摘要。
-- 任务级 started、completed、skipped 和 failed 事件，但只有这些事件对全局观察或通知有价值时才写入。
-
-全局日志不适用于：
-
-- 单商品、单订单或单 API 调用的明细记录。
-- 高频循环条目。循环内部如需细节，应写模块自己的页面日志，然后在必要时写一条全局摘要。
-- debug 输出或内部开发跟踪。
-
-全局日志规则：
-
-1. 每个业务模块维护自己的页面内日志，例如商品提审使用 `listingLogs`，违规检测使用 `violationLogs`。不要重新引入泛化的 `accounts[].logs`。
-2. 模块页面日志只服务模块内执行记录，不默认进入全局日志。
-3. 模块认为事件重要时，必须主动调用 `global-log-service` 上报全局日志；全局日志系统不监听、不收集模块明细日志。
-4. 通知中心只消费全局日志，不直接消费模块页面日志。
-5. 失败、跳过、等待用户处理和异常任务结果应优先写入全局日志；普通成功流水不应打扰用户。
-6. 全局日志只是观测数据，不得作为业务状态的数据源。
-7. 清空全局日志不得清空模块页面日志。
-8. 未来云端分析必须使用 cloud sink 和结构化字段，例如 `module`、`eventType`、`taskKind`、`runId`、`summary` 和 `error`；不得上传凭证、token、客户数据或敏感的订单、地址、商品明细。
-
-## 通知中心指南
-
-通知中心消费全局日志，但不替代全局日志。业务模块仍只负责写结构化全局日志，不得直接决定手机、微信、飞书等外部推送渠道。
-
+- 共享日志类型位于 `src/shared/global-log.ts`。
 - 共享通知类型位于 `src/shared/notification.ts`。
-- 后台通知中心位于 `src/background/notification-center/`。
-- 通知 IPC 位于 `src/background/runtime-handlers/notification-handlers.ts`，并通过 `src/shared/extension-api.ts` 暴露。
-- UI 入口位于 `src/components/NotificationCenter.tsx`。
-- 通知主题 `NotificationTopic` 是用户可配置通知场景的唯一事实来源。新增通知场景必须先在 `src/shared/notification.ts` 中添加 topic、默认开关和中文说明。
+- 后台日志基础设施位于 `src/background/global-logs/`。
+- 通知持久化、已读、清空和偏好管理位于 `src/background/notification-center/`，但业务代码不得直接调用通知中心生成通知。
+- UI 通过 `src/hooks/useGlobalLogs.ts`、`src/components/GlobalLogDrawer.tsx` 和 `src/components/NotificationCenter.tsx` 展示日志与通知。
 
-通知中心规则：
+日志中心只有一个事实入口：`src/background/global-logs/global-log-service.ts`。业务模块必须通过 `recordGlobalLog`、`recordTaskStarted`、`recordTaskCompleted`、`recordTaskSkipped`、`recordTaskFailed`、`recordTaskWaitingUser` 等封装写日志；不要在业务代码中直接写 `chrome.storage.local.globalLogs`、`notifications` 或其它日志/通知存储。
 
-1. 全局日志是事实记录，通知是用户提醒。
-2. 通知只从带 `notification.topic` 的全局日志派生；没有 topic 的日志只进入日志中心，不进入通知中心。
-3. 通知来源必须能追溯到 `sourceLogId`，不要创建无来源的重要通知。
-4. 用户偏好按业务场景 `topicEnabled` 配置，并可按模块过滤；不要再使用 `levelEnabled`、`eventTypeEnabled` 或其它按日志级别驱动的通知配置。
-5. 业务模块只声明通知意图，例如 `notification: { topic: 'orders.shipment_failed', urgency: 'important' }`。是否创建通知、如何展示、未来发往哪些渠道，都由通知中心决定。
-6. 当前通知渠道只实现 `inApp`，后续手机、微信、飞书等外部渠道应作为通知中心的 channel/sink 扩展，不要散落在业务模块。
-7. 失败通知必须包含明确 `errorMessage` 或可读原因；成功通知默认不打扰用户，除非该成功事件对应明确的业务通知 topic。
-8. 日志和通知是观测数据，不是业务状态。日志或通知持久化 schema 变更必须走 `src/background/store/migrations.ts` 并提升 `CURRENT_STORAGE_VERSION`；旧日志、旧通知和旧通知偏好可以在 migration 中直接清空或重置，不要在运行时代码中长期保留旧结构兼容分支。
+日志分两类视图：
+
+1. 业务事件日志：记录用户或系统应该知道的结构化事实，例如任务开始、完成、失败、等待用户处理、授权失效、配额耗尽和重要任务摘要。
+2. 控制台诊断日志：记录排查问题需要的运行细节，例如接口请求参数、时间窗口、返回数量、账号处理进度、页面读取结果和异常堆栈。控制台日志应通过日志模块的 `createLogger(...)` 或后续统一 logger API 写入，不能只写 `console.*` 导致工作台不可见。
+
+通知规则：
+
+1. 通知不是独立入口，只能从日志派生。
+2. 只有日志 entry 显式带 `notification.topic` 时，才会进入通知视图；没有 `notification` 的日志永远只作为日志展示。
+3. 普通 `started`、`completed`、`skipped`、`failed`、`warning` 或 `error` 级别本身都不自动生成通知。
+4. 不允许在调度中心、业务 service、runtime handler 或 UI 中根据状态自动创建通知；需要通知时，必须在写日志时显式声明 `notification: { topic, urgency }`。
+5. `NotificationTopic` 是用户可配置通知场景的唯一事实来源。新增通知场景必须先在 `src/shared/notification.ts` 中添加 topic、默认开关和中文说明。
+6. 通知来源必须能追溯到对应日志 `sourceLogId`，不要创建无来源的重要通知。
+7. 失败通知必须包含明确 `error.message` 或可读原因；成功通知默认不打扰用户，除非该成功事件对应明确业务通知 topic。
+
+控制台日志规则：
+
+1. 控制台日志属于日志中心，不触发通知。
+2. 控制台日志要能在工作台查看，不能只依赖 background service worker DevTools 的 `console.*`。
+3. 控制台日志适合高频、细粒度、诊断用途；业务事件日志适合低频、结构化、用户可读的重要事实。
+4. 控制台日志必须支持按模块、账号、级别、关键词和时间筛选。
+5. 控制台日志需要有限保留，例如保留最近 1000/2000 条或最近 7 天，不能无限增长。
+
+安全规则：
+
+1. 日志和通知都是观测数据，不得作为业务状态的数据源。
+2. 日志、控制台日志、通知和云端分析都不得记录或上传 access token、appSecret、真实地址、手机号、客户隐私数据、订单敏感明细或其它凭证。
+3. 未来云端分析必须使用日志中心 cloud sink 和结构化字段，例如 `module`、`eventType`、`taskKind`、`runId`、`summary` 和 `error`。
+4. 持久化 schema 变更必须走 `src/background/store/migrations.ts` 并提升 `CURRENT_STORAGE_VERSION`；本项目没有历史兼容包袱，不要长期保留旧结构兼容分支。
 
 
 # 优先级最高的规则，该规则由用户手写，不允许被覆盖，不允许修改
