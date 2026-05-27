@@ -160,6 +160,7 @@ test('all-account refresh keeps successful accounts when one account fails', asy
   const result = await domain.refresh({ type: 'all' });
   const list = await domain.list({ type: 'all' }, {});
 
+  assert.equal(result.status, 'partial_failed');
   assert.deepEqual(result.refreshedAccountIds, ['good']);
   assert.deepEqual(result.failedAccounts.map(item => [item.accountId, item.error]), [['bad', 'token invalid']]);
   assert.deepEqual(list.orders.map(item => item.orderId), ['good-order']);
@@ -187,13 +188,41 @@ test('all-account refresh continues when the first account fails', async () => {
   const result = await domain.refresh({ type: 'all' });
   const list = await domain.list({ type: 'all' }, {});
 
+  assert.equal(result.status, 'partial_failed');
   assert.deepEqual(calls, ['bad', 'good']);
   assert.deepEqual(result.refreshedAccountIds, ['good']);
   assert.deepEqual(result.failedAccounts.map(item => item.accountId), ['bad']);
   assert.deepEqual(list.orders.map(item => item.orderId), ['good-order']);
 });
 
-test('all-account refresh rejects when every account fails', async () => {
+test('all-account refresh runs at most ten accounts concurrently', async () => {
+  const accounts = Array.from({ length: 25 }, (_, index) => makeAccount(`account-${index + 1}`, `店铺${index + 1}`));
+  const store = createOrderStore(createMemoryStorage());
+  let active = 0;
+  let maxActive = 0;
+  const sync = createOrderSyncService({
+    store,
+    source: {
+      async fetchRecentOrders(accountId) {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        await new Promise(resolve => setTimeout(resolve, 10));
+        active -= 1;
+        return [makeOrder(`order-${accountId}`)];
+      },
+      async searchOrders() { return []; },
+      async getOrderDetail() { return makeOrder('unused'); },
+    },
+    getAccounts: async () => accounts,
+  });
+  const domain = createOrderDomainService({ store, sync });
+
+  await domain.refresh({ type: 'all' });
+
+  assert.equal(maxActive, 10);
+});
+
+test('all-account refresh returns structured failed result when every account fails', async () => {
   const accounts = [makeAccount('bad-1', '异常店铺一'), makeAccount('bad-2', '异常店铺二')];
   const store = createOrderStore(createMemoryStorage());
   const sync = createOrderSyncService({
@@ -209,12 +238,15 @@ test('all-account refresh rejects when every account fails', async () => {
   });
   const domain = createOrderDomainService({ store, sync });
 
-  await assert.rejects(
-    () => domain.refresh({ type: 'all' }),
-    /bad-1 token invalid.*bad-2 token invalid/,
-  );
+  const result = await domain.refresh({ type: 'all' });
   const state = await store.getSyncState({ type: 'all' });
 
+  assert.equal(result.status, 'failed');
+  assert.deepEqual(result.refreshedAccountIds, []);
+  assert.deepEqual(result.failedAccounts.map(item => [item.accountId, item.error]), [
+    ['bad-1', 'bad-1 token invalid'],
+    ['bad-2', 'bad-2 token invalid'],
+  ]);
   assert.match(state.lastError || '', /bad-1 token invalid/);
   assert.match(state.lastError || '', /bad-2 token invalid/);
 });
@@ -260,8 +292,37 @@ test('order refresh distinguishes fetched orders from changed local orders', asy
   const first = await sync.refresh({ type: 'account', accountId: account.id }, { reason: 'autoSync' });
   const second = await sync.refresh({ type: 'account', accountId: account.id }, { reason: 'autoSync' });
 
+  assert.equal(first.status, 'completed');
+  assert.equal(second.status, 'completed');
   assert.equal(first.fetchedOrderCount, 1);
   assert.equal(first.updatedOrderCount, 1);
   assert.equal(second.fetchedOrderCount, 1);
   assert.equal(second.updatedOrderCount, 0);
+});
+
+test('older duplicate refresh payload does not overwrite newer local order data', async () => {
+  const account = makeAccount('account-1', '店铺一');
+  const store = createOrderStore(createMemoryStorage());
+  await store.upsertMany(account.id, account.name, [
+    makeOrder('order-1', { status: COMPLETED, update_time: 1700000100 }),
+  ], 'manualRefresh');
+  const sync = createOrderSyncService({
+    store,
+    source: {
+      async fetchRecentOrders() {
+        return [makeOrder('order-1', { status: PENDING_SHIPMENT, update_time: 1700000000 })];
+      },
+      async searchOrders() { return []; },
+      async getOrderDetail() { return makeOrder('unused'); },
+    },
+    getAccounts: async () => [account],
+  });
+
+  const result = await sync.refresh({ type: 'account', accountId: account.id }, { reason: 'manualRefresh' });
+  const local = await store.get(account.id, 'order-1');
+
+  assert.equal(result.fetchedOrderCount, 1);
+  assert.equal(result.updatedOrderCount, 0);
+  assert.equal(local?.order.status, COMPLETED);
+  assert.equal(local?.order.update_time, 1700000100);
 });

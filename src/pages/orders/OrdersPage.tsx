@@ -754,11 +754,11 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
           refreshOrdersMutation.mutate(undefined, {
             onSuccess: (result) => {
               console.info('[wishop][orders:ui] manual refresh success', result);
-              const fetchedOrderCount = result.fetchedOrderCount || 0;
-              if (result.failedAccounts.length > 0 && result.refreshedAccountIds.length === 0) {
+              const fetchedOrderCount = result.fetchedOrderCount;
+              if (result.status === 'failed') {
                 setRefreshError(`订单刷新失败：${result.failedAccounts.map(item => `${item.accountName || item.accountId}: ${item.error}`).join('; ')}`);
                 message.error(`订单刷新失败：${result.failedAccounts.map(item => item.error).join('; ')}`);
-              } else if (result.failedAccounts.length > 0) {
+              } else if (result.status === 'partial_failed') {
                 setRefreshError(`部分账号刷新失败：${result.failedAccounts.map(item => `${item.accountName || item.accountId}: ${item.error}`).join('; ')}`);
                 message.warning(`部分账号刷新失败，扫描 ${fetchedOrderCount} 条，新增/变更 ${result.updatedOrderCount} 条`);
               } else if (result.updatedOrderCount === 0) {

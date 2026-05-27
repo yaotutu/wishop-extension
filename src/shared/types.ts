@@ -570,10 +570,11 @@ export interface OrderSyncState {
 }
 
 export interface OrderRefreshResult {
+  status: 'completed' | 'partial_failed' | 'failed';
   scope: OrderScope;
   refreshedAccountIds: string[];
   failedAccounts: Array<{ accountId: string; accountName?: string; error: string }>;
-  fetchedOrderCount?: number;
+  fetchedOrderCount: number;
   updatedOrderCount: number;
   startedAt: number;
   finishedAt: number;

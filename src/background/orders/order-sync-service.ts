@@ -33,14 +33,14 @@ interface AccountRefreshResult {
   changedOrderCount: number;
 }
 
+type AccountRefreshTaskResult =
+  | { status: 'fulfilled'; value: AccountRefreshResult }
+  | { status: 'rejected'; account: Account; error: string };
+
+const ORDER_REFRESH_ACCOUNT_CONCURRENCY = 10;
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function formatFailedAccounts(failedAccounts: OrderRefreshResult['failedAccounts']): string {
-  return failedAccounts
-    .map(item => `${item.accountName || item.accountId}: ${item.error}`)
-    .join('; ');
 }
 
 function defaultModeForReason(reason: NonNullable<RefreshOptions['reason']>): NonNullable<RefreshOptions['mode']> {
@@ -49,9 +49,34 @@ function defaultModeForReason(reason: NonNullable<RefreshOptions['reason']>): No
   return 'full';
 }
 
+function refreshStatus(successCount: number, failureCount: number): OrderRefreshResult['status'] {
+  if (failureCount === 0) return 'completed';
+  return successCount === 0 ? 'failed' : 'partial_failed';
+}
+
+async function runWithConcurrency<T, TResult>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<TResult>,
+): Promise<TResult[]> {
+  const results = new Array<TResult>(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(1, limit), items.length);
+
+  async function runWorker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await worker(items[index], index);
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+  return results;
+}
+
 export function createOrderSyncService(deps: OrderSyncServiceDeps) {
   const now = deps.now || Date.now;
-  const inFlightRefreshes = new Map<string, Promise<AccountRefreshResult>>();
 
   async function resolveAccounts(scope: OrderScope): Promise<Account[]> {
     const accounts = await deps.getAccounts();
@@ -59,50 +84,25 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
     return accounts.filter(account => account.id === scope.accountId);
   }
 
-  async function refreshAccount(account: Account, options: Required<Pick<RefreshOptions, 'reason' | 'mode'>> & Omit<RefreshOptions, 'reason' | 'mode'>): Promise<AccountRefreshResult> {
-    const existing = inFlightRefreshes.get(account.id);
-    if (existing) return existing;
-    const promise = (async () => {
-      const source = options.reason;
-      const fallbackStatuses = source !== 'autoSync';
-      const logger = createLogger('OrderSync', account.id);
-      logger.info('账号订单刷新开始', {
-        accountName: account.name,
-        source,
-        mode: options.mode,
-        fallbackStatuses,
-      });
-      await deps.store.markSyncStarted({ type: 'account', accountId: account.id });
-      const orders = await deps.source.fetchRecentOrders(account.id, {
-        mode: options.mode,
-        fallbackStatuses,
-        debug: source === 'manualRefresh',
-        windowStartTime: options.windowStartTime,
-        windowEndTime: options.windowEndTime,
-        lookbackDays: options.lookbackDays,
-        maxWindows: options.maxWindows,
-      });
-      const upsertResult = await deps.store.upsertMany(account.id, account.name, orders, source);
-      logger.info('账号订单刷新完成', {
-        accountName: account.name,
-        fetchedOrderCount: upsertResult.fetchedCount,
-        changedOrderCount: upsertResult.changedCount,
-        source,
-        mode: options.mode,
-      });
-      return {
-        account,
-        orders,
-        fetchedOrderCount: upsertResult.fetchedCount,
-        changedOrderCount: upsertResult.changedCount,
-      };
-    })();
-    inFlightRefreshes.set(account.id, promise);
-    try {
-      return await promise;
-    } finally {
-      inFlightRefreshes.delete(account.id);
-    }
+  async function refreshAccountOrders(account: Account, options: Required<Pick<RefreshOptions, 'reason' | 'mode'>> & Omit<RefreshOptions, 'reason' | 'mode'>): Promise<Order[]> {
+    const source = options.reason;
+    const fallbackStatuses = source !== 'autoSync';
+    const logger = createLogger('OrderSync', account.id);
+    logger.info('账号订单刷新开始', {
+      accountName: account.name,
+      source,
+      mode: options.mode,
+      fallbackStatuses,
+    });
+    return deps.source.fetchRecentOrders(account.id, {
+      mode: options.mode,
+      fallbackStatuses,
+      debug: source === 'manualRefresh',
+      windowStartTime: options.windowStartTime,
+      windowEndTime: options.windowEndTime,
+      lookbackDays: options.lookbackDays,
+      maxWindows: options.maxWindows,
+    });
   }
 
   async function refresh(scope: OrderScope, options: RefreshOptions = {}): Promise<OrderRefreshResult> {
@@ -123,13 +123,33 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
     let fetchedOrderCount = 0;
     let updatedOrderCount = 0;
 
-    for (const account of accounts) {
+    let commitQueue = Promise.resolve();
+    function enqueueCommit<T>(work: () => Promise<T>): Promise<T> {
+      const run = commitQueue.then(work, work);
+      commitQueue = run.then(() => undefined, () => undefined);
+      return run;
+    }
+
+    const accountResults = await runWithConcurrency(accounts, ORDER_REFRESH_ACCOUNT_CONCURRENCY, async (account): Promise<AccountRefreshTaskResult> => {
       try {
-        const result = await refreshAccount(account, { ...options, reason, mode });
-        refreshedAccountIds.push(account.id);
-        fetchedOrderCount += result.fetchedOrderCount;
-        updatedOrderCount += result.changedOrderCount;
-        await deps.store.markSyncFinished({ type: 'account', accountId: account.id }, {
+        await enqueueCommit(() => deps.store.markSyncStarted({ type: 'account', accountId: account.id }));
+        const orders = await refreshAccountOrders(account, { ...options, reason, mode });
+        const upsertResult = await enqueueCommit(() => deps.store.upsertMany(account.id, account.name, orders, reason));
+        const result: AccountRefreshResult = {
+          account,
+          orders,
+          fetchedOrderCount: upsertResult.fetchedCount,
+          changedOrderCount: upsertResult.changedCount,
+        };
+        createLogger('OrderSync', account.id).info('账号订单刷新完成', {
+          accountName: account.name,
+          fetchedOrderCount: result.fetchedOrderCount,
+          changedOrderCount: result.changedOrderCount,
+          source: reason,
+          mode,
+        });
+        await enqueueCommit(() => deps.store.markSyncFinished({ type: 'account', accountId: account.id }, {
+          status: 'completed',
           scope: { type: 'account', accountId: account.id },
           refreshedAccountIds: [account.id],
           failedAccounts: [],
@@ -137,7 +157,8 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
           updatedOrderCount: result.changedOrderCount,
           startedAt,
           finishedAt: now(),
-        });
+        }));
+        return { status: 'fulfilled', value: result };
       } catch (error) {
         const message = errorMessage(error);
         createLogger('OrderSync', account.id).error('账号订单刷新失败', {
@@ -145,8 +166,8 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
           source: reason,
           error: message,
         });
-        failedAccounts.push({ accountId: account.id, accountName: account.name, error: message });
-        await deps.store.markSyncFinished({ type: 'account', accountId: account.id }, {
+        await enqueueCommit(() => deps.store.markSyncFinished({ type: 'account', accountId: account.id }, {
+          status: 'failed',
           scope: { type: 'account', accountId: account.id },
           refreshedAccountIds: [],
           failedAccounts: [{ accountId: account.id, accountName: account.name, error: message }],
@@ -154,11 +175,28 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
           updatedOrderCount: 0,
           startedAt,
           finishedAt: now(),
+        }));
+        return { status: 'rejected', account, error: message };
+      }
+    });
+
+    for (const accountResult of accountResults) {
+      if (accountResult.status === 'fulfilled') {
+        const result = accountResult.value;
+        refreshedAccountIds.push(result.account.id);
+        fetchedOrderCount += result.fetchedOrderCount;
+        updatedOrderCount += result.changedOrderCount;
+      } else {
+        failedAccounts.push({
+          accountId: accountResult.account.id,
+          accountName: accountResult.account.name,
+          error: accountResult.error,
         });
       }
     }
 
     const result: OrderRefreshResult = {
+      status: refreshStatus(refreshedAccountIds.length, failedAccounts.length),
       scope,
       refreshedAccountIds,
       failedAccounts,
@@ -178,9 +216,6 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
     });
     if (accounts.length === 0) {
       throw new Error(scope.type === 'account' ? `账号不存在: ${scope.accountId}` : '当前没有可刷新的账号');
-    }
-    if (failedAccounts.length === accounts.length) {
-      throw new Error(formatFailedAccounts(failedAccounts));
     }
     return result;
   }

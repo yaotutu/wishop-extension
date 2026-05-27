@@ -41,6 +41,19 @@ export interface OrderUpsertResult {
   changedCount: number;
 }
 
+interface ExistingOrderForUpsert {
+  order: Order;
+  status: number;
+  updateTime: number;
+  indexedText: string;
+}
+
+interface ResolvedOrderUpsert {
+  order: Order;
+  indexedText: string;
+  changed: boolean;
+}
+
 function orderRecordToSnapshot(record: OrderRecord): StoredOrderSnapshot {
   return {
     accountId: record.accountId,
@@ -76,6 +89,26 @@ function orderToRecord(
     source,
     lastFetchedAt: fetchedAt,
     lastChangedAt: changed ? fetchedAt : previous?.lastChangedAt || fetchedAt,
+  };
+}
+
+function isIncomingOrderStale(order: Order, previousUpdateTime?: number): boolean {
+  const incomingUpdateTime = order.update_time || 0;
+  return incomingUpdateTime > 0 && !!previousUpdateTime && incomingUpdateTime < previousUpdateTime;
+}
+
+function resolveOrderUpsert(order: Order, previous?: ExistingOrderForUpsert): ResolvedOrderUpsert {
+  const indexedText = buildOrderIndexedText(order);
+  if (!previous) return { order, indexedText, changed: true };
+  if (isIncomingOrderStale(order, previous.order.update_time)) {
+    return { order: previous.order, indexedText: previous.indexedText, changed: false };
+  }
+  return {
+    order,
+    indexedText,
+    changed: previous.status !== order.status
+      || previous.updateTime !== order.update_time
+      || previous.indexedText !== indexedText,
   };
 }
 
@@ -152,13 +185,9 @@ function createIndexedDbOrderStore(options: OrderStoreOptions = {}) {
       if (!orderId) continue;
       fetchedCount += 1;
       const previous = await extensionDb.orders.get([accountId, orderId]);
-      const indexedText = buildOrderIndexedText(order);
-      const changed = !previous
-        || previous.status !== order.status
-        || previous.updateTime !== order.update_time
-        || previous.indexedText !== indexedText;
-      if (changed) changedCount += 1;
-      nextRecords.push(orderToRecord(accountId, accountName, order, source, fetchedAt, changed, previous));
+      const resolved = resolveOrderUpsert(order, previous);
+      if (resolved.changed) changedCount += 1;
+      nextRecords.push(orderToRecord(accountId, accountName, resolved.order, source, fetchedAt, resolved.changed, previous));
     }
 
     if (nextRecords.length > 0) {
@@ -346,19 +375,21 @@ export function createOrderStore(storage?: OrderStoreStorage, options: OrderStor
       fetchedCount += 1;
       const key = `${accountId}:${orderId}`;
       const previous = currentByKey.get(key);
-      const changed = !previous
-        || previous.order.status !== order.status
-        || previous.order.update_time !== order.update_time
-        || previous.indexedText !== buildOrderIndexedText(order);
-      if (changed) changedCount += 1;
+      const resolved = resolveOrderUpsert(order, previous ? {
+        order: previous.order,
+        status: previous.order.status,
+        updateTime: previous.order.update_time,
+        indexedText: previous.indexedText,
+      } : undefined);
+      if (resolved.changed) changedCount += 1;
       currentByKey.set(key, {
         accountId,
         accountName,
         orderId,
-        order,
-        indexedText: buildOrderIndexedText(order),
+        order: resolved.order,
+        indexedText: resolved.indexedText,
         lastFetchedAt: fetchedAt,
-        lastChangedAt: changed ? fetchedAt : previous.lastChangedAt,
+        lastChangedAt: resolved.changed || !previous ? fetchedAt : previous.lastChangedAt,
         source,
       });
     }
