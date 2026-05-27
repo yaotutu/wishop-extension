@@ -2,7 +2,7 @@ import { WxShopClient } from '../wxshop/client';
 import type { AddLogFn, ViolationMatch, ViolationScanResult } from '../../shared/types';
 import { streamDraftProducts } from './fetch-draft-products';
 import { batchDelete } from './delete-failed-products';
-import { createLogger } from '../utils/logger';
+import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 
 export function findMatches(title: string, words: string[]): string[] {
   const lower = title.toLowerCase();
@@ -17,7 +17,7 @@ export async function* scanOneByOne(
   signal?: AbortSignal,
   accountId: string = '',
 ): AsyncGenerator<ViolationMatch & { scanned: number }> {
-  const logger = createLogger('ViolationScan', accountId);
+  const logger = createDiagnosticLogger({ domain: 'violation', component: 'ViolationScan', accountId });
   logger.info(`开始违规词检测，词库共 ${words.length} 个词`);
   addLog({ runId, productId: '', productTitle: `开始违规词检测，词库共 ${words.length} 个词`, action: 'check', status: 'success' });
   let scanned = 0;

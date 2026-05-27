@@ -1,5 +1,5 @@
-import type { GlobalLogModule } from '../../shared/global-log';
-import type { GlobalLogScope, GlobalLogTaskKind } from '../../shared/global-log';
+import type { ActivityLogDomain } from '../../shared/activity-log';
+import type { ActivityLogScope, ActivityLogTrigger } from '../../shared/activity-log';
 import type {
   ScheduledJob,
   ScheduledJobExecutorResult,
@@ -16,13 +16,13 @@ import {
   updateScheduledJobAccountStats,
   updateScheduledJobStats,
 } from '../store/scheduled-job-repository';
-import { createLogger } from '../utils/logger';
+import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 import {
-  recordTaskCompleted,
-  recordTaskFailed,
-  recordTaskSkipped,
-  recordTaskStarted,
-} from '../global-logs/global-log-service';
+  recordActivityCompleted,
+  recordActivityFailed,
+  recordActivitySkipped,
+  recordActivityStarted,
+} from '../activity-logs/activity-log-service.ts';
 import { nextUntilCompleteRunSchedule } from './scheduled-job-alarm-schedule.ts';
 
 const JOB_ALARM_PREFIX = 'scheduled-job:';
@@ -68,15 +68,15 @@ function parseAccountAlarm(name: string): string | null {
   return name.slice(JOB_ALARM_PREFIX.length) || null;
 }
 
-function logModule(job: ScheduledJob): GlobalLogModule {
+function logDomain(job: ScheduledJob): ActivityLogDomain {
   return job.module;
 }
 
-function logScope(job: ScheduledJob): GlobalLogScope {
+function logScope(job: ScheduledJob): ActivityLogScope {
   return job.scope === 'account' ? 'account' : 'global';
 }
 
-function taskKind(job: ScheduledJob): GlobalLogTaskKind {
+function trigger(job: ScheduledJob): ActivityLogTrigger {
   if (job.scope === 'global') return 'globalScheduled';
   if (job.scope === 'system') return 'background';
   return 'scheduled';
@@ -154,7 +154,11 @@ export function isSupportedJobCron(cronExpression: string): boolean {
 }
 
 export async function startScheduledJob(job: ScheduledJob): Promise<boolean> {
-  const logger = createLogger('SchedulerCenter', job.scope === 'account' ? job.accountId : undefined);
+  const logger = createDiagnosticLogger({
+    domain: 'scheduler',
+    component: 'SchedulerCenter',
+    accountId: job.scope === 'account' ? job.accountId : undefined,
+  });
   await stopScheduledJob(job.id);
   if (!job.enabled) return true;
 
@@ -254,14 +258,14 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
   const account = targetAccountId ? await getAccount(targetAccountId) : undefined;
 
   if (job.dailyLimit > 0 && todayRunCount >= job.dailyLimit) {
-    await recordTaskSkipped({
-      module: logModule(job),
+    await recordActivitySkipped({
+      domain: logDomain(job),
       scope: logScope(job),
       accountId: targetAccountId,
       accountName: account?.name,
       taskId: job.id,
       taskName: job.name,
-      taskKind: taskKind(job),
+      trigger: trigger(job),
       title: '定时任务跳过',
       detail: `今日已执行 ${todayRunCount}，达到任务上限 ${job.dailyLimit}`,
     });
@@ -280,14 +284,14 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
     lastError: undefined,
   });
 
-  await recordTaskStarted({
-    module: logModule(job),
+  await recordActivityStarted({
+    domain: logDomain(job),
     scope: logScope(job),
     accountId: targetAccountId,
     accountName: account?.name,
     taskId: job.id,
     taskName: job.name,
-    taskKind: taskKind(job),
+    trigger: trigger(job),
     runId,
     title: '定时任务开始执行',
     detail: `任务类型：${job.jobType}`,
@@ -326,28 +330,28 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
     }
 
     if (status === 'skipped') {
-      await recordTaskSkipped({
-        module: logModule(job),
+      await recordActivitySkipped({
+        domain: logDomain(job),
         scope: logScope(job),
         accountId: targetAccountId,
         accountName: account?.name,
         taskId: job.id,
         taskName: job.name,
-        taskKind: taskKind(job),
+        trigger: trigger(job),
         title: '定时任务跳过',
         detail,
       });
       return { listed: countIncrement, status, message: detail ?? null, error: null, completed: result.completed };
     }
 
-    await recordTaskCompleted({
-      module: logModule(job),
+    await recordActivityCompleted({
+      domain: logDomain(job),
       scope: logScope(job),
       accountId: targetAccountId,
       accountName: account?.name,
       taskId: job.id,
       taskName: job.name,
-      taskKind: taskKind(job),
+      trigger: trigger(job),
       runId,
       level: status === 'failed' ? 'warning' : 'success',
       title: '定时任务执行完成',
@@ -366,14 +370,14 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
       lastListed: 1,
       lastError: message,
     });
-    await recordTaskFailed({
-      module: logModule(job),
+    await recordActivityFailed({
+      domain: logDomain(job),
       scope: logScope(job),
       accountId: targetAccountId,
       accountName: account?.name,
       taskId: job.id,
       taskName: job.name,
-      taskKind: taskKind(job),
+      trigger: trigger(job),
       runId,
       title: '定时任务执行失败',
       error: { message },

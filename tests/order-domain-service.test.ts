@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { Account, Order, OrderStatus } from '../src/shared/types.ts';
+import type { OrderSyncActivityLog } from '../src/background/orders/order-sync-service.ts';
 import { createOrderStore } from '../src/background/orders/order-store.ts';
 import { createOrderSyncService } from '../src/background/orders/order-sync-service.ts';
 import { createOrderDomainService } from '../src/background/orders/order-domain-service.ts';
@@ -220,6 +221,69 @@ test('all-account refresh runs at most ten accounts concurrently', async () => {
   await domain.refresh({ type: 'all' });
 
   assert.equal(maxActive, 10);
+});
+
+test('manual all-account refresh emits user-facing activity start and summary', async () => {
+  const accounts = [makeAccount('good', '正常店铺'), makeAccount('bad', '异常店铺')];
+  const store = createOrderStore(createMemoryStorage());
+  const activities: Array<{ type: string; payload: unknown }> = [];
+  const activityLog: OrderSyncActivityLog = {
+    async started(payload) {
+      activities.push({ type: 'started', payload });
+    },
+    async completed(payload) {
+      activities.push({ type: 'completed', payload });
+    },
+    async failed(payload) {
+      activities.push({ type: 'failed', payload });
+    },
+  };
+  const sync = createOrderSyncService({
+    store,
+    source: {
+      async fetchRecentOrders(accountId) {
+        if (accountId === 'bad') throw new Error('token invalid');
+        return [makeOrder('good-order')];
+      },
+      async searchOrders() { return []; },
+      async getOrderDetail() { return makeOrder('unused'); },
+    },
+    getAccounts: async () => accounts,
+    activityLog,
+    now: () => 1700000000000,
+  });
+
+  await sync.refresh({ type: 'all' }, { reason: 'manualRefresh' });
+
+  assert.equal(activities.length, 2);
+  assert.deepEqual(activities[0], {
+    type: 'started',
+    payload: {
+      scope: { type: 'all' },
+      reason: 'manualRefresh',
+      mode: 'full',
+      accountCount: 2,
+      concurrency: 10,
+      startedAt: 1700000000000,
+    },
+  });
+  assert.deepEqual(activities[1], {
+    type: 'completed',
+    payload: {
+      scope: { type: 'all' },
+      reason: 'manualRefresh',
+      mode: 'full',
+      status: 'partial_failed',
+      accountCount: 2,
+      concurrency: 10,
+      successCount: 1,
+      failureCount: 1,
+      fetchedOrderCount: 1,
+      updatedOrderCount: 1,
+      startedAt: 1700000000000,
+      finishedAt: 1700000000000,
+    },
+  });
 });
 
 test('all-account refresh returns structured failed result when every account fails', async () => {

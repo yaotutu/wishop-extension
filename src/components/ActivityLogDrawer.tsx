@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { Button, Drawer, Empty, FloatButton, Space, Tag, Timeline, Typography } from 'antd';
 import { ClearOutlined, FileTextOutlined, ReloadOutlined } from '@ant-design/icons';
-import { useGlobalLogs } from '../hooks/useIpc';
-import type { GlobalLogEntry, GlobalLogEventType, GlobalLogLevel, GlobalLogModule, GlobalLogTaskKind } from '../shared/global-log';
+import { useActivityLogs } from '../hooks/useIpc';
+import type { ActivityLogDomain, ActivityLogEntry, ActivityLogEvent, ActivityLogLevel, ActivityLogTrigger } from '../shared/activity-log';
 
 const { Text } = Typography;
 
-const moduleLabels: Record<GlobalLogModule, string> = {
+const domainLabels: Record<ActivityLogDomain, string> = {
   listing: '商品提审',
   violation: '违规词',
   orders: '订单',
@@ -15,21 +15,21 @@ const moduleLabels: Record<GlobalLogModule, string> = {
   system: '系统',
 };
 
-const levelColors: Record<GlobalLogLevel, string> = {
+const levelColors: Record<ActivityLogLevel, string> = {
   info: 'blue',
   success: 'green',
   warning: 'orange',
   error: 'red',
 };
 
-const timelineColors: Record<GlobalLogLevel, string> = {
+const timelineColors: Record<ActivityLogLevel, string> = {
   info: 'blue',
   success: 'green',
   warning: 'orange',
   error: 'red',
 };
 
-const eventLabels: Record<GlobalLogEventType, string> = {
+const eventLabels: Record<ActivityLogEvent, string> = {
   started: '开始',
   queued: '排队',
   waiting_user: '需处理',
@@ -38,7 +38,7 @@ const eventLabels: Record<GlobalLogEventType, string> = {
   failed: '失败',
 };
 
-const taskKindLabels: Record<GlobalLogTaskKind, string> = {
+const triggerLabels: Record<ActivityLogTrigger, string> = {
   manual: '手动',
   scheduled: '单账号定时',
   globalScheduled: '全部账号定时',
@@ -56,16 +56,16 @@ function formatTime(timestamp: number): string {
   });
 }
 
-function LogContent({ log }: { log: GlobalLogEntry }) {
+function LogContent({ log }: { log: ActivityLogEntry }) {
   const scopeLabel = log.scope === 'global' ? '全部账号' : (log.accountName || log.accountId || '单账号');
 
   return (
     <div style={{ paddingBottom: 10 }}>
       <Space size={6} wrap style={{ marginBottom: 6 }}>
         <Text type="secondary" style={{ fontSize: 12 }}>{formatTime(log.timestamp)}</Text>
-        <Tag color={levelColors[log.level]} variant="filled">{moduleLabels[log.module]}</Tag>
-        <Tag color={levelColors[log.level]} variant="outlined">{eventLabels[log.eventType]}</Tag>
-        {log.taskKind && <Tag>{taskKindLabels[log.taskKind]}</Tag>}
+        <Tag color={levelColors[log.level]} variant="filled">{domainLabels[log.domain]}</Tag>
+        <Tag color={levelColors[log.level]} variant="outlined">{eventLabels[log.event]}</Tag>
+        {log.trigger && <Tag>{triggerLabels[log.trigger]}</Tag>}
         <Tag variant="filled">{scopeLabel}</Tag>
       </Space>
       <div style={{ fontSize: 13, fontWeight: 500, color: '#1f1f1f', lineHeight: 1.5 }}>
@@ -90,10 +90,10 @@ function LogContent({ log }: { log: GlobalLogEntry }) {
   );
 }
 
-const GlobalLogDrawer: React.FC = () => {
+const ActivityLogDrawer: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [lastViewedAt, setLastViewedAt] = useState(Date.now());
-  const { logs, loading, fetchLogs, clearLogs } = useGlobalLogs();
+  const { logs, loading, fetchLogs, clearLogs } = useActivityLogs();
 
   const unreadCount = open ? 0 : logs.filter(log => log.timestamp > lastViewedAt).length;
   const timelineItems = useMemo(() => [...logs]
@@ -150,4 +150,4 @@ const GlobalLogDrawer: React.FC = () => {
   );
 };
 
-export default GlobalLogDrawer;
+export default ActivityLogDrawer;

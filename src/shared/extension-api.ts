@@ -43,7 +43,7 @@ import type {
   ViolationMatch,
   ViolationScanResult,
 } from './types';
-import type { GlobalLogEntry } from './global-log';
+import type { ActivityLogEntry } from './activity-log';
 import type { NotificationEntry, NotificationPreference } from './notification';
 import type { AppSettings, AppSettingsPatch } from './settings';
 import type { RuntimeArgs, RuntimeChannel, RuntimeResult } from './runtime-channels';
@@ -203,10 +203,10 @@ export const extensionApi = {
     clear: (accountId: string): Promise<void> => invoke('listingLogs:clear', accountId),
     onAdded: (accountId: string, callback: (log: LogEntry) => void) => onRuntimeEvent(`listingLog:added:${accountId}`, callback),
   },
-  globalLogs: {
-    list: (): Promise<GlobalLogEntry[]> => invoke('globalLogs:list'),
-    clear: (): Promise<void> => invoke('globalLogs:clear'),
-    onAdded: (callback: (log: GlobalLogEntry) => void) => onRuntimeEvent('globalLog:added', callback),
+  activityLogs: {
+    list: (): Promise<ActivityLogEntry[]> => invoke('activityLogs:list'),
+    clear: (): Promise<void> => invoke('activityLogs:clear'),
+    onAdded: (callback: (log: ActivityLogEntry) => void) => onRuntimeEvent('activityLog:added', callback),
   },
   notifications: {
     list: (): Promise<NotificationEntry[]> => invoke('notifications:list'),

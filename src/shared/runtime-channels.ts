@@ -1,4 +1,4 @@
-import type { GlobalLogEntry } from './global-log';
+import type { ActivityLogEntry } from './activity-log';
 import type { NotificationEntry, NotificationPreference } from './notification';
 import type { AppSettings, AppSettingsPatch } from './settings';
 import type {
@@ -118,8 +118,8 @@ export interface RuntimeChannels {
 
   'listingLogs:get': { args: [accountId: string]; result: LogEntry[] };
   'listingLogs:clear': { args: [accountId: string]; result: void };
-  'globalLogs:list': { args: []; result: GlobalLogEntry[] };
-  'globalLogs:clear': { args: []; result: void };
+  'activityLogs:list': { args: []; result: ActivityLogEntry[] };
+  'activityLogs:clear': { args: []; result: void };
   'notifications:list': { args: []; result: NotificationEntry[] };
   'notifications:markRead': { args: [notificationId: string]; result: NotificationEntry[] };
   'notifications:markAllRead': { args: []; result: NotificationEntry[] };

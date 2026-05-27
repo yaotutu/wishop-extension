@@ -1,6 +1,6 @@
 import type { Order, OrderListParams, OrderListResult, OrderSearchParams, OrderStatus } from '../../shared/types';
 import { normalizeOrderListTimeRange } from '../../shared/order-time-range.ts';
-import { createLogger } from '../utils/logger.ts';
+import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 import { getRecentOrderWindow, makeRecentOrderWindowState, moveRecentOrderWindowBack } from './recent-order-window.ts';
 
 const MAX_RECENT_WINDOWS = 26;
@@ -112,7 +112,7 @@ async function fetchWindowOrders(
   windowIndex = 0,
 ): Promise<Order[]> {
   assertValidTimeRange(timeRange, accountId, status);
-  const logger = debug ? createLogger('OrderSource', accountId) : null;
+  const logger = debug ? createDiagnosticLogger({ domain: 'orders', component: 'OrderSource', accountId }) : null;
   const orders: Order[] = [];
   let nextKey = '';
   let scannedPages = 0;
@@ -184,7 +184,7 @@ export function createWxOrderSource(resolveClient: ResolveWxOrderClient = defaul
       const state = makeRecentOrderWindowState(scan.nowSeconds, scan.lookbackDays);
       let scannedWindows = 0;
       let orders: Order[] = [];
-      const logger = options.debug ? createLogger('OrderSource', accountId) : null;
+      const logger = options.debug ? createDiagnosticLogger({ domain: 'orders', component: 'OrderSource', accountId }) : null;
       logger?.info('最近订单同步开始', {
         mode: scan.mode,
         fallbackStatuses: Boolean(options.fallbackStatuses),

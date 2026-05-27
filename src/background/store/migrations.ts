@@ -75,7 +75,7 @@ const migrations: Record<number, Migration> = {
   8(store) {
     return {
       ...store,
-      globalLogs: [],
+      activityLogs: [],
       notifications: [],
       notificationPreference: DEFAULT_NOTIFICATION_PREFERENCE,
       storageVersion: 8,
@@ -97,7 +97,7 @@ const LEGACY_BUSINESS_KEYS = [
   'statusRules',
   'notificationPreference',
   'appSettings',
-  'globalLogs',
+  'activityLogs',
   'notifications',
   'orderSnapshots',
   'orderSyncStates',

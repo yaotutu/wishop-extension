@@ -1,7 +1,7 @@
 import { WxShopClient, DraftProduct } from '../wxshop/client';
 import type { AddLogFn } from '../../shared/types';
 import type { BlacklistRule } from '../../shared/types';
-import { createLogger } from '../utils/logger';
+import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 
 export type ListOneResult = 'success' | 'skipped' | 'stopped' | 'deleted';
 
@@ -48,7 +48,7 @@ export async function listOne(
   autoDeleteFailed: boolean = true,
   skipKeywords: string[] = [],
 ): Promise<ListOneResult> {
-  const logger = createLogger('ListOne', accountId);
+  const logger = createDiagnosticLogger({ domain: 'listing', component: 'ListOne', accountId });
   try {
     const latest = await api.getProductDetail(product.productId);
     if (latest.editStatus !== 72 && latest.editStatus !== 1) {

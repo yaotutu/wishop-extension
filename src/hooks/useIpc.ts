@@ -15,13 +15,13 @@ export type {
   OrderSyncState,
   StoredOrderSnapshot,
 } from '../shared/types';
-export type { GlobalLogEntry } from '../shared/global-log';
+export type { ActivityLogEntry } from '../shared/activity-log';
 export type { NotificationEntry, NotificationPreference } from '../shared/notification';
 export { useAccounts } from './useAccounts';
 export { useConfig } from './useConfig';
 export { useGlobalSchedulers, useSchedulers } from './useScheduler';
 export type { ListingScheduledJob } from './useScheduler';
-export { useGlobalLogs } from './useGlobalLogs';
+export { useActivityLogs } from './useActivityLogs';
 export { useNotifications } from './useNotifications';
 export { useListingLogs } from './useListingLogs';
 export { useQuota } from './useQuota';

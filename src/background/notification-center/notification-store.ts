@@ -23,9 +23,9 @@ function normalizePreference(value: unknown): NotificationPreference {
       ...DEFAULT_NOTIFICATION_PREFERENCE.topicEnabled,
       ...(input?.topicEnabled || {}),
     },
-    moduleEnabled: {
-      ...DEFAULT_NOTIFICATION_PREFERENCE.moduleEnabled,
-      ...(input?.moduleEnabled || {}),
+    domainEnabled: {
+      ...DEFAULT_NOTIFICATION_PREFERENCE.domainEnabled,
+      ...(input?.domainEnabled || {}),
     },
   };
 }
@@ -77,9 +77,9 @@ export async function setNotificationPreference(patch: Partial<NotificationPrefe
       ...current.topicEnabled,
       ...(patch.topicEnabled || {}),
     },
-    moduleEnabled: {
-      ...current.moduleEnabled,
-      ...(patch.moduleEnabled || {}),
+    domainEnabled: {
+      ...current.domainEnabled,
+      ...(patch.domainEnabled || {}),
     },
   });
   await updateAccountWorkspace(NOTIFICATION_ACCOUNT_ID, workspace => {

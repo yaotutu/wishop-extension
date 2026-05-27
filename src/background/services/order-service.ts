@@ -1,6 +1,6 @@
 import type { Order, OrderListParams, OrderSearchParams, OrderStatus, OrderTimeScope } from '../../shared/types';
 import { getClient } from '../wxshop/client-registry';
-import { createLogger } from '../utils/logger';
+import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 
 interface OrderPaginationState {
   nextKey: string;
@@ -45,7 +45,7 @@ function moveToPreviousWindow(state: OrderPaginationState): void {
 async function fetchOrderDetails(
   orderIds: string[],
   getOrderDetail: (orderId: string) => Promise<Order>,
-  logger: ReturnType<typeof createLogger>,
+  logger: ReturnType<typeof createDiagnosticLogger>,
 ): Promise<Order[]> {
   if (orderIds.length === 0) return [];
 
@@ -72,7 +72,7 @@ export async function listOrders(
   reset?: boolean,
   timeScope: OrderTimeScope = 'all',
 ): Promise<{ orders: Order[]; hasMore: boolean }> {
-  const logger = createLogger('Orders', accountId);
+  const logger = createDiagnosticLogger({ domain: 'orders', component: 'Orders', accountId });
   const key = `${accountId}:${status ?? 'all'}:${timeScope}`;
   let pag = orderPaginationMap.get(key);
   if (!pag || reset) {
@@ -119,7 +119,7 @@ export async function listOrders(
 }
 
 export async function searchOrders(accountId: string, params: OrderSearchParams): Promise<{ orders: Order[]; hasMore: boolean }> {
-  const logger = createLogger('Orders', accountId);
+  const logger = createDiagnosticLogger({ domain: 'orders', component: 'Orders', accountId });
   const api = await getClient(accountId);
   const listResult = await api.searchOrders(params);
   const orders = await fetchOrderDetails(listResult.order_id_list, api.getOrderDetail, logger);

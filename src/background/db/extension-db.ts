@@ -57,7 +57,7 @@ export interface AccountWorkspaceRecord {
   updatedAt: number;
 }
 
-export type AccountLogKind = 'listing' | 'violation' | 'global' | 'notification';
+export type AccountLogKind = 'listing' | 'violation' | 'activity' | 'notification';
 
 export interface AccountLogRecord<TEntry = unknown> {
   id: string;

@@ -1,25 +1,25 @@
 import type { TaskConfig, TaskCycleResult } from '../../shared/types';
-import { recordTaskCompleted, recordTaskFailed, recordTaskStarted } from '../global-logs/global-log-service';
+import { recordActivityCompleted, recordActivityFailed, recordActivityStarted } from '../activity-logs/activity-log-service.ts';
 import { runTaskCycle } from '../modules/task-cycle';
 import { getAccount } from '../store/account-repository';
 import { createScopedListingLog } from '../store/log-repository';
 import { getBlacklistRules, getSkipKeywords, getStatusRules } from '../store/rule-repository';
-import { createLogger } from '../utils/logger';
+import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 import type { SessionManager } from '../utils/session-manager';
 import { getClient } from '../wxshop/client-registry';
 
 export async function runTask(accountId: string, taskConfig: TaskConfig, taskSessions: SessionManager<void>): Promise<TaskCycleResult> {
-  const logger = createLogger('TaskRun', accountId);
+  const logger = createDiagnosticLogger({ domain: 'listing', component: 'TaskRun', accountId });
   const runId = Date.now().toString();
   const addLog = createScopedListingLog(accountId);
   const account = await getAccount(accountId);
 
-  await recordTaskStarted({
-    module: 'listing',
+  await recordActivityStarted({
+    domain: 'listing',
     scope: 'account',
     accountId,
     accountName: account?.name,
-    taskKind: 'manual',
+    trigger: 'manual',
     runId,
     title: '单账号手动提审开始',
     detail: `账号「${account?.name || accountId}」开始执行单账号手动提审任务`,
@@ -33,12 +33,12 @@ export async function runTask(accountId: string, taskConfig: TaskConfig, taskSes
       taskConfig = { ...taskConfig, listUnreviewedQuantity: quota.quota };
     } catch (error: any) {
       addLog({ runId, productId: '', productTitle: '', action: 'check', status: 'failed', errorMsg: `配额检查失败: ${error.message}` });
-      await recordTaskFailed({
-        module: 'listing',
+      await recordActivityFailed({
+        domain: 'listing',
         scope: 'account',
         accountId,
         accountName: account?.name,
-        taskKind: 'manual',
+        trigger: 'manual',
         runId,
         title: '单账号手动提审失败',
         error: { message: `配额检查失败: ${error.message}` },
@@ -65,12 +65,12 @@ export async function runTask(accountId: string, taskConfig: TaskConfig, taskSes
       await getSkipKeywords(),
       await getStatusRules(),
     );
-    await recordTaskCompleted({
-      module: 'listing',
+    await recordActivityCompleted({
+      domain: 'listing',
       scope: 'account',
       accountId,
       accountName: account?.name,
-      taskKind: 'manual',
+      trigger: 'manual',
       runId,
       level: result.stopped || result.errors > 0 ? 'warning' : 'success',
       title: '单账号手动提审完成',
@@ -91,12 +91,12 @@ export async function runTask(accountId: string, taskConfig: TaskConfig, taskSes
     });
     return result;
   } catch (error: any) {
-    await recordTaskFailed({
-      module: 'listing',
+    await recordActivityFailed({
+      domain: 'listing',
       scope: 'account',
       accountId,
       accountName: account?.name,
-      taskKind: 'manual',
+      trigger: 'manual',
       runId,
       title: '单账号手动提审异常',
       error: { message: error?.message || String(error) },

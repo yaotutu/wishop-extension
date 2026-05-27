@@ -6,16 +6,9 @@ import type {
   OrderSearchParams,
   StoredOrderSource,
 } from '../../shared/types';
-import { createLogger } from '../utils/logger.ts';
+import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 import type { OrderStore } from './order-store.ts';
 import type { WxOrderSource } from './wx-order-source.ts';
-
-export interface OrderSyncServiceDeps {
-  store: OrderStore;
-  source: WxOrderSource;
-  getAccounts: () => Promise<Account[]>;
-  now?: () => number;
-}
 
 export interface RefreshOptions {
   reason?: Extract<StoredOrderSource, 'autoSync' | 'manualRefresh' | 'historyBackfill'>;
@@ -24,6 +17,43 @@ export interface RefreshOptions {
   windowEndTime?: number;
   lookbackDays?: number;
   maxWindows?: number;
+}
+
+export interface OrderSyncActivityStartInput {
+  scope: OrderScope;
+  reason: NonNullable<RefreshOptions['reason']>;
+  mode: NonNullable<RefreshOptions['mode']>;
+  accountCount: number;
+  concurrency: number;
+  startedAt: number;
+}
+
+export interface OrderSyncActivityCompleteInput extends OrderSyncActivityStartInput {
+  status: OrderRefreshResult['status'];
+  successCount: number;
+  failureCount: number;
+  fetchedOrderCount: number;
+  updatedOrderCount: number;
+  finishedAt: number;
+}
+
+export interface OrderSyncActivityFailInput extends OrderSyncActivityStartInput {
+  error: string;
+  finishedAt: number;
+}
+
+export interface OrderSyncActivityLog {
+  started(input: OrderSyncActivityStartInput): Promise<void> | void;
+  completed(input: OrderSyncActivityCompleteInput): Promise<void> | void;
+  failed(input: OrderSyncActivityFailInput): Promise<void> | void;
+}
+
+export interface OrderSyncServiceDeps {
+  store: OrderStore;
+  source: WxOrderSource;
+  getAccounts: () => Promise<Account[]>;
+  activityLog?: OrderSyncActivityLog;
+  now?: () => number;
 }
 
 interface AccountRefreshResult {
@@ -87,7 +117,7 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
   async function refreshAccountOrders(account: Account, options: Required<Pick<RefreshOptions, 'reason' | 'mode'>> & Omit<RefreshOptions, 'reason' | 'mode'>): Promise<Order[]> {
     const source = options.reason;
     const fallbackStatuses = source !== 'autoSync';
-    const logger = createLogger('OrderSync', account.id);
+    const logger = createDiagnosticLogger({ domain: 'orders', component: 'OrderSync', accountId: account.id });
     logger.info('账号订单刷新开始', {
       accountName: account.name,
       source,
@@ -109,15 +139,30 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
     const reason = options.reason || 'manualRefresh';
     const mode = options.mode || defaultModeForReason(reason);
     const startedAt = now();
-    const logger = createLogger('OrderSync');
+    const logger = createDiagnosticLogger({ domain: 'orders', component: 'OrderSync' });
     await deps.store.markSyncStarted(scope);
     const accounts = await resolveAccounts(scope);
+    const activityStart: OrderSyncActivityStartInput = {
+      scope,
+      reason,
+      mode,
+      accountCount: accounts.length,
+      concurrency: ORDER_REFRESH_ACCOUNT_CONCURRENCY,
+      startedAt,
+    };
+    await deps.activityLog?.started(activityStart);
     logger.info('订单刷新任务开始', {
       scope,
       reason,
       mode,
       accountCount: accounts.length,
+      concurrency: ORDER_REFRESH_ACCOUNT_CONCURRENCY,
     });
+    if (accounts.length === 0) {
+      const message = scope.type === 'account' ? `账号不存在: ${scope.accountId}` : '当前没有可刷新的账号';
+      await deps.activityLog?.failed({ ...activityStart, error: message, finishedAt: now() });
+      throw new Error(message);
+    }
     const refreshedAccountIds: string[] = [];
     const failedAccounts: OrderRefreshResult['failedAccounts'] = [];
     let fetchedOrderCount = 0;
@@ -141,7 +186,7 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
           fetchedOrderCount: upsertResult.fetchedCount,
           changedOrderCount: upsertResult.changedCount,
         };
-        createLogger('OrderSync', account.id).info('账号订单刷新完成', {
+        createDiagnosticLogger({ domain: 'orders', component: 'OrderSync', accountId: account.id }).info('账号订单刷新完成', {
           accountName: account.name,
           fetchedOrderCount: result.fetchedOrderCount,
           changedOrderCount: result.changedOrderCount,
@@ -161,7 +206,7 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
         return { status: 'fulfilled', value: result };
       } catch (error) {
         const message = errorMessage(error);
-        createLogger('OrderSync', account.id).error('账号订单刷新失败', {
+        createDiagnosticLogger({ domain: 'orders', component: 'OrderSync', accountId: account.id }).error('账号订单刷新失败', {
           accountName: account.name,
           source: reason,
           error: message,
@@ -206,6 +251,15 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
       finishedAt: now(),
     };
     await deps.store.markSyncFinished(scope, result);
+    await deps.activityLog?.completed({
+      ...activityStart,
+      status: result.status,
+      successCount: refreshedAccountIds.length,
+      failureCount: failedAccounts.length,
+      fetchedOrderCount,
+      updatedOrderCount,
+      finishedAt: result.finishedAt,
+    });
     logger.info('订单刷新任务结束', {
       scope,
       reason,
@@ -214,9 +268,6 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
       fetchedOrderCount,
       updatedOrderCount,
     });
-    if (accounts.length === 0) {
-      throw new Error(scope.type === 'account' ? `账号不存在: ${scope.accountId}` : '当前没有可刷新的账号');
-    }
     return result;
   }
 

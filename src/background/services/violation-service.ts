@@ -3,7 +3,7 @@ import { batchDeleteViolations, batchScan, scanOneByOne } from '../modules/viola
 import { getAccount } from '../store/account-repository';
 import { createScopedViolationLog } from '../store/log-repository';
 import { getViolationWords } from '../store/rule-repository';
-import { createLogger } from '../utils/logger';
+import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 import type { SessionManager } from '../utils/session-manager';
 import { getClient } from '../wxshop/client-registry';
 
@@ -18,7 +18,7 @@ export async function runViolationBatchScan(
   scanSessions: SessionManager<ScanSessionState>,
   limit?: number,
 ): Promise<ViolationScanResult> {
-  const logger = createLogger('Violation', accountId);
+  const logger = createDiagnosticLogger({ domain: 'violation', component: 'Violation', accountId });
   const words = await getViolationWords(accountId);
   const account = await getAccount(accountId);
   const api = await getClient(accountId);
@@ -38,7 +38,7 @@ export async function runViolationStep(
   scanSessions: SessionManager<ScanSessionState>,
   action: 'next' | 'skip' | 'delete',
 ): Promise<unknown> {
-  const logger = createLogger('Violation', accountId);
+  const logger = createDiagnosticLogger({ domain: 'violation', component: 'Violation', accountId });
   let session = scanSessions.get(accountId);
   if (!session || session.state.done) {
     const words = await getViolationWords(accountId);

@@ -2,10 +2,10 @@ import type { Order, OrderProductInfo, ShipOrderFromPurchaseInput, ShipOrderFrom
 import { OrderStatus } from '../../shared/types';
 import { DELIVERY_COMPANY_UNMATCHED_PREFIX } from '../../shared/errors';
 import {
-  recordTaskCompleted,
-  recordTaskFailed,
-  recordTaskStarted,
-} from '../global-logs/global-log-service';
+  recordActivityCompleted,
+  recordActivityFailed,
+  recordActivityStarted,
+} from '../activity-logs/activity-log-service.ts';
 import { getClient } from '../wxshop/client-registry';
 import type { DeliveryCompany, SendOrderDeliveryPayload } from '../wxshop/client';
 
@@ -101,11 +101,11 @@ export async function shipOrderFromPurchase(input: ShipOrderFromPurchaseInput): 
   if (!logisticsCompany) throw new Error('缺少快递公司，无法提交发货');
   if (!trackingNumber) throw new Error('缺少快递单号，无法提交发货');
 
-  void recordTaskStarted({
-    module: 'orders',
+  void recordActivityStarted({
+    domain: 'orders',
     scope: 'account',
     accountId: input.accountId,
-    taskKind: 'manual',
+    trigger: 'manual',
     runId,
     title: '手动回填微信小店发货已开始',
     detail: `订单号：${input.orderId}，快递：${logisticsCompany} ${trackingNumber}`,
@@ -142,11 +142,11 @@ export async function shipOrderFromPurchase(input: ShipOrderFromPurchaseInput): 
     });
 
     const updatedOrder = await client.getOrderDetail(input.orderId);
-    void recordTaskCompleted({
-      module: 'orders',
+    void recordActivityCompleted({
+      domain: 'orders',
       scope: 'account',
       accountId: input.accountId,
-      taskKind: 'manual',
+      trigger: 'manual',
       runId,
       title: '手动回填微信小店发货完成',
       detail: `订单号：${input.orderId}，快递：${company.delivery_name} ${trackingNumber}`,
@@ -165,11 +165,11 @@ export async function shipOrderFromPurchase(input: ShipOrderFromPurchaseInput): 
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : '提交微信小店发货失败';
-    void recordTaskFailed({
-      module: 'orders',
+    void recordActivityFailed({
+      domain: 'orders',
       scope: 'account',
       accountId: input.accountId,
-      taskKind: 'manual',
+      trigger: 'manual',
       runId,
       title: '手动回填微信小店发货失败',
       error: { message },

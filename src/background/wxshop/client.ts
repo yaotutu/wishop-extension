@@ -1,6 +1,7 @@
 import axios from 'axios';
 import type { DraftProduct, QuotaResult, Order, OrderListParams, OrderListResult, OrderSearchParams, OrderAddressInfo } from '../../shared/types';
 import { normalizeOrderListPageSize, normalizeOrderListTimeRange } from '../../shared/order-time-range.ts';
+import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 import { getAccessToken, isAccessTokenInvalidError, removeAccessToken } from './access-token-service';
 
 export type { DraftProduct, QuotaResult };
@@ -49,6 +50,8 @@ function normalizeOrderIds(orderIds: Array<string | number> = []): string[] {
 }
 
 export function createWxShopClient(accountId: string) {
+  const logger = createDiagnosticLogger({ domain: 'orders', component: 'WxShopClient', accountId });
+
   async function request<T>(path: string, body: unknown): Promise<T> {
     const send = async (forceRefresh = false) => {
       const token = await getAccessToken(accountId, forceRefresh);
@@ -142,16 +145,16 @@ export function createWxShopClient(accountId: string) {
     };
     if (params.status !== undefined) body.status = params.status;
     if (params.create_time_range && !createTimeRange) {
-      console.error(`[WxShopOrderList:${accountId}] invalid create_time_range`, params.create_time_range);
+      logger.error('订单列表 create_time_range 无效', params.create_time_range);
     }
     if (params.update_time_range && !updateTimeRange) {
-      console.error(`[WxShopOrderList:${accountId}] invalid update_time_range`, params.update_time_range);
+      logger.error('订单列表 update_time_range 无效', params.update_time_range);
     }
     if (createTimeRange) body.create_time_range = createTimeRange;
     if (updateTimeRange) body.update_time_range = updateTimeRange;
     if (params.order_id) body.order_id = params.order_id;
     if (!createTimeRange && !updateTimeRange) {
-      console.error(`[WxShopOrderList:${accountId}] blocked request without valid time range`, {
+      logger.error('订单列表请求缺少有效时间范围，已拦截', {
         page_size: body.page_size,
         status: body.status,
         hasNextKey: Boolean(body.next_key),
@@ -161,7 +164,7 @@ export function createWxShopClient(accountId: string) {
       });
       throw new Error('订单列表请求缺少有效时间范围，已在本地拦截，未发送到微信接口');
     }
-    console.info(`[WxShopOrderList:${accountId}] request`, {
+    logger.info('订单列表请求', {
       page_size: body.page_size,
       status: body.status ?? 'all',
       hasNextKey: Boolean(body.next_key),

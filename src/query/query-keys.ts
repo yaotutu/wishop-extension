@@ -54,8 +54,8 @@ export const queryKeys = {
   listingLogs: {
     list: (accountId: string) => ['listingLogs', accountId] as const,
   },
-  globalLogs: {
-    list: ['globalLogs'] as const,
+  activityLogs: {
+    list: ['activityLogs'] as const,
   },
   notifications: {
     list: ['notifications'] as const,

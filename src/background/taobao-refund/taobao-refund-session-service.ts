@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { GlobalLogInput } from '../../shared/global-log';
+import type { ActivityLogInput } from '../../shared/activity-log';
 import type {
   CreateTaobaoRefundSessionInput,
   TaobaoRefundPrepareSnapshot,
@@ -8,11 +8,11 @@ import type {
   TaobaoSecurityChallengeSnapshot,
 } from '../../shared/types';
 import {
-  recordTaskCompleted,
-  recordTaskFailed,
-  recordTaskStarted,
-  recordTaskWaitingUser,
-} from '../global-logs/global-log-service';
+  recordActivityCompleted,
+  recordActivityFailed,
+  recordActivityStarted,
+  recordActivityWaitingUser,
+} from '../activity-logs/activity-log-service.ts';
 import { activateTaobaoWorkTab, openTaobaoWorkTab } from '../taobao-workspace/work-tab-service';
 
 const SESSION_TTL_MS = 30 * 60 * 1000;
@@ -53,12 +53,12 @@ function emitTaobaoRefundEvent(event: string, payload: unknown): void {
   chrome.runtime.sendMessage({ type: 'event', event, payload }).catch(() => {});
 }
 
-function taobaoRefundLogBase(session: TaobaoRefundSession): Omit<GlobalLogInput, 'eventType' | 'level' | 'title'> {
+function taobaoRefundLogBase(session: TaobaoRefundSession): Omit<ActivityLogInput, 'event' | 'level' | 'title'> {
   return {
-    module: 'orders',
+    domain: 'orders',
     scope: 'account',
     accountId: session.accountId,
-    taskKind: 'manual',
+    trigger: 'manual',
     runId: session.id,
     metadata: {
       orderId: session.orderId,
@@ -92,7 +92,7 @@ export async function openTaobaoRefundSessionTab(input: CreateTaobaoRefundSessio
   };
   sessions.set(session.id, session);
   activeSessionId = session.id;
-  void recordTaskStarted({
+  void recordActivityStarted({
     ...taobaoRefundLogBase(session),
     title: '淘宝退款申请页已打开',
     detail: `淘宝订单号：${platformOrderId}`,
@@ -155,7 +155,7 @@ export async function reportTaobaoRefundChallenge(
     updatedAt: now(),
   };
   sessions.set(sessionId, next);
-  void recordTaskWaitingUser({
+  void recordActivityWaitingUser({
     ...taobaoRefundLogBase(next),
     title: '淘宝退款申请需要用户处理验证',
     detail: snapshot.reason || '淘宝退款页需要登录或安全验证。',
@@ -205,7 +205,7 @@ export async function completeTaobaoRefundPreparation(
   };
   sessions.set(sessionId, next);
   if (activeSessionId === sessionId) activeSessionId = undefined;
-  void recordTaskCompleted({
+  void recordActivityCompleted({
     ...taobaoRefundLogBase(next),
     title: '淘宝退款申请页已准备',
     detail: `退款原因：${snapshot.selectedReason || '-'}，提交按钮：${snapshot.submitReady ? '可手动提交' : '未就绪'}`,
@@ -233,7 +233,7 @@ export async function completeTaobaoRefundSubmission(
   };
   sessions.set(sessionId, next);
   if (activeSessionId === sessionId) activeSessionId = undefined;
-  void recordTaskCompleted({
+  void recordActivityCompleted({
     ...taobaoRefundLogBase(next),
     title: '淘宝退款申请已自动提交',
     detail: `退款原因：${snapshot.selectedReason || '-'}，退款金额：${snapshot.refundAmountText || '-'}`,
@@ -251,7 +251,7 @@ export async function completeTaobaoRefundSubmission(
 export async function failTaobaoRefundSession(sessionId: string, error: string): Promise<TaobaoRefundSession> {
   const session = await updateTaobaoRefundSessionStatus(sessionId, 'failed', error);
   if (activeSessionId === sessionId) activeSessionId = undefined;
-  void recordTaskFailed({
+  void recordActivityFailed({
     ...taobaoRefundLogBase(session),
     title: '淘宝退款申请准备失败',
     error: { message: error },
@@ -285,7 +285,7 @@ export function installTaobaoRefundTabCleanup(): void {
       updatedAt: now(),
     };
     sessions.set(sessionId, next);
-    void recordTaskFailed({
+    void recordActivityFailed({
       ...taobaoRefundLogBase(next),
       title: '淘宝退款申请准备失败',
       error: { message: errorMessage },

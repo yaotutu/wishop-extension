@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { GlobalLogInput } from '../../shared/global-log';
+import type { ActivityLogInput } from '../../shared/activity-log';
 import type {
   CreatePurchaseLookupSessionInput,
   LinkedPlatformOrder,
@@ -10,12 +10,12 @@ import type {
   TaobaoPurchaseOrderSnapshot,
 } from '../../shared/types';
 import {
-  recordTaskCompleted,
-  recordTaskFailed,
-  recordTaskQueued,
-  recordTaskStarted,
-  recordTaskWaitingUser,
-} from '../global-logs/global-log-service';
+  recordActivityCompleted,
+  recordActivityFailed,
+  recordActivityQueued,
+  recordActivityStarted,
+  recordActivityWaitingUser,
+} from '../activity-logs/activity-log-service.ts';
 import { getAppSettings } from '../store/settings-repository';
 import { getOrderAssociations, setOrderAssociation, updateLinkedOrderShipmentCheck } from '../store/order-association-repository';
 import { activateTaobaoWorkTab, ensureTaobaoTaskWorkTab, openTaobaoWorkTab } from '../taobao-workspace/work-tab-service';
@@ -60,12 +60,12 @@ function emitPurchaseLookupEvent(event: string, payload: unknown): void {
   chrome.runtime.sendMessage({ type: 'event', event, payload }).catch(() => {});
 }
 
-function purchaseLookupLogBase(session: PurchaseLookupSession): Omit<GlobalLogInput, 'eventType' | 'level' | 'title'> {
+function purchaseLookupLogBase(session: PurchaseLookupSession): Omit<ActivityLogInput, 'event' | 'level' | 'title'> {
   return {
-    module: 'orders',
+    domain: 'orders',
     scope: 'account',
     accountId: session.accountId,
-    taskKind: 'background',
+    trigger: 'background',
     runId: session.id,
     metadata: {
       orderId: session.orderId,
@@ -240,7 +240,7 @@ export async function createPurchaseLookupSession(input: CreatePurchaseLookupSes
     expiresAt: timestamp + SESSION_TTL_MS,
   };
   sessions.set(session.id, session);
-  void recordTaskStarted({
+  void recordActivityStarted({
     ...purchaseLookupLogBase(session),
     title: '淘宝订单读取任务已创建',
     detail: `淘宝订单号：${platformOrderId}`,
@@ -284,7 +284,7 @@ export async function openPurchaseLookupSessionTab(input: CreatePurchaseLookupSe
     const queued: PurchaseLookupSession = { ...session, status: 'queued', updatedAt: now() };
     sessions.set(session.id, queued);
     queuedSessionIds.push(session.id);
-    void recordTaskQueued({
+    void recordActivityQueued({
       ...purchaseLookupLogBase(queued),
       title: '淘宝订单读取已排队',
       detail: '淘宝工作页正在处理其他任务，当前任务会自动排队执行。',
@@ -309,7 +309,7 @@ export async function reportPurchaseLookupChallenge(
   };
   sessions.set(sessionId, next);
   void markPurchaseLookupShipmentCheckWaitingUser(next, next.lastError || '淘宝工作页需要用户处理验证').catch(() => {});
-  void recordTaskWaitingUser({
+  void recordActivityWaitingUser({
     ...purchaseLookupLogBase(next),
     title: '淘宝订单读取需要用户处理验证',
     detail: snapshot.reason || '淘宝工作页需要登录或安全验证。',
@@ -357,7 +357,7 @@ export async function completePurchaseLookupSession(
   sessions.set(sessionId, next);
   if (activeSessionId === sessionId) activeSessionId = undefined;
   void markPurchaseLookupShipmentCheckCompleted(next).catch(() => {});
-  void recordTaskCompleted({
+  void recordActivityCompleted({
     ...purchaseLookupLogBase(next),
     title: '淘宝订单读取完成',
     detail: `订单状态：${snapshot.platformOrderStatus || '-'}，物流状态：${snapshot.logisticsStatus || '-'}`,
@@ -371,7 +371,7 @@ export async function failPurchaseLookupSession(sessionId: string, error: string
   const session = await updatePurchaseLookupSessionStatus(sessionId, 'failed', error);
   if (activeSessionId === sessionId) activeSessionId = undefined;
   void markPurchaseLookupShipmentCheckFailed(session, error).catch(() => {});
-  void recordTaskFailed({
+  void recordActivityFailed({
     ...purchaseLookupLogBase(session),
     title: '淘宝订单读取失败',
     error: { message: error },
@@ -407,7 +407,7 @@ export function installPurchaseLookupTabCleanup(): void {
     };
     sessions.set(sessionId, next);
     void markPurchaseLookupShipmentCheckFailed(next, errorMessage).catch(() => {});
-    void recordTaskFailed({
+    void recordActivityFailed({
       ...purchaseLookupLogBase(next),
       title: '淘宝订单读取失败',
       error: { message: errorMessage },
