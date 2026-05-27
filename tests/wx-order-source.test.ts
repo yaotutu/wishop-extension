@@ -202,3 +202,41 @@ test('backfill history sync scans one requested seven-day window', async () => {
   assert.equal(listCalls[0].create_time_range?.start_time, 1699395201);
   assert.equal(listCalls[0].create_time_range?.end_time, 1700000000);
 });
+
+test('recent sync enriches only orders that carry aftersale signals', async () => {
+  const aftersaleCalls: string[] = [];
+  const source = createWxOrderSource(async () => ({
+    async getOrderList(_params: OrderListParams) {
+      return { order_id_list: ['normal-order', 'aftersale-order'], next_key: '', has_more: false };
+    },
+    async getOrderDetail(orderId: string) {
+      if (orderId !== 'aftersale-order') return makeOrder(orderId);
+      return {
+        ...makeOrder(orderId),
+        aftersale_detail: {
+          on_aftersale_order_cnt: 1,
+          aftersale_order_list: [
+            { aftersale_order_id: 'after-1', status: 8 },
+          ],
+        },
+      };
+    },
+    async getAfterSaleOrder(afterSaleOrderId: string) {
+      aftersaleCalls.push(afterSaleOrderId);
+      return {
+        after_sale_order_id: afterSaleOrderId,
+        order_id: 'aftersale-order',
+        status: 'USER_WAIT_RETURN',
+      };
+    },
+    async searchOrders(_params: OrderSearchParams) {
+      return { order_id_list: [], next_key: '', has_more: false };
+    },
+  }));
+
+  const orders = await source.fetchRecentOrders('account-1');
+
+  assert.deepEqual(aftersaleCalls, ['after-1']);
+  assert.equal(orders.find(order => order.order_id === 'normal-order')?.aftersale_summary, undefined);
+  assert.equal(orders.find(order => order.order_id === 'aftersale-order')?.aftersale_summary?.statusText, '待买家退货');
+});

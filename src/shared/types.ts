@@ -410,6 +410,88 @@ export interface OrderProductInfo {
   delivery_deadline?: number;
 }
 
+export interface OrderAftersaleListItem {
+  aftersale_order_id: string;
+  /**
+   * 微信订单详情接口里的这个 status 官方已标记废弃。
+   * 这里只保留原始字段形状，业务展示必须以售后详情接口返回的 status 为准。
+   */
+  status?: number;
+}
+
+export interface OrderAftersaleDetail {
+  aftersale_order_list?: OrderAftersaleListItem[];
+  on_aftersale_order_cnt?: number;
+}
+
+export type AfterSaleOrderStatus =
+  | 'USER_CANCELD'
+  | 'MERCHANT_PROCESSING'
+  | 'MERCHANT_REJECT_REFUND'
+  | 'MERCHANT_REJECT_RETURN'
+  | 'USER_WAIT_RETURN'
+  | 'RETURN_CLOSED'
+  | 'MERCHANT_WAIT_RECEIPT'
+  | 'MERCHANT_OVERDUE_REFUND'
+  | 'MERCHANT_REFUND_SUCCESS'
+  | 'MERCHANT_RETURN_SUCCESS'
+  | 'PLATFORM_REFUNDING'
+  | 'PLATFORM_REFUND_FAIL'
+  | 'USER_WAIT_CONFIRM'
+  | 'MERCHANT_REFUND_RETRY_FAIL'
+  | 'MERCHANT_FAIL'
+  | 'USER_WAIT_CONFIRM_UPDATE'
+  | 'USER_WAIT_HANDLE_MERCHANT_AFTER_SALE'
+  | 'WAIT_PACKAGE_INTERCEPT'
+  | 'MERCHANT_REJECT_EXCHANGE'
+  | 'MERCHANT_REJECT_RESHIP'
+  | 'USER_WAIT_RECEIPT'
+  | 'MERCHANT_EXCHANGE_SUCCESS'
+  | (string & {});
+
+export type AfterSaleOrderType = 'REFUND' | 'RETURN' | 'EXCHANGE' | (string & {});
+
+export interface AfterSaleProductInfo {
+  product_id?: string;
+  sku_id?: string;
+  count?: number;
+}
+
+export interface WxAfterSaleOrder {
+  after_sale_order_id: string;
+  status: AfterSaleOrderStatus;
+  order_id?: string;
+  product_info?: AfterSaleProductInfo;
+  type?: AfterSaleOrderType;
+  reason_text?: string;
+  create_time?: number;
+  update_time?: number;
+  complete_time?: number;
+}
+
+export interface OrderAftersaleSummaryItem {
+  afterSaleOrderId: string;
+  status?: AfterSaleOrderStatus;
+  statusText: string;
+  type?: AfterSaleOrderType;
+  productId?: string;
+  skuId?: string;
+  count?: number;
+  updateTime?: number;
+  completeTime?: number;
+}
+
+export interface OrderAftersaleSummary {
+  hasAftersale: true;
+  status?: AfterSaleOrderStatus;
+  statusText: string;
+  onAftersaleOrderCount: number;
+  onAftersaleSkuCount: number;
+  finishAftersaleSkuCount: number;
+  items: OrderAftersaleSummaryItem[];
+  detailFetchFailed?: boolean;
+}
+
 export interface OrderPriceInfo {
   product_price: number;
   order_price: number;
@@ -487,6 +569,8 @@ export interface Order {
   create_time: number;
   update_time: number;
   order_detail: OrderDetail;
+  aftersale_detail?: OrderAftersaleDetail;
+  aftersale_summary?: OrderAftersaleSummary;
 }
 
 export interface OrderListParams {

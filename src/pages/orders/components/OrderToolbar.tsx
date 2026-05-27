@@ -11,7 +11,7 @@ export const STATUS_FILTER_OPTIONS = [
   { label: '全部', value: 'all' },
   { label: '待付款', value: OrderStatusEnum.PendingPayment },
   { label: '待发货', value: OrderStatusEnum.PendingShipment },
-  { label: '已发货', value: OrderStatusEnum.PendingReceipt },
+  { label: '待收货', value: OrderStatusEnum.PendingReceipt },
   { label: '已完成', value: OrderStatusEnum.Completed },
 ];
 

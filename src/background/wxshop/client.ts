@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { DraftProduct, QuotaResult, Order, OrderListParams, OrderListResult, OrderSearchParams, OrderAddressInfo } from '../../shared/types';
+import type { DraftProduct, QuotaResult, Order, OrderListParams, OrderListResult, OrderSearchParams, OrderAddressInfo, WxAfterSaleOrder } from '../../shared/types';
 import { normalizeOrderListPageSize, normalizeOrderListTimeRange } from '../../shared/order-time-range.ts';
 import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 import { getAccessToken, isAccessTokenInvalidError, removeAccessToken } from './access-token-service';
@@ -191,6 +191,19 @@ export function createWxShopClient(accountId: string) {
     return normalizeOrder(data.order);
   }
 
+  async function getAfterSaleOrder(afterSaleOrderId: string): Promise<WxAfterSaleOrder> {
+    const data = await request<any>('/channels/ec/aftersale/getaftersaleorder', {
+      after_sale_order_id: afterSaleOrderId,
+    });
+    if (data.errcode && data.errcode !== 0) {
+      throw new Error(data.errmsg || `获取售后详情失败: ${data.errcode}`);
+    }
+    if (!data.after_sale_order) {
+      throw new Error(`售后单 ${afterSaleOrderId} 详情为空`);
+    }
+    return data.after_sale_order;
+  }
+
   async function searchOrders(params: OrderSearchParams): Promise<OrderListResult> {
     const searchCondition: Record<string, string> = {};
     const fieldMap: Record<string, string> = {
@@ -258,6 +271,7 @@ export function createWxShopClient(accountId: string) {
     deleteProduct,
     getOrderList,
     getOrderDetail,
+    getAfterSaleOrder,
     searchOrders,
     decodeOrderSensitiveInfo,
     getDeliveryCompanyList,

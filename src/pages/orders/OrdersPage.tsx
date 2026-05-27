@@ -4,7 +4,6 @@ import {
   useOrderAutoSyncJobQuery,
   useFetchRealAddressMutation,
   useOrderAssociationsQuery,
-  useOrderDetailQuery,
   useOrderSyncStateQuery,
   useOrdersQuery,
   useProductSourcesQuery,
@@ -71,8 +70,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
   const [hiddenError, setHiddenError] = useState('');
   const [refreshError, setRefreshError] = useState('');
   const [detailModalOpen, setDetailModalOpen] = useState(false);
-  const [detailAccountId, setDetailAccountId] = useState('');
-  const [detailOrderId, setDetailOrderId] = useState('');
+  const [detailOrder, setDetailOrder] = useState<OrderTableRecord | null>(null);
   const [decodingOrderIds, setDecodingOrderIds] = useState<Set<string>>(new Set());
   const [associationModalOpen, setAssociationModalOpen] = useState(false);
   const [associationOrder, setAssociationOrder] = useState<OrderTableRecord | null>(null);
@@ -96,7 +94,6 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
   const latestSyncFinishedAt = latestOrderSyncFinishedAt(syncStateQuery.data);
   const autoSyncJobQuery = useOrderAutoSyncJobQuery();
   const refreshOrdersMutation = useRefreshOrdersMutation(scope);
-  const detailQuery = useOrderDetailQuery(detailAccountId, detailOrderId);
   const productSourcesQuery = useProductSourcesQuery(accountIds);
   const orderAssociationsQuery = useOrderAssociationsQuery(accountIds);
   const refetchOrderAssociations = orderAssociationsQuery.refetch;
@@ -165,8 +162,8 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
     setActiveSearch(null);
     setSearchKeyword('');
     setRefreshError('');
-    setDetailAccountId('');
-    setDetailOrderId('');
+    setDetailOrder(null);
+    setDetailModalOpen(false);
   }, [scope]);
 
   useEffect(() => {
@@ -200,12 +197,11 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
       ['加载货源失败', productSourcesQuery.error],
       ['加载订单关联失败', orderAssociationsQuery.error],
       ['加载真实地址缓存失败，请在扩展管理页重新加载插件后再试', realAddressCachesQuery.error],
-      ['加载订单详情失败', detailQuery.error],
     ] as const;
     errors.forEach(([prefix, err]) => {
       if (err instanceof Error) message.error(`${prefix}: ${err.message}`);
     });
-  }, [productSourcesQuery.error, orderAssociationsQuery.error, realAddressCachesQuery.error, detailQuery.error]);
+  }, [productSourcesQuery.error, orderAssociationsQuery.error, realAddressCachesQuery.error]);
 
   useEffect(() => {
     const offCompleted = extensionApi.purchaseLookup.onCompleted((association) => {
@@ -314,9 +310,8 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
   }, [ordersQuery]);
 
   const handleViewDetail = useCallback((order: OrderTableRecord) => {
+    setDetailOrder(order);
     setDetailModalOpen(true);
-    setDetailAccountId(order.accountId);
-    setDetailOrderId(order.order_id);
   }, []);
 
   const handleDecodeAddress = useCallback(async (order: OrderTableRecord) => {
@@ -821,9 +816,9 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
 
       <OrderDetailModal
         open={detailModalOpen}
-        loading={detailQuery.isLoading || detailQuery.isFetching}
-        order={detailQuery.data || null}
-        realAddressCache={detailQuery.data ? realAddressCaches[scopedKey(detailAccountId, detailQuery.data.order_id)] : undefined}
+        loading={false}
+        order={detailOrder}
+        realAddressCache={detailOrder ? realAddressCaches[scopedKey(detailOrder.accountId, detailOrder.order_id)] : undefined}
         onCancel={() => setDetailModalOpen(false)}
       />
 

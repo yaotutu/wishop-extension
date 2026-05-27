@@ -1,6 +1,7 @@
-import type { Order, OrderListParams, OrderListResult, OrderSearchParams, OrderStatus } from '../../shared/types';
+import type { Order, OrderListParams, OrderListResult, OrderSearchParams, OrderStatus, WxAfterSaleOrder } from '../../shared/types';
 import { normalizeOrderListTimeRange } from '../../shared/order-time-range.ts';
 import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
+import { enrichOrderAftersale } from './aftersale-enrichment.ts';
 import { getRecentOrderWindow, makeRecentOrderWindowState, moveRecentOrderWindowBack } from './recent-order-window.ts';
 
 const MAX_RECENT_WINDOWS = 26;
@@ -19,10 +20,19 @@ const RECENT_SYNC_FALLBACK_STATUSES = [
 
 async function fetchOrderDetails(
   orderIds: string[],
-  getOrderDetail: (orderId: string) => Promise<Order>,
+  api: WxOrderClient,
+  accountId: string,
 ): Promise<Order[]> {
   if (orderIds.length === 0) return [];
-  const settled = await Promise.allSettled(orderIds.map(orderId => getOrderDetail(orderId)));
+  const logger = createDiagnosticLogger({ domain: 'orders', component: 'OrderAftersale', accountId });
+  const settled = await Promise.allSettled(orderIds.map(async orderId => (
+    enrichOrderAftersale(await api.getOrderDetail(orderId), {
+      getAfterSaleOrder: afterSaleOrderId => api.getAfterSaleOrder
+        ? api.getAfterSaleOrder(afterSaleOrderId)
+        : Promise.reject(new Error('当前微信客户端未实现售后详情接口')),
+      logger,
+    })
+  )));
   const orders = settled
     .map(result => result.status === 'fulfilled' ? result.value : null)
     .filter((order): order is Order => order !== null);
@@ -59,6 +69,7 @@ export interface FetchRecentOrdersOptions {
 export interface WxOrderClient {
   getOrderList(params: OrderListParams): Promise<OrderListResult>;
   getOrderDetail(orderId: string): Promise<Order>;
+  getAfterSaleOrder?(afterSaleOrderId: string): Promise<WxAfterSaleOrder>;
   searchOrders(params: OrderSearchParams): Promise<OrderListResult>;
 }
 
@@ -154,7 +165,7 @@ async function fetchWindowOrders(
       hasMore: listResult.has_more,
       hasNextKey: Boolean(listResult.next_key),
     });
-    orders.push(...await fetchOrderDetails(listResult.order_id_list, api.getOrderDetail));
+    orders.push(...await fetchOrderDetails(listResult.order_id_list, api, accountId));
     if (!listResult.has_more || !listResult.next_key || listResult.next_key === nextKey) break;
     nextKey = listResult.next_key;
   }
@@ -224,11 +235,17 @@ export function createWxOrderSource(resolveClient: ResolveWxOrderClient = defaul
     async searchOrders(accountId: string, params: OrderSearchParams): Promise<Order[]> {
       const api = await resolveClient(accountId);
       const listResult = await api.searchOrders(params);
-      return fetchOrderDetails(listResult.order_id_list, api.getOrderDetail);
+      return fetchOrderDetails(listResult.order_id_list, api, accountId);
     },
 
     async getOrderDetail(accountId: string, orderId: string): Promise<Order> {
-      return (await resolveClient(accountId)).getOrderDetail(orderId);
+      const api = await resolveClient(accountId);
+      return enrichOrderAftersale(await api.getOrderDetail(orderId), {
+        getAfterSaleOrder: afterSaleOrderId => api.getAfterSaleOrder
+          ? api.getAfterSaleOrder(afterSaleOrderId)
+          : Promise.reject(new Error('当前微信客户端未实现售后详情接口')),
+        logger: createDiagnosticLogger({ domain: 'orders', component: 'OrderAftersale', accountId }),
+      });
     },
   };
 }

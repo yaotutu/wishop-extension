@@ -4,6 +4,7 @@ import { CopyOutlined, EyeOutlined, LinkOutlined, PictureOutlined, RollbackOutli
 import type { Order, OrderAssociation, OrderProductInfo, OrderRealAddressCache, ProductSourceItem } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
 import { formatOrderAddressLine, getOrderPhoneDisplay } from '../../../shared/address-format';
+import { getOrderAftersaleDisplay } from '../../../shared/order-aftersale';
 import { normalizeLinkedPurchaseOrder } from '../../../shared/purchase-status';
 import { firstProduct, formatPrice, formatTime, getEstimatedCommissionFee, hasAddressInfo, PAYMENT_METHOD, STATUS_CONFIG } from '../order-display';
 import { canPrepareTaobaoRefund as canPrepareTaobaoRefundForOrder, isLinkedPurchaseRefundFinished } from '../purchase-refund';
@@ -228,10 +229,18 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
         const payInfo = record.order_detail?.pay_info;
         const deliveryInfos = record.order_detail?.delivery_info?.delivery_product_info;
         const product = firstProduct(record);
+        const aftersaleDisplay = getOrderAftersaleDisplay(record);
 
         return (
           <div>
-            <Tag color={cfg.color} style={{ marginBottom: 4 }}>{cfg.text}</Tag>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 4 }}>
+              <Tag color={cfg.color} style={{ marginInlineEnd: 0 }}>{cfg.text}</Tag>
+              {aftersaleDisplay && (
+                <Tag color={aftersaleDisplay.color} title={aftersaleDisplay.title} style={{ marginInlineEnd: 0 }}>
+                  售后：{aftersaleDisplay.text}
+                </Tag>
+              )}
+            </div>
             {payInfo?.payment_method && (
               <Text type="secondary" style={{ fontSize: 12 }}>{PAYMENT_METHOD[payInfo.payment_method] || `支付方式${payInfo.payment_method}`}</Text>
             )}
