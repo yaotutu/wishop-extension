@@ -8,6 +8,7 @@ import { getOrderAftersaleDisplay } from '../../../shared/order-aftersale';
 import { normalizeLinkedPurchaseOrder } from '../../../shared/purchase-status';
 import { firstProduct, formatPrice, formatTime, getEstimatedCommissionFee, hasAddressInfo, PAYMENT_METHOD, STATUS_CONFIG } from '../order-display';
 import { canPrepareTaobaoRefund as canPrepareTaobaoRefundForOrder, isLinkedPurchaseRefundFinished } from '../purchase-refund';
+import { wrappingProductTextStyle } from './product-text-styles';
 
 const { Text } = Typography;
 
@@ -118,7 +119,7 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
                   style={{ width: 18, height: 18, minWidth: 18, padding: 0, flexShrink: 0 }}
                 />
               </div>
-              <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{product?.title || '-'}</div>
+              <div style={{ ...wrappingProductTextStyle, fontSize: 13, fontWeight: 500 }}>{product?.title || '-'}</div>
               <Space size={4} style={{ marginTop: 2 }}>
                 <Button
                   type="link"
@@ -146,8 +147,7 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
                 <Text
                   type="secondary"
                   onClick={() => options.onCopyText(specs || undefined, '规格')}
-                  style={{ fontSize: 12, cursor: specs ? 'pointer' : 'default', maxWidth: 185, display: 'block' }}
-                  ellipsis
+                  style={{ ...wrappingProductTextStyle, fontSize: 12, cursor: specs ? 'pointer' : 'default', display: 'block' }}
                   title={specs || '无规格'}
                 >
                   规格: {specs || '无规格'} ｜ x{product.sku_cnt}

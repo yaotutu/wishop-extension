@@ -4,6 +4,7 @@ import type { Order, OrderRealAddressCache } from '../../../shared/types';
 import { formatOrderAddressLine, formatOrderPhoneInline } from '../../../shared/address-format';
 import { getOrderAftersaleDisplay } from '../../../shared/order-aftersale';
 import { formatPrice, getEstimatedCommissionFee, STATUS_CONFIG } from '../order-display';
+import { wrappingProductTextStyle } from './product-text-styles';
 
 const { Text } = Typography;
 
@@ -76,8 +77,8 @@ export const OrderDetailModal: React.FC<Props> = ({ open, loading, order, realAd
                 <div key={i} style={{ display: 'flex', gap: 8, padding: '8px 0', borderBottom: '1px solid #f0f0f0', alignItems: 'center' }}>
                   {p.thumb_img && <Image src={p.thumb_img} width={50} height={50} alt={p.title || '商品图片'} style={{ borderRadius: 4, objectFit: 'cover' }} preview={false} />}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
+                    <div style={{ ...wrappingProductTextStyle, fontWeight: 500 }}>{p.title}</div>
+                    <Text type="secondary" style={{ ...wrappingProductTextStyle, fontSize: 12, display: 'block' }}>
                       {p.sku_attrs?.map(a => `${a.attr_key}: ${a.attr_value}`).join(' / ')}
                     </Text>
                     <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>
