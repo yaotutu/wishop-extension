@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Button, Drawer, Empty, FloatButton, Space, Tag, Timeline, Typography } from 'antd';
+import { Button, FloatButton, Modal, Space, Table, Tag, Typography } from 'antd';
+import type { TableProps } from 'antd';
 import { ClearOutlined, FileTextOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useActivityLogs } from '../hooks/useIpc';
 import type { ActivityLogDomain, ActivityLogEntry, ActivityLogEvent, ActivityLogLevel, ActivityLogTrigger } from '../shared/activity-log';
@@ -22,13 +23,6 @@ const levelColors: Record<ActivityLogLevel, string> = {
   error: 'red',
 };
 
-const timelineColors: Record<ActivityLogLevel, string> = {
-  info: 'blue',
-  success: 'green',
-  warning: 'orange',
-  error: 'red',
-};
-
 const eventLabels: Record<ActivityLogEvent, string> = {
   started: '开始',
   queued: '排队',
@@ -45,6 +39,40 @@ const triggerLabels: Record<ActivityLogTrigger, string> = {
   background: '后台',
 };
 
+const metadataDisplayOrder = [
+  'jobType',
+  'stage',
+  'service',
+  'method',
+  'endpoint',
+  'errorKind',
+  'httpStatus',
+  'errorCode',
+  'requestId',
+  'transient',
+] as const;
+
+const metadataLabels: Record<typeof metadataDisplayOrder[number], string> = {
+  jobType: '任务类型',
+  stage: '阶段',
+  service: '服务',
+  method: '方法',
+  endpoint: '接口',
+  errorKind: '错误分类',
+  httpStatus: 'HTTP',
+  errorCode: '错误码',
+  requestId: '请求ID',
+  transient: '临时性',
+};
+
+const errorKindLabels: Record<string, string> = {
+  network: '网络连接',
+  timeout: '请求超时',
+  http: 'HTTP响应',
+  api: '接口业务',
+  unknown: '未知',
+};
+
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleString('zh-CN', {
     month: '2-digit',
@@ -56,36 +84,68 @@ function formatTime(timestamp: number): string {
   });
 }
 
-function LogContent({ log }: { log: ActivityLogEntry }) {
-  const scopeLabel = log.scope === 'global' ? '全部账号' : (log.accountName || log.accountId || '单账号');
+function metadataDisplayItems(metadata: ActivityLogEntry['metadata']) {
+  if (!metadata) return [];
+  return metadataDisplayOrder
+    .map((key) => {
+      const value = metadata[key];
+      if (value === undefined || value === null || value === '') return null;
+      const displayValue = key === 'errorKind'
+        ? errorKindLabels[String(value)] || String(value)
+        : key === 'transient'
+          ? value ? '可能偶发' : '需处理'
+          : String(value);
+      return { key, label: metadataLabels[key], value: displayValue };
+    })
+    .filter((item): item is { key: typeof metadataDisplayOrder[number]; label: string; value: string } => item !== null);
+}
+
+function scopeLabel(log: ActivityLogEntry): string {
+  return log.scope === 'global' ? '全部账号' : (log.accountName || log.accountId || '单账号');
+}
+
+function compactMetadata(log: ActivityLogEntry): string {
+  return metadataDisplayItems(log.metadata)
+    .map(item => `${item.label}:${item.value}`)
+    .join(' ');
+}
+
+function compactSummary(log: ActivityLogEntry): string {
+  return [
+    log.title,
+    log.error?.message ? `错误:${log.error.message}` : '',
+    log.detail,
+    compactMetadata(log),
+  ].filter(Boolean).join(' | ');
+}
+
+function OneLineText({ text, danger = false }: { text: string; danger?: boolean }) {
+  return (
+    <span
+      title={text}
+      style={{
+        color: danger ? '#cf1322' : undefined,
+        display: 'block',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {text}
+    </span>
+  );
+}
+
+function ExpandedLog({ log }: { log: ActivityLogEntry }) {
+  const metadataText = compactMetadata(log);
 
   return (
-    <div style={{ paddingBottom: 10 }}>
-      <Space size={6} wrap style={{ marginBottom: 6 }}>
-        <Text type="secondary" style={{ fontSize: 12 }}>{formatTime(log.timestamp)}</Text>
-        <Tag color={levelColors[log.level]} variant="filled">{domainLabels[log.domain]}</Tag>
-        <Tag color={levelColors[log.level]} variant="outlined">{eventLabels[log.event]}</Tag>
-        {log.trigger && <Tag>{triggerLabels[log.trigger]}</Tag>}
-        <Tag variant="filled">{scopeLabel}</Tag>
-      </Space>
-      <div style={{ fontSize: 13, fontWeight: 500, color: '#1f1f1f', lineHeight: 1.5 }}>
-        {log.title}
-      </div>
-      {log.detail && (
-        <div style={{ marginTop: 4, color: '#666', fontSize: 12, lineHeight: 1.6, wordBreak: 'break-word' }}>
-          {log.detail}
-        </div>
-      )}
-      {log.error && (
-        <div style={{ marginTop: 4, color: '#cf1322', fontSize: 12, lineHeight: 1.6, wordBreak: 'break-word' }}>
-          {log.error.code ? `错误码 ${log.error.code}：` : ''}{log.error.message}
-        </div>
-      )}
-      {log.taskName && (
-        <div style={{ marginTop: 4 }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>任务：{log.taskName}</Text>
-        </div>
-      )}
+    <div style={{ fontSize: 12, lineHeight: 1.7, wordBreak: 'break-word' }}>
+      <div><Text type="secondary">标题：</Text>{log.title}</div>
+      {log.detail && <div><Text type="secondary">详情：</Text>{log.detail}</div>}
+      {log.error && <div style={{ color: '#cf1322' }}><Text type="secondary">错误：</Text>{log.error.code ? `错误码 ${log.error.code}：` : ''}{log.error.message}</div>}
+      {metadataText && <div><Text type="secondary">排查：</Text>{metadataText}</div>}
+      {log.runId && <div><Text type="secondary">RunID：</Text>{log.runId}</div>}
     </div>
   );
 }
@@ -96,13 +156,55 @@ const ActivityLogDrawer: React.FC = () => {
   const { logs, loading, fetchLogs, clearLogs } = useActivityLogs();
 
   const unreadCount = open ? 0 : logs.filter(log => log.timestamp > lastViewedAt).length;
-  const timelineItems = useMemo(() => [...logs]
-    .sort((a, b) => b.timestamp - a.timestamp)
-    .map(log => ({
-      key: log.id,
-      color: timelineColors[log.level],
-      children: <LogContent log={log} />,
-    })), [logs]);
+  const sortedLogs = useMemo(() => [...logs].sort((a, b) => b.timestamp - a.timestamp), [logs]);
+
+  const columns = useMemo<TableProps<ActivityLogEntry>['columns']>(() => [
+    {
+      title: '时间',
+      dataIndex: 'timestamp',
+      width: 118,
+      render: timestamp => <Text type="secondary" style={{ fontSize: 12 }}>{formatTime(Number(timestamp))}</Text>,
+    },
+    {
+      title: '级别',
+      dataIndex: 'level',
+      width: 66,
+      render: level => <Tag color={levelColors[level as ActivityLogLevel]}>{String(level)}</Tag>,
+    },
+    {
+      title: '模块',
+      dataIndex: 'domain',
+      width: 78,
+      render: domain => domainLabels[domain as ActivityLogDomain],
+    },
+    {
+      title: '事件',
+      dataIndex: 'event',
+      width: 70,
+      render: event => eventLabels[event as ActivityLogEvent],
+    },
+    {
+      title: '触发',
+      dataIndex: 'trigger',
+      width: 96,
+      render: trigger => trigger ? triggerLabels[trigger as ActivityLogTrigger] : '',
+    },
+    {
+      title: '账号',
+      width: 128,
+      render: (_, log) => <OneLineText text={scopeLabel(log)} />,
+    },
+    {
+      title: '任务',
+      dataIndex: 'taskName',
+      width: 156,
+      render: taskName => <OneLineText text={String(taskName || '')} />,
+    },
+    {
+      title: '摘要',
+      render: (_, log) => <OneLineText text={compactSummary(log)} danger={log.level === 'error'} />,
+    },
+  ], []);
 
   const handleOpen = () => {
     setOpen(true);
@@ -120,16 +222,22 @@ const ActivityLogDrawer: React.FC = () => {
         badge={unreadCount > 0 ? { count: unreadCount, overflowCount: 99 } : undefined}
         onClick={handleOpen}
       />
-      <Drawer
-        title="日志中心"
-        placement="right"
-        size="min(480px, calc(100vw - 32px))"
+      <Modal
+        title={(
+          <Space size={10}>
+            <span>日志中心</span>
+            <Text type="secondary" style={{ fontSize: 12 }}>{sortedLogs.length} 条</Text>
+          </Space>
+        )}
         open={open}
-        onClose={() => setOpen(false)}
-        loading={loading}
+        onCancel={() => setOpen(false)}
+        footer={null}
+        width="min(1280px, calc(100vw - 32px))"
         zIndex={1100}
-        styles={{ body: { padding: 16 } }}
-        extra={(
+        style={{ top: 32 }}
+        styles={{ body: { padding: 12 } }}
+      >
+        <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'flex-end' }}>
           <Space size={8}>
             <Button size="small" icon={<ReloadOutlined />} onClick={() => fetchLogs().catch(() => {})}>
               刷新
@@ -138,14 +246,23 @@ const ActivityLogDrawer: React.FC = () => {
               清空
             </Button>
           </Space>
-        )}
-      >
-        {timelineItems.length === 0 ? (
-          <Empty description="暂无日志" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-        ) : (
-          <Timeline items={timelineItems} />
-        )}
-      </Drawer>
+        </div>
+        <Table<ActivityLogEntry>
+          rowKey="id"
+          size="small"
+          loading={loading}
+          columns={columns}
+          dataSource={sortedLogs}
+          pagination={false}
+          scroll={{ x: 1080, y: 'calc(100vh - 220px)' }}
+          tableLayout="fixed"
+          expandable={{
+            expandedRowRender: log => <ExpandedLog log={log} />,
+            rowExpandable: log => Boolean(log.detail || log.error || log.metadata || log.runId),
+          }}
+          locale={{ emptyText: '暂无日志' }}
+        />
+      </Modal>
     </>
   );
 };

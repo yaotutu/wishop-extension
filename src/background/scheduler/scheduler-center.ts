@@ -24,6 +24,7 @@ import {
   recordActivityStarted,
 } from '../activity-logs/activity-log-service.ts';
 import { nextUntilCompleteRunSchedule } from './scheduled-job-alarm-schedule.ts';
+import { formatScheduledJobFailureLog } from './scheduled-job-error-detail.ts';
 
 const JOB_ALARM_PREFIX = 'scheduled-job:';
 const GLOBAL_JOB_ALARM_PREFIX = 'scheduled-job-global:';
@@ -360,7 +361,13 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
     });
     return { listed: countIncrement, status, message: status === 'failed' ? null : detail ?? null, error: errorMessage ?? null, completed: result.completed };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const failureLog = formatScheduledJobFailureLog({
+      job,
+      accountId: targetAccountId,
+      accountName: account?.name,
+      error,
+    });
+    const message = failureLog.errorMessage;
     await patchStatsFor(job, targetAccountId, {
       lastRunDate: currentDate,
       todayRunCount: todayRunCount + 1,
@@ -380,10 +387,13 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
       trigger: trigger(job),
       runId,
       title: '定时任务执行失败',
+      detail: failureLog.detail,
       error: { message },
+      metadata: failureLog.metadata,
       notification: {
         topic: 'scheduled_job.failed',
         urgency: 'important',
+        detail: failureLog.notificationDetail,
       },
     });
     return { listed: 1, status: 'failed', message: null, error: message, completed: false };
