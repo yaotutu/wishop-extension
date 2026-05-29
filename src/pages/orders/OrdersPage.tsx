@@ -54,6 +54,8 @@ function scopedKey(accountId: string, id: string): string {
   return `${accountId}:${id}`;
 }
 
+const DEFAULT_ORDER_STATUS = OrderStatusEnum.PendingShipment;
+
 const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, accounts }) => {
   const accountNameById = useMemo(() => new Map(accounts.map(account => [account.id, account.name])), [accounts]);
   const accountIds = useMemo(
@@ -61,7 +63,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
     [accounts, scope],
   );
   const accountIdSet = useMemo(() => new Set(accountIds), [accountIds]);
-  const [activeStatus, setActiveStatus] = useState<OrderStatus | undefined>(undefined);
+  const [activeStatus, setActiveStatus] = useState<OrderStatus | undefined>(DEFAULT_ORDER_STATUS);
   const [timeScope, setTimeScope] = useState<OrderTimeScope>('all');
   const [searchType, setSearchType] = useState<OrderSearchParams['search_type']>('order_id');
   const [searchSource, setSearchSource] = useState<OrderSearchSource>('local');
@@ -157,7 +159,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
   }, []);
 
   useEffect(() => {
-    setActiveStatus(undefined);
+    setActiveStatus(DEFAULT_ORDER_STATUS);
     setTimeScope('all');
     setActiveSearch(null);
     setSearchKeyword('');
