@@ -280,6 +280,7 @@ export interface ShipOrderFromPurchaseInput {
   logisticsCompany: string;
   trackingNumber: string;
   deliveryId?: string;
+  sourceAction?: 'manual' | 'auto';
 }
 
 export interface ShipOrderFromPurchaseResult {

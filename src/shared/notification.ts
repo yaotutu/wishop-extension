@@ -6,6 +6,8 @@ export type NotificationUrgency = 'silent' | 'normal' | 'important';
 
 export type NotificationTopic =
   | 'taobao.security_challenge'
+  | 'orders.auto_shipment_completed'
+  | 'orders.auto_shipment_failed'
   | 'orders.shipment_failed'
   | 'orders.purchase_lookup_failed'
   | 'orders.refund_failed'
@@ -52,6 +54,8 @@ export const DEFAULT_NOTIFICATION_PREFERENCE: NotificationPreference = {
   inAppEnabled: true,
   topicEnabled: {
     'taobao.security_challenge': true,
+    'orders.auto_shipment_completed': true,
+    'orders.auto_shipment_failed': true,
     'orders.shipment_failed': true,
     'orders.purchase_lookup_failed': true,
     'orders.refund_failed': true,
@@ -84,6 +88,20 @@ export const NOTIFICATION_TOPIC_DEFINITIONS: NotificationTopicDefinition[] = [
     domain: 'orders',
     label: '淘宝/天猫需要处理',
     description: '工作页遇到登录、安全验证、访问受限等需要人工处理的情况。',
+    defaultUrgency: 'important',
+  },
+  {
+    topic: 'orders.auto_shipment_completed',
+    domain: 'orders',
+    label: '自动发货成功',
+    description: '检测到采购单已发货后，自动向微信小店提交发货成功。',
+    defaultUrgency: 'normal',
+  },
+  {
+    topic: 'orders.auto_shipment_failed',
+    domain: 'orders',
+    label: '自动发货失败',
+    description: '检测到采购单已发货后，自动向微信小店提交发货失败。',
     defaultUrgency: 'important',
   },
   {

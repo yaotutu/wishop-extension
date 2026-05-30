@@ -95,6 +95,7 @@ function buildProductInfos(products: OrderProductInfo[]): SendOrderDeliveryPaylo
 export async function shipOrderFromPurchase(input: ShipOrderFromPurchaseInput): Promise<ShipOrderFromPurchaseResult> {
   const logisticsCompany = input.logisticsCompany.trim();
   const trackingNumber = input.trackingNumber.trim();
+  const isAuto = input.sourceAction === 'auto';
   const runId = `ship-${input.orderId}-${Date.now()}`;
   if (!input.accountId) throw new Error('缺少账号 ID');
   if (!input.orderId.trim()) throw new Error('缺少微信小店订单号');
@@ -105,9 +106,9 @@ export async function shipOrderFromPurchase(input: ShipOrderFromPurchaseInput): 
     domain: 'orders',
     scope: 'account',
     accountId: input.accountId,
-    trigger: 'manual',
+    trigger: isAuto ? 'background' : 'manual',
     runId,
-    title: '手动回填微信小店发货已开始',
+    title: isAuto ? '自动发货已开始' : '手动回填微信小店发货已开始',
     detail: `订单号：${input.orderId}，快递：${logisticsCompany} ${trackingNumber}`,
     metadata: {
       orderId: input.orderId,
@@ -146,10 +147,14 @@ export async function shipOrderFromPurchase(input: ShipOrderFromPurchaseInput): 
       domain: 'orders',
       scope: 'account',
       accountId: input.accountId,
-      trigger: 'manual',
+      trigger: isAuto ? 'background' : 'manual',
       runId,
-      title: '手动回填微信小店发货完成',
+      title: isAuto ? '自动发货成功' : '手动回填微信小店发货完成',
       detail: `订单号：${input.orderId}，快递：${company.delivery_name} ${trackingNumber}`,
+      notification: isAuto ? {
+        topic: 'orders.auto_shipment_completed',
+        urgency: 'normal',
+      } : undefined,
       metadata: {
         orderId: input.orderId,
         deliveryId: company.delivery_id,
@@ -169,12 +174,12 @@ export async function shipOrderFromPurchase(input: ShipOrderFromPurchaseInput): 
       domain: 'orders',
       scope: 'account',
       accountId: input.accountId,
-      trigger: 'manual',
+      trigger: isAuto ? 'background' : 'manual',
       runId,
-      title: '手动回填微信小店发货失败',
+      title: isAuto ? '自动发货失败' : '手动回填微信小店发货失败',
       error: { message },
       notification: {
-        topic: 'orders.shipment_failed',
+        topic: isAuto ? 'orders.auto_shipment_failed' : 'orders.shipment_failed',
         urgency: 'important',
       },
       metadata: {

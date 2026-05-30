@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Button, Flex, Input, Select, Space, Tag, Typography } from 'antd';
+import { Alert, Button, Flex, Input, Select, Space, Switch, Tag, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import type { OrderSearchParams, OrderSearchSource, OrderStatus, OrderSyncState, OrderTimeScope, ScheduledJobView } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
@@ -42,6 +42,9 @@ interface Props {
   error: string | null;
   syncState?: OrderSyncState;
   autoSyncJob?: ScheduledJobView;
+  autoShipEnabled?: boolean;
+  autoShipVisible?: boolean;
+  autoShipUpdating?: boolean;
   onStatusChange: (value: string | number | null) => void;
   onTimeScopeChange: (value: OrderTimeScope) => void;
   onSearchTypeChange: (value: OrderSearchParams['search_type']) => void;
@@ -49,6 +52,7 @@ interface Props {
   onSearchKeywordChange: (value: string) => void;
   onSearch: (value: string) => void;
   onRefresh: () => void;
+  onAutoShipChange?: (enabled: boolean) => void;
   onClearError: () => void;
 }
 
@@ -64,6 +68,9 @@ export const OrderToolbar: React.FC<Props> = ({
   error,
   syncState,
   autoSyncJob,
+  autoShipEnabled = false,
+  autoShipVisible = false,
+  autoShipUpdating = false,
   onStatusChange,
   onTimeScopeChange,
   onSearchTypeChange,
@@ -71,6 +78,7 @@ export const OrderToolbar: React.FC<Props> = ({
   onSearchKeywordChange,
   onSearch,
   onRefresh,
+  onAutoShipChange,
   onClearError,
 }) => {
   const [now, setNow] = useState(() => Date.now());
@@ -129,6 +137,17 @@ export const OrderToolbar: React.FC<Props> = ({
         <Text type="secondary" style={{ fontSize: 12 }}>
           {orderSyncCountdownText({ syncState, autoSyncJob, now })}
         </Text>
+        {autoShipVisible && (
+          <Space size={4} style={{ marginLeft: 'auto' }}>
+            <Text type="secondary" style={{ fontSize: 12 }}>自动发货</Text>
+            <Switch
+              size="small"
+              checked={autoShipEnabled}
+              loading={autoShipUpdating}
+              onChange={onAutoShipChange}
+            />
+          </Space>
+        )}
       </Flex>
       {error && (
         <Alert type="error" title={error} showIcon closable={{ onClose: onClearError }} />

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { Table, Button, Empty, Modal, Select, message } from 'antd';
 import {
+  useAppSettingsQuery,
   useOrderAutoSyncJobQuery,
   useFetchRealAddressMutation,
   useOrderAssociationsQuery,
@@ -12,6 +13,7 @@ import {
   useSaveOrderAssociationMutation,
   useSaveProductSourcesMutation,
   useShipOrderFromPurchaseMutation,
+  useUpdateAppSettingsMutation,
 } from '../../hooks/useIpc';
 import { extensionApi } from '../../shared/extension-api';
 import { latestOrderSyncFinishedAt } from '../../shared/order-sync-state';
@@ -95,6 +97,8 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
   const syncStateQuery = useOrderSyncStateQuery(scope);
   const latestSyncFinishedAt = latestOrderSyncFinishedAt(syncStateQuery.data);
   const autoSyncJobQuery = useOrderAutoSyncJobQuery();
+  const appSettingsQuery = useAppSettingsQuery();
+  const updateAppSettingsMutation = useUpdateAppSettingsMutation();
   const refreshOrdersMutation = useRefreshOrdersMutation(scope);
   const productSourcesQuery = useProductSourcesQuery(accountIds);
   const orderAssociationsQuery = useOrderAssociationsQuery(accountIds);
@@ -119,6 +123,21 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
   const visibleError = refreshError || orderError;
   const error = visibleError && visibleError !== hiddenError ? visibleError : null;
   const scopeKey = scope.type === 'all' ? 'all' : `account:${scope.accountId}`;
+  const autoShipEnabled = appSettingsQuery.data?.shipmentCheck.autoShipEnabled ?? false;
+
+  const handleAutoShipChange = useCallback((enabled: boolean) => {
+    updateAppSettingsMutation.mutate(
+      { shipmentCheck: { autoShipEnabled: enabled } },
+      {
+        onSuccess: () => {
+          message.success(enabled ? '自动发货已开启' : '自动发货已关闭');
+        },
+        onError: (err: any) => {
+          message.error(`更新自动发货设置失败: ${err.message}`);
+        },
+      },
+    );
+  }, [updateAppSettingsMutation]);
 
   const scheduleTaobaoRefundStatusSync = useCallback((session: TaobaoRefundSession) => {
     message.success('淘宝退款申请已自动提交，稍后同步淘宝订单状态');
@@ -735,6 +754,9 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
         error={error}
         syncState={syncStateQuery.data}
         autoSyncJob={autoSyncJobQuery.data}
+        autoShipVisible={scope.type === 'all'}
+        autoShipEnabled={autoShipEnabled}
+        autoShipUpdating={updateAppSettingsMutation.isPending || appSettingsQuery.isLoading}
         onStatusChange={handleStatusChange}
         onTimeScopeChange={handleTimeScopeChange}
         onSearchTypeChange={setSearchType}
@@ -781,6 +803,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
             },
           });
         }}
+        onAutoShipChange={handleAutoShipChange}
         onClearError={() => setHiddenError(visibleError)}
       />
 

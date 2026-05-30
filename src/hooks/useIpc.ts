@@ -28,6 +28,7 @@ export { useQuota } from './useQuota';
 export { useDrafts } from './useDrafts';
 export { useOrders } from './useOrders';
 export {
+  useAppSettingsQuery,
   useOrderAutoSyncJobQuery,
   useFetchRealAddressMutation,
   useOrderAssociationsQuery,
@@ -40,5 +41,6 @@ export {
   useSaveOrderAssociationMutation,
   useSaveProductSourcesMutation,
   useShipOrderFromPurchaseMutation,
+  useUpdateAppSettingsMutation,
 } from './useOrderQueries';
 export { useTaskConfig } from './useTaskConfig';

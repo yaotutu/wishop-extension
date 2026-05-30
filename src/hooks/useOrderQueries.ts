@@ -99,6 +99,23 @@ export function useOrderAutoSyncJobQuery() {
   });
 }
 
+export function useAppSettingsQuery() {
+  return useQuery({
+    queryKey: ['appSettings'],
+    queryFn: () => extensionApi.settings.get(),
+  });
+}
+
+export function useUpdateAppSettingsMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: extensionApi.settings.update,
+    onSuccess: (settings) => {
+      queryClient.setQueryData(['appSettings'], settings);
+    },
+  });
+}
+
 export function useRefreshOrdersMutation(scope: OrderScope) {
   const queryClient = useQueryClient();
   return useMutation({

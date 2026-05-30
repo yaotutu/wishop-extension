@@ -17,6 +17,7 @@ import {
   recordActivityWaitingUser,
 } from '../activity-logs/activity-log-service.ts';
 import { getAppSettings } from '../store/settings-repository';
+import { shipOrderFromPurchase } from '../services/order-delivery-service';
 import { getOrderAssociations, setOrderAssociation, updateLinkedOrderShipmentCheck } from '../store/order-association-repository';
 import { activateTaobaoWorkTab, ensureTaobaoTaskWorkTab, openTaobaoWorkTab } from '../taobao-workspace/work-tab-service';
 
@@ -224,6 +225,30 @@ async function savePurchaseSnapshot(
   });
 }
 
+async function autoShipFromPurchaseIfEnabled(
+  session: PurchaseLookupSession,
+  snapshot: TaobaoPurchaseOrderSnapshot,
+): Promise<void> {
+  const settings = (await getAppSettings()).shipmentCheck;
+  if (!settings.autoShipEnabled) return;
+
+  const logisticsCompany = snapshot.logisticsCompany?.trim() || '';
+  const trackingNumber = snapshot.trackingNumber?.trim() || '';
+  if (!logisticsCompany || !trackingNumber) return;
+
+  try {
+    await shipOrderFromPurchase({
+      accountId: session.accountId,
+      orderId: session.orderId,
+      logisticsCompany,
+      trackingNumber,
+      sourceAction: 'auto',
+    });
+  } catch {
+    // shipOrderFromPurchase records the user-facing failure notification.
+  }
+}
+
 export async function createPurchaseLookupSession(input: CreatePurchaseLookupSessionInput): Promise<PurchaseLookupSession> {
   const platformOrderId = input.platformOrderId.trim();
   if (!platformOrderId) throw new Error('请输入淘宝订单号');
@@ -362,6 +387,7 @@ export async function completePurchaseLookupSession(
     title: '淘宝订单读取完成',
     detail: `订单状态：${snapshot.platformOrderStatus || '-'}，物流状态：${snapshot.logisticsStatus || '-'}`,
   });
+  void autoShipFromPurchaseIfEnabled(next, snapshot);
   emitPurchaseLookupEvent('purchaseLookup:completed', association);
   void startNextQueuedSession().catch(() => {});
   return association;
