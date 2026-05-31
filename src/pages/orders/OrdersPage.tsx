@@ -669,6 +669,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
       accountId: shipSourceOrder.accountId,
       orderId: shipSourceOrder.order_id,
       productId: shipSourceProduct.product_id,
+      paymentWorkflow: 'manualPasswordPayment',
       source: {
         id: source.id,
         url: normalizeUrl(source.url),

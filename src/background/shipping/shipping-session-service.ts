@@ -1,11 +1,18 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { CreateShippingSessionInput, OrderAssociation, ShippingSession, ShippingSessionStatus } from '../../shared/types';
+import type {
+  CreateShippingSessionInput,
+  OrderAssociation,
+  ShippingPaymentWorkflow,
+  ShippingSession,
+  ShippingSessionStatus,
+} from '../../shared/types';
 import { getOrderAssociations, setOrderAssociation } from '../store/order-association-repository';
 import { ensureTaobaoTaskWorkTab, openTaobaoShippingWorkTab } from '../taobao-workspace/work-tab-service';
 import { openPurchaseLookupSessionTab } from '../purchase-lookup/purchase-lookup-session-service';
 import { buildPaidTaobaoLinkedOrder } from './purchase-association';
 
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
+const DEFAULT_PAYMENT_WORKFLOW: ShippingPaymentWorkflow = 'manualPasswordPayment';
 const sessions = new Map<string, ShippingSession>();
 const sessionIdByTabId = new Map<number, string>();
 let activeShippingSessionId: string | undefined;
@@ -76,7 +83,7 @@ function assertActiveSession(session: ShippingSession): void {
   }
 }
 
-function readPaySuccessOrderId(url?: string): string {
+function readManualPasswordPaymentSuccessOrderId(url?: string): string {
   if (!url) return '';
   try {
     const current = new URL(url);
@@ -85,6 +92,15 @@ function readPaySuccessOrderId(url?: string): string {
     return current.searchParams.get('biz_order_id')?.trim() || '';
   } catch {
     return '';
+  }
+}
+
+function readPaymentSuccessOrderId(workflow: ShippingPaymentWorkflow, url?: string): string {
+  switch (workflow) {
+    case 'manualPasswordPayment':
+      return readManualPasswordPaymentSuccessOrderId(url);
+    default:
+      return '';
   }
 }
 
@@ -109,11 +125,11 @@ async function startPaidTaobaoOrderStatusLookup(session: ShippingSession, platfo
 }
 
 async function handleShippingTabUrlChange(tabId: number, url?: string): Promise<void> {
-  const platformOrderId = readPaySuccessOrderId(url);
-  if (!platformOrderId) return;
-
   const session = await getShippingSessionByTab(tabId);
   if (!session) return;
+
+  const platformOrderId = readPaymentSuccessOrderId(session.paymentWorkflow, url);
+  if (!platformOrderId) return;
   if (session.linkedPlatformOrderId === platformOrderId && session.purchaseAssociationStatus === 'associated') return;
 
   const detected: ShippingSession = {
@@ -175,6 +191,7 @@ export async function createShippingSession(input: CreateShippingSessionInput): 
       remark: input.source.remark,
     },
     order: input.order,
+    paymentWorkflow: input.paymentWorkflow || DEFAULT_PAYMENT_WORKFLOW,
     status: 'created',
     purchaseAssociationStatus: 'waiting-payment',
     purchaseAssociationMessage: '等待淘宝付款完成',

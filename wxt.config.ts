@@ -17,11 +17,21 @@ const EXTENSION_PERMISSIONS = [
   'notifications',
 ];
 
+function formatBuildTime(date = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+const BUILD_TIME = formatBuildTime();
+
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   outDir: 'output',
   vite: () => ({
+    define: {
+      __WISHOP_BUILD_TIME__: JSON.stringify(BUILD_TIME),
+    },
     build: {
       sourcemap: false,
       minify: 'esbuild',

@@ -304,6 +304,7 @@ export interface OrderRealAddressCache {
 
 export type ShippingSessionStatus = 'created' | 'opened' | 'page-ready' | 'completed' | 'failed';
 export type ShippingPurchaseAssociationStatus = 'waiting-payment' | 'detected' | 'associated' | 'failed';
+export type ShippingPaymentWorkflow = 'manualPasswordPayment';
 
 export interface ShippingOrderSnapshot {
   orderId: string;
@@ -336,6 +337,7 @@ export interface ShippingSession {
   productId: string;
   source: ShippingSourceSnapshot;
   order: ShippingOrderSnapshot;
+  paymentWorkflow: ShippingPaymentWorkflow;
   status: ShippingSessionStatus;
   createdAt: number;
   updatedAt: number;
@@ -353,6 +355,7 @@ export interface CreateShippingSessionInput {
   productId: string;
   source: ShippingSourceSnapshot;
   order: ShippingOrderSnapshot;
+  paymentWorkflow?: ShippingPaymentWorkflow;
 }
 
 export type LicensedFeature = 'orders' | 'listing' | 'violation' | 'shipping';

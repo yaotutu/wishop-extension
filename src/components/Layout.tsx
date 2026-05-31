@@ -4,6 +4,7 @@ import { Layout as AntLayout, Tabs, Empty, Spin } from 'antd';
 import ActivityLogDrawer from './ActivityLogDrawer';
 import NotificationCenter from './NotificationCenter';
 import { useAccounts } from '../hooks/useAccounts';
+import { BUILD_TIME } from '../shared/build-info';
 import type { Account } from '../shared/types';
 import type { OrderScope } from '../shared/types';
 import { CredentialErrorProvider } from '../contexts/CredentialErrorContext';
@@ -183,7 +184,7 @@ const Layout: React.FC = () => {
             onClick={handleVersionClick}
             style={{ color: '#bbb', fontSize: 12, whiteSpace: 'nowrap', marginLeft: 8, cursor: 'pointer' }}
           >
-            v{version}
+            v{version} · 构建 {BUILD_TIME}
           </span>
         </Header>
         <AntLayout>
