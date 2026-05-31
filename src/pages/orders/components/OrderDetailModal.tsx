@@ -75,7 +75,15 @@ export const OrderDetailModal: React.FC<Props> = ({ open, loading, order, realAd
               <div style={{ fontWeight: 600, marginBottom: 8 }}>商品信息</div>
               {order.order_detail.product_infos.map((p, i) => (
                 <div key={i} style={{ display: 'flex', gap: 8, padding: '8px 0', borderBottom: '1px solid #f0f0f0', alignItems: 'center' }}>
-                  {p.thumb_img && <Image src={p.thumb_img} width={50} height={50} alt={p.title || '商品图片'} style={{ borderRadius: 4, objectFit: 'cover' }} preview={false} />}
+                  {p.thumb_img && (
+                    <Image
+                      src={p.thumb_img}
+                      width={50}
+                      height={50}
+                      alt={p.title || '商品图片'}
+                      style={{ borderRadius: 4, objectFit: 'cover', cursor: 'zoom-in' }}
+                    />
+                  )}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ ...wrappingProductTextStyle, fontWeight: 500 }}>{p.title}</div>
                     <Text type="secondary" style={{ ...wrappingProductTextStyle, fontSize: 12, display: 'block' }}>

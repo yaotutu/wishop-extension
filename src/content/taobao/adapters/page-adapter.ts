@@ -13,7 +13,16 @@ export interface TaobaoPageSnapshot {
 export function detectTaobaoPageType(url = location.href): TaobaoPageSnapshot['pageType'] {
   const current = new URL(url);
   if (current.hostname === 'item.taobao.com' && current.pathname.endsWith('/item.htm')) return 'product-detail';
-  if (current.hostname === 'buy.taobao.com' && current.pathname.endsWith('/auction/buy_now.jhtml')) return 'checkout';
+  if (
+    (current.hostname === 'buy.taobao.com' || current.hostname === 'buy.tmall.com')
+    && (
+      current.pathname.endsWith('/auction/buy_now.jhtml')
+      || current.pathname.endsWith('/auction/order/confirm_order.htm')
+      || current.pathname.endsWith('/order/confirm_order.htm')
+    )
+  ) {
+    return 'checkout';
+  }
   if (current.hostname === 'trade.taobao.com' && current.pathname.includes('/trade/detail/')) return 'order-detail';
   return 'unknown';
 }

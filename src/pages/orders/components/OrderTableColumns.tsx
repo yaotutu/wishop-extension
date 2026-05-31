@@ -76,7 +76,13 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
         return (
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
             {product?.thumb_img && (
-              <Image src={product.thumb_img} width={50} height={50} alt={product.title || '商品图片'} style={{ borderRadius: 4, objectFit: 'cover', flexShrink: 0 }} preview={false} />
+              <Image
+                src={product.thumb_img}
+                width={50}
+                height={50}
+                alt={product.title || '商品图片'}
+                style={{ borderRadius: 4, objectFit: 'cover', flexShrink: 0, cursor: 'zoom-in' }}
+              />
             )}
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
