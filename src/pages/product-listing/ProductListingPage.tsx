@@ -41,6 +41,12 @@ const imageGridStyle: React.CSSProperties = {
   gap: 8,
 };
 
+const detailImageGridStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+  gap: 8,
+};
+
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleString('zh-CN');
 }
@@ -147,6 +153,17 @@ const ProductListingPage: React.FC = () => {
       key: 'priceRangeText',
       width: 110,
       render: (value: string) => value || '-',
+    },
+    {
+      title: '图片',
+      key: 'images',
+      width: 120,
+      render: (_: unknown, record) => (
+        <div>
+          <div>主图 {record.mainImages.length}</div>
+          <div style={{ color: '#6b7280', fontSize: 12 }}>详情 {record.detailImages.length}</div>
+        </div>
+      ),
     },
     {
       title: 'SKU',
@@ -292,6 +309,34 @@ const ProductListingPage: React.FC = () => {
                   ))}
                 </div>
               </Image.PreviewGroup>
+            </div>
+            <div>
+              <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>
+                图文详情
+                <span style={{ marginLeft: 8, color: '#6b7280', fontSize: 12, fontWeight: 400 }}>
+                  {previewListing.detailImages.length} 张
+                </span>
+              </h3>
+              {previewListing.detailImages.length > 0 ? (
+                <Image.PreviewGroup>
+                  <div style={detailImageGridStyle}>
+                    {previewListing.detailImages.map((url, index) => (
+                      <Image
+                        key={`${url}:${index}`}
+                        src={url}
+                        width="100%"
+                        height={128}
+                        alt="商品详情图"
+                        styles={{ root: { objectFit: 'cover', background: '#f6f8fa' } }}
+                      />
+                    ))}
+                  </div>
+                </Image.PreviewGroup>
+              ) : (
+                <div style={{ color: '#9ca3af', fontSize: 13, padding: '12px 0' }}>
+                  暂无详情图
+                </div>
+              )}
             </div>
             <div>
               <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>商品参数</h3>

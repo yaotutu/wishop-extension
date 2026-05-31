@@ -27,6 +27,15 @@ test('product listing has an independent dashboard module boundary', () => {
   assert.match(layout, /activeModule === 'commonFunctions' && <ListingPage/);
 });
 
+test('product listing preview renders collected detail images', () => {
+  const page = source('src/pages/product-listing/ProductListingPage.tsx');
+
+  assert.match(page, /title: '图片'/);
+  assert.match(page, /record\.detailImages\.length/);
+  assert.match(page, /图文详情/);
+  assert.match(page, /previewListing\.detailImages\.map/);
+});
+
 test('product detail collection adapter is decomposed behind a small public API', () => {
   const adapter = source('src/content/taobao/adapters/product-detail-collection-adapter.ts');
 
