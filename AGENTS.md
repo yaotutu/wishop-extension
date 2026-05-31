@@ -6,10 +6,10 @@
 
 - `entrypoints/background.ts` 注册插件后台入口。
 - `entrypoints/dashboard/` 包含后台管理页面的 HTML 和 React 启动代码。
-- `entrypoints/taobao-shipping.content.tsx` 注册淘宝/天猫页面的发货助手 content script。
+- `entrypoints/taobao.content.tsx` 注册淘宝/天猫页面的通用 content script，承载发货助手、采购单读取、退款和商品采集等淘宝工作流。
 - `src/App.tsx`、`src/main.tsx` 和 `src/index.css` 提供应用外壳和全局样式。
 - `src/components/` 放置通用 UI，例如布局、统计卡片和账号弹窗。
-- `src/pages/` 按业务域组织功能页面，包括 `orders`、`settings`、`store-management`、`violation` 和 `common-functions`。
+- `src/pages/` 按业务域组织功能页面，包括 `orders`、`settings`、`store-management`、`product-listing`、`violation` 和 `common-functions`。
 - `src/pages/orders/` 按职责拆分：`OrdersPage.tsx` 负责页面状态和动作，`components/` 负责表格列、工具栏、详情弹窗和货源弹窗，`order-display.ts` 负责订单展示辅助逻辑。
 - `src/background/` 包含后台运行时接线、功能处理器、定时任务、任务模块、服务、仓储和微信小店客户端代码。
 - `src/background/handlers.ts` 应保持为很薄的 runtime 消息传输层。新增 IPC 行为应通过 `src/background/router/`、`src/background/runtime-handlers/` 和 `src/background/services/` 实现。

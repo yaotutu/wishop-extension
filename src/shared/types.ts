@@ -254,6 +254,40 @@ export interface TaobaoPurchaseOrderSnapshot {
   remark?: string;
 }
 
+export interface TaobaoProductSkuSpec {
+  name: string;
+  value: string;
+}
+
+export interface TaobaoProductSkuGroup {
+  name: string;
+  values: string[];
+}
+
+export interface TaobaoProductSkuMatrixItem {
+  id: string;
+  specs: TaobaoProductSkuSpec[];
+  priceText: string;
+  stockText: string;
+  imageUrl: string;
+}
+
+export interface TaobaoProductSnapshot {
+  url: string;
+  platform: 'taobao' | 'tmall';
+  itemId: string;
+  title: string;
+  shopName: string;
+  priceRangeText: string;
+  mainImages: string[];
+  detailImages: string[];
+  skuGroups: TaobaoProductSkuGroup[];
+  skuMatrix: TaobaoProductSkuMatrixItem[];
+  salesText: string;
+  deliveryText: string;
+  collectedAt: number;
+}
+
 export interface PurchaseLookupSession {
   id: string;
   accountId: string;
