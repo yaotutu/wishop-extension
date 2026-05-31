@@ -1,6 +1,6 @@
 import type { DraftProduct } from '../../shared/types';
 import { createScopedListingLog } from '../store/log-repository';
-import { getClient } from '../wxshop/client-registry';
+import { getListingClient } from '../wxshop/client-registry';
 import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 
 interface PaginationState {
@@ -23,7 +23,7 @@ export async function fetchDrafts(accountId: string, reset?: boolean): Promise<{
   }
   if (!pagination.hasMore) return { products: [], hasMore: false };
 
-  const api = await getClient(accountId);
+  const api = await getListingClient(accountId);
   const products: DraftProduct[] = [];
   let nextKey = pagination.nextKey;
 
@@ -53,7 +53,7 @@ export async function listDraft(accountId: string, productId: string): Promise<{
   const logger = createDiagnosticLogger({ domain: 'listing', component: 'Drafts', accountId });
   const addLog = createScopedListingLog(accountId);
   try {
-    const result = await (await getClient(accountId)).listProduct(productId);
+    const result = await (await getListingClient(accountId)).listProduct(productId);
     if (result.errcode === 0) {
       addLog({ runId: '', productId, productTitle: '', action: 'list', status: 'success' });
       return { success: true };

@@ -6,7 +6,7 @@ import { createScopedListingLog } from '../store/log-repository';
 import { getBlacklistRules, getSkipKeywords, getStatusRules } from '../store/rule-repository';
 import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 import type { SessionManager } from '../utils/session-manager';
-import { getClient } from '../wxshop/client-registry';
+import { getListingClient } from '../wxshop/client-registry';
 
 export async function runTask(accountId: string, taskConfig: TaskConfig, taskSessions: SessionManager<void>): Promise<TaskCycleResult> {
   const logger = createDiagnosticLogger({ domain: 'listing', component: 'TaskRun', accountId });
@@ -27,7 +27,7 @@ export async function runTask(accountId: string, taskConfig: TaskConfig, taskSes
 
   if (taskConfig.listUnreviewed) {
     try {
-      const quota = await (await getClient(accountId)).getAuditQuota();
+      const quota = await (await getListingClient(accountId)).getAuditQuota();
       logger.info(`配额检查: 剩余 ${quota.quota} / 总共 ${quota.total}`);
       addLog({ runId, productId: '', productTitle: `今日提审配额: 剩余${quota.quota}/${quota.total}`, action: 'check', status: quota.quota > 0 ? 'success' : 'failed' });
       taskConfig = { ...taskConfig, listUnreviewedQuantity: quota.quota };
@@ -55,7 +55,7 @@ export async function runTask(accountId: string, taskConfig: TaskConfig, taskSes
   const signal = taskSessions.start(accountId, undefined);
   try {
     const result = await runTaskCycle(
-      await getClient(accountId),
+      await getListingClient(accountId),
       addLog,
       taskConfig,
       runId,

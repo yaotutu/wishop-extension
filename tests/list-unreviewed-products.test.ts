@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { listOne } from '../src/background/modules/list-unreviewed-products.ts';
 import { DEFAULT_BLACKLIST } from '../src/background/store/core.ts';
-import type { DraftProduct, WxShopClient } from '../src/background/wxshop/client.ts';
+import type { DraftProduct, WxShopListingClient } from '../src/background/wxshop/listing/types.ts';
 import type { AddLogFn } from '../src/shared/types.ts';
 
 function makeProduct(): DraftProduct {
@@ -32,7 +32,7 @@ test('store-level freight insurance failure does not delete the draft product', 
       deleteCalled = true;
       return { errcode: 0, errmsg: 'ok' };
     },
-  } as Partial<WxShopClient> as WxShopClient;
+  } as Partial<WxShopListingClient> as WxShopListingClient;
 
   const result = await listOne(
     api,

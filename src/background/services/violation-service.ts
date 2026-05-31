@@ -5,7 +5,7 @@ import { createScopedViolationLog } from '../store/log-repository';
 import { getViolationWords } from '../store/rule-repository';
 import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 import type { SessionManager } from '../utils/session-manager';
-import { getClient } from '../wxshop/client-registry';
+import { getListingClient } from '../wxshop/client-registry';
 
 export interface ScanSessionState {
   generator: AsyncGenerator<ViolationMatch & { scanned: number }> | null;
@@ -21,7 +21,7 @@ export async function runViolationBatchScan(
   const logger = createDiagnosticLogger({ domain: 'violation', component: 'Violation', accountId });
   const words = await getViolationWords(accountId);
   const account = await getAccount(accountId);
-  const api = await getClient(accountId);
+  const api = await getListingClient(accountId);
   logger.info(`批量扫描开始 店铺=${account?.name || '未知'} 账号=${accountId} 词库=${words.length}个 上限=${limit || '全部'}`);
   if (words.length === 0) return { scanned: 0, violations: [], errors: 0, stopped: false, reason: '词库为空' };
 
@@ -43,7 +43,7 @@ export async function runViolationStep(
   if (!session || session.state.done) {
     const words = await getViolationWords(accountId);
     if (words.length === 0) return { type: 'done', reason: '词库为空' };
-    const api = await getClient(accountId);
+    const api = await getListingClient(accountId);
     const account = await getAccount(accountId);
     logger.info(`逐个扫描开始 店铺=${account?.name || '未知'} 账号=${accountId} 词库=${words.length}个`);
     const signal = scanSessions.start(accountId, { generator: null, current: null, done: false });
@@ -52,7 +52,7 @@ export async function runViolationStep(
   }
 
   if (action === 'delete' && session.state.current) {
-    const result = await batchDeleteViolations(await getClient(accountId), createScopedViolationLog(accountId), [session.state.current], Date.now().toString(), accountId);
+    const result = await batchDeleteViolations(await getListingClient(accountId), createScopedViolationLog(accountId), [session.state.current], Date.now().toString(), accountId);
     if (result.stopped) {
       session.state.done = true;
       scanSessions.stop(accountId);

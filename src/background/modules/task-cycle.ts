@@ -1,4 +1,4 @@
-import { WxShopClient } from '../wxshop/client';
+import type { WxShopListingClient } from '../wxshop/listing/types';
 import type { DraftProduct, AddLogFn, TaskConfig, TaskCycleResult, BlacklistRule, StatusRule } from '../../shared/types';
 import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 
@@ -8,7 +8,7 @@ import { deleteOne } from './delete-failed-products';
 import { listOne } from './list-unreviewed-products';
 
 export async function runTaskCycle(
-  api: WxShopClient,
+  api: WxShopListingClient,
   addLog: AddLogFn,
   taskConfig: TaskConfig,
   runId: string,

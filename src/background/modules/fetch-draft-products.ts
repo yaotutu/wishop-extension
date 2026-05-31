@@ -1,7 +1,7 @@
-import { WxShopClient, DraftProduct } from '../wxshop/client';
+import type { DraftProduct, WxShopListingClient } from '../wxshop/listing/types';
 import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 
-export async function* streamDraftProducts(api: WxShopClient, signal?: AbortSignal, accountId: string = ''): AsyncGenerator<DraftProduct> {
+export async function* streamDraftProducts(api: WxShopListingClient, signal?: AbortSignal, accountId: string = ''): AsyncGenerator<DraftProduct> {
   const logger = createDiagnosticLogger({ domain: 'listing', component: 'StreamDrafts', accountId });
   let nextKey = '';
   let hasMore = true;

@@ -1,4 +1,4 @@
-import { WxShopClient, DraftProduct } from '../wxshop/client';
+import type { DraftProduct, WxShopListingClient } from '../wxshop/listing/types';
 import type { AddLogFn } from '../../shared/types';
 import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 
@@ -6,7 +6,7 @@ const DELETE_INTERVAL_MS = 1000;
 const lastDeleteTimeMap = new Map<string, number>();
 
 export async function deleteOne(
-  api: WxShopClient,
+  api: WxShopListingClient,
   addLog: AddLogFn,
   product: DraftProduct,
   runId: string,
@@ -49,7 +49,7 @@ export async function deleteOne(
 }
 
 export async function batchDelete(
-  api: WxShopClient,
+  api: WxShopListingClient,
   addLog: AddLogFn,
   products: Array<{ productId: string; title: string }>,
   runId: string,

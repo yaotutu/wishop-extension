@@ -1,4 +1,4 @@
-import { WxShopClient } from '../wxshop/client';
+import type { WxShopListingClient } from '../wxshop/listing/types';
 import type { AddLogFn, ViolationMatch, ViolationScanResult } from '../../shared/types';
 import { streamDraftProducts } from './fetch-draft-products';
 import { batchDelete } from './delete-failed-products';
@@ -10,7 +10,7 @@ export function findMatches(title: string, words: string[]): string[] {
 }
 
 export async function* scanOneByOne(
-  api: WxShopClient,
+  api: WxShopListingClient,
   addLog: AddLogFn,
   words: string[],
   runId: string,
@@ -52,7 +52,7 @@ export async function* scanOneByOne(
 }
 
 export async function batchScan(
-  api: WxShopClient,
+  api: WxShopListingClient,
   addLog: AddLogFn,
   words: string[],
   runId: string,

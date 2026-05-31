@@ -2,7 +2,7 @@ import type { TaskConfig } from '../../shared/types';
 import { runTaskCycle } from '../modules/task-cycle';
 import { createScopedListingLog } from '../store/log-repository';
 import { getBlacklistRules, getSkipKeywords, getStatusRules } from '../store/rule-repository';
-import { getClient } from '../wxshop/client-registry';
+import { getListingClient } from '../wxshop/client-registry';
 import { registerScheduledJobExecutor } from './scheduler-center';
 
 export function registerListingScheduledJobs(): void {
@@ -10,7 +10,7 @@ export function registerListingScheduledJobs(): void {
     const targetAccountId = accountId || (job.scope === 'account' ? job.accountId : undefined);
     if (!targetAccountId) throw new Error('缺少账号 ID');
 
-    const api = await getClient(targetAccountId);
+    const api = await getListingClient(targetAccountId);
     const quota = await api.getAuditQuota();
     if (quota.quota <= 0) {
       return {

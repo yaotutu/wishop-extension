@@ -1,5 +1,5 @@
 import type { Order, OrderListParams, OrderSearchParams, OrderStatus, OrderTimeScope } from '../../shared/types';
-import { getClient } from '../wxshop/client-registry';
+import { getOrdersClient } from '../wxshop/client-registry';
 import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 
 interface OrderPaginationState {
@@ -81,7 +81,7 @@ export async function listOrders(
   }
   if (!pag.hasMore) return { orders: [], hasMore: false };
 
-  const api = await getClient(accountId);
+  const api = await getOrdersClient(accountId);
   let scannedEmptyWindows = 0;
 
   while (pag.hasMore) {
@@ -120,7 +120,7 @@ export async function listOrders(
 
 export async function searchOrders(accountId: string, params: OrderSearchParams): Promise<{ orders: Order[]; hasMore: boolean }> {
   const logger = createDiagnosticLogger({ domain: 'orders', component: 'Orders', accountId });
-  const api = await getClient(accountId);
+  const api = await getOrdersClient(accountId);
   const listResult = await api.searchOrders(params);
   const orders = await fetchOrderDetails(listResult.order_id_list, api.getOrderDetail, logger);
   return { orders, hasMore: listResult.has_more };

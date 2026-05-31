@@ -6,7 +6,7 @@ import { getActivePurchaseLookupKeys, openPurchaseLookupSessionTab } from '../pu
 import { getOrderAssociations, updateLinkedOrderShipmentCheck } from '../store/order-association-repository';
 import { addScheduledJob, getScheduledJob, getScheduledJobs, updateScheduledJob } from '../store/scheduled-job-repository';
 import { getAppSettings } from '../store/settings-repository';
-import { getClient } from '../wxshop/client-registry';
+import { getOrdersClient } from '../wxshop/client-registry';
 import { registerScheduledJobExecutor } from './scheduler-center';
 import {
   buildShipmentCheckDispatchPlan,
@@ -45,7 +45,7 @@ function parseDispatchAlarmName(name: string): ShipmentCheckCandidate | null {
 
 async function fetchPendingShipmentOrders(accountId: string): Promise<Order[]> {
   const settings = (await getAppSettings()).shipmentCheck;
-  const api = await getClient(accountId);
+  const api = await getOrdersClient(accountId);
   const nowSeconds = Math.floor(Date.now() / 1000);
   const lookbackDays = Math.min(settings.orderLookbackDays, MAX_SHIPMENT_CHECK_ORDER_LOOKBACK_DAYS);
   const createTimeRange = {

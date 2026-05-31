@@ -1,4 +1,4 @@
-import { WxShopClient, DraftProduct } from '../wxshop/client';
+import type { DraftProduct, WxShopListingClient } from '../wxshop/listing/types';
 import type { AddLogFn } from '../../shared/types';
 import type { BlacklistRule } from '../../shared/types';
 import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
@@ -38,7 +38,7 @@ function matchSkipKeyword(errmsg: string | undefined, skipKeywords: string[]): s
 }
 
 export async function listOne(
-  api: WxShopClient,
+  api: WxShopListingClient,
   addLog: AddLogFn,
   product: DraftProduct,
   runId: string,

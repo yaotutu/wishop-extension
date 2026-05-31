@@ -1,7 +1,7 @@
 import type { ViolationMatch } from '../../shared/types';
 import { createScopedViolationLog } from '../store/log-repository';
 import { getViolationWords, setViolationWords } from '../store/rule-repository';
-import { getClient } from '../wxshop/client-registry';
+import { getListingClient } from '../wxshop/client-registry';
 import { batchDeleteViolations } from '../modules/violation-detect';
 import type { RuntimeHandlerMap } from '../router/runtime-router';
 
@@ -27,7 +27,7 @@ export function createViolationRuntimeHandlers(deps: ViolationHandlerDeps): Runt
     },
     async 'violation:batchDelete'(args) {
       return batchDeleteViolations(
-        await getClient(args[0] as string),
+        await getListingClient(args[0] as string),
         createScopedViolationLog(args[0] as string),
         args[1] as ViolationMatch[],
         Date.now().toString(),
