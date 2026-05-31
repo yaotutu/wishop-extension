@@ -35,6 +35,8 @@
 
 Runtime IPC 必须保持类型化。每个新增 channel 都必须添加到 `RuntimeChannels`，并显式声明 `args` 和 `result` 类型。前端代码应通过 `extensionApi` 调用 IPC，不要直接调用原始 `chrome.runtime.sendMessage`，已经由共享辅助方法封装的底层事件监听除外。
 
+前端必须保持为意图表达层和结果渲染层。涉及业务数据的筛选、排序、聚合、派生状态、分页、权限判断、持久化写入和跨模块一致性规则时，应先抽象为共享类型和查询/命令参数，再由 background 的 router、runtime handler、service、domain 或 store 层统一执行。前端组件可以维护控件输入、弹窗开关、当前选中项等轻量 UI 状态，但不得在组件里对业务数据做权威重排、二次过滤、静默改写或维护另一套业务事实来源。页面拿到什么结构化数据就渲染什么；需要改变数据呈现时，应改变查询模型或后端领域模型，而不是在 UI 中临时补逻辑。
+
 ## 微信小店 API 与 Token 架构指南
 
 微信小店后台接口必须通过统一 token 服务调用，不保留 client 内部 token 兼容入口。
@@ -83,6 +85,8 @@ Zustand 只用于轻量 UI 状态和用户偏好，例如悬浮工具栏位置�
 ## 淘宝页面读取架构指南
 
 后续会有大量能力依赖淘宝/天猫页面元素读取。此类能力必须作为 content 子系统维护，不要把 DOM 解析、业务流程和浮层 UI 混在一起。
+
+淘宝商品采集的专门设计说明见 `docs/taobao-product-collection-agent-guide.md`。修改上货模块、商品详情采集、淘宝页面模型读取或详情图采集前，AI agent 必须先阅读该文档，并按文档要求用真实登录页面验证结构变化。
 
 `src/content/taobao/` 按以下职责组织：
 
