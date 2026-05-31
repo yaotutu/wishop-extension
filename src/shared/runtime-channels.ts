@@ -1,4 +1,4 @@
-import type { GlobalLogEntry } from './global-log';
+import type { ActivityLogEntry } from './activity-log';
 import type { NotificationEntry, NotificationPreference } from './notification';
 import type { AppSettings, AppSettingsPatch } from './settings';
 import type {
@@ -14,10 +14,14 @@ import type {
   Order,
   OrderAddressInfo,
   OrderAssociation,
+  OrderListFilters,
+  LocalOrderListResult,
+  OrderRefreshResult,
   OrderRealAddressCache,
   OrderSearchParams,
-  OrderStatus,
-  OrderTimeScope,
+  OrderScope,
+  OrderSearchSource,
+  OrderSyncState,
   ShipOrderFromPurchaseInput,
   ShipOrderFromPurchaseResult,
   CreatePurchaseLookupSessionInput,
@@ -27,6 +31,9 @@ import type {
   PurchaseLookupSession,
   QuotaResult,
   ScheduledJob,
+  ScheduledJobInput,
+  ScheduledJobView,
+  ScheduledJobRunNowResult,
   ShippingSession,
   TaobaoRefundPrepareSnapshot,
   TaobaoRefundSession,
@@ -54,11 +61,16 @@ export interface RuntimeChannels {
   'drafts:list': { args: [accountId: string, productId: string]; result: { success: boolean; error?: string } };
 
   'orders:list': {
-    args: [accountId: string, status?: OrderStatus, pageSize?: number, reset?: boolean, timeScope?: OrderTimeScope];
-    result: { orders: Order[]; hasMore: boolean };
+    args: [scope: OrderScope, filters?: OrderListFilters];
+    result: LocalOrderListResult;
   };
-  'orders:detail': { args: [accountId: string, orderId: string]; result: Order };
-  'orders:search': { args: [accountId: string, params: OrderSearchParams]; result: { orders: Order[]; hasMore: boolean } };
+  'orders:detail': { args: [accountId: string, orderId: string, options?: { refresh?: boolean }]; result: Order };
+  'orders:search': {
+    args: [scope: OrderScope, params: OrderSearchParams, source: OrderSearchSource];
+    result: LocalOrderListResult;
+  };
+  'orders:refresh': { args: [scope: OrderScope]; result: OrderRefreshResult };
+  'orders:syncState': { args: [scope: OrderScope]; result: OrderSyncState };
   'orders:decodeAddress': { args: [accountId: string, orderId: string]; result: OrderAddressInfo };
   'orders:listDeliveryCompanies': { args: [accountId: string]; result: DeliveryCompanyOption[] };
   'orders:shipFromPurchase': { args: [input: ShipOrderFromPurchaseInput]; result: ShipOrderFromPurchaseResult };
@@ -106,8 +118,8 @@ export interface RuntimeChannels {
 
   'listingLogs:get': { args: [accountId: string]; result: LogEntry[] };
   'listingLogs:clear': { args: [accountId: string]; result: void };
-  'globalLogs:list': { args: []; result: GlobalLogEntry[] };
-  'globalLogs:clear': { args: []; result: void };
+  'activityLogs:list': { args: []; result: ActivityLogEntry[] };
+  'activityLogs:clear': { args: []; result: void };
   'notifications:list': { args: []; result: NotificationEntry[] };
   'notifications:markRead': { args: [notificationId: string]; result: NotificationEntry[] };
   'notifications:markAllRead': { args: []; result: NotificationEntry[] };
@@ -117,10 +129,11 @@ export interface RuntimeChannels {
   'settings:get': { args: []; result: AppSettings };
   'settings:update': { args: [patch: AppSettingsPatch]; result: AppSettings };
 
-  'scheduledJobs:list': { args: []; result: ScheduledJob[] };
-  'scheduledJobs:add': { args: [job: Omit<ScheduledJob, 'id' | 'stats' | 'createdAt' | 'updatedAt'>]; result: ScheduledJob };
+  'scheduledJobs:list': { args: []; result: ScheduledJobView[] };
+  'scheduledJobs:add': { args: [job: ScheduledJobInput]; result: ScheduledJob };
   'scheduledJobs:update': { args: [jobId: string, patch: Partial<ScheduledJob>]; result: void };
   'scheduledJobs:remove': { args: [jobId: string]; result: void };
+  'scheduledJobs:runNow': { args: [jobId: string]; result: ScheduledJobRunNowResult };
 
   'taskConfig:get': { args: [accountId: string]; result: TaskConfig };
   'taskConfig:set': { args: [accountId: string, config: TaskConfig]; result: void };

@@ -1,6 +1,6 @@
 import { WxShopClient, DraftProduct } from '../wxshop/client';
 import type { AddLogFn } from '../../shared/types';
-import { createLogger } from '../utils/logger';
+import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 
 const DELETE_INTERVAL_MS = 1000;
 const lastDeleteTimeMap = new Map<string, number>();
@@ -12,7 +12,7 @@ export async function deleteOne(
   runId: string,
   accountId: string = '',
 ): Promise<'success' | 'failed' | 'stopped'> {
-  const logger = createLogger('DeleteFailed', accountId);
+  const logger = createDiagnosticLogger({ domain: 'listing', component: 'DeleteFailed', accountId });
   try {
     const cacheKey = accountId;
     const lastDeleteTime = lastDeleteTimeMap.get(cacheKey) || 0;

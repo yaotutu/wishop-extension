@@ -1,6 +1,6 @@
 import { WxShopClient } from '../wxshop/client';
 import type { DraftProduct, AddLogFn, TaskConfig, TaskCycleResult, BlacklistRule, StatusRule } from '../../shared/types';
-import { createLogger } from '../utils/logger';
+import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 
 export type { TaskConfig, TaskCycleResult };
 import { streamDraftProducts } from './fetch-draft-products';
@@ -18,7 +18,7 @@ export async function runTaskCycle(
   skipKeywords: string[] = [],
   statusRules: StatusRule[] = [],
 ): Promise<TaskCycleResult> {
-  const logger = createLogger('TaskCycle', accountId);
+  const logger = createDiagnosticLogger({ domain: 'listing', component: 'TaskCycle', accountId });
   logger.info(`开始 (runId=${runId}): 提交未审核=${taskConfig.listUnreviewed}(${taskConfig.listUnreviewedQuantity})`);
 
   const result: TaskCycleResult = { scanned: 0, deleted: 0, listed: 0, errors: 0, skipped: 0, stopped: false };

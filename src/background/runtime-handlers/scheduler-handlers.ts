@@ -1,4 +1,4 @@
-import type { ScheduledJob } from '../../shared/types';
+import type { ScheduledJob, ScheduledJobInput, ScheduledJobView } from '../../shared/types';
 import {
   addScheduledJob,
   getScheduledJobs,
@@ -6,7 +6,9 @@ import {
   updateScheduledJob,
 } from '../store/scheduled-job-repository';
 import {
+  getScheduledJobNextRunAt,
   isSupportedJobCron,
+  runScheduledJobNow,
   startScheduledJob,
   stopScheduledJob,
 } from '../scheduler/scheduler-center';
@@ -23,10 +25,14 @@ function pruneUndefined<T extends Record<string, unknown>>(patch: T): Partial<T>
 export function createSchedulerRuntimeHandlers(): RuntimeHandlerMap {
   return {
     async 'scheduledJobs:list'() {
-      return getScheduledJobs();
+      const jobs = await getScheduledJobs();
+      return Promise.all(jobs.map(async job => ({
+        ...job,
+        nextRunAt: await getScheduledJobNextRunAt(job),
+      } satisfies ScheduledJobView)));
     },
     async 'scheduledJobs:add'(args) {
-      const input = args[0] as Omit<ScheduledJob, 'id' | 'stats' | 'createdAt' | 'updatedAt'>;
+      const input = args[0] as ScheduledJobInput;
       if (!isSupportedJobCron(input.cronExpression)) throw unsupportedCronError(input.cronExpression);
       const job = await addScheduledJob(input);
       if (job.enabled) {
@@ -46,7 +52,7 @@ export function createSchedulerRuntimeHandlers(): RuntimeHandlerMap {
 
       const nextPatch = pruneUndefined(patch as Record<string, unknown>) as Partial<ScheduledJob>;
       await updateScheduledJob(jobId, nextPatch);
-      const updated = { ...existing, ...nextPatch };
+      const updated = { ...existing, ...nextPatch } as ScheduledJob;
 
       if (patch.enabled === false) await stopScheduledJob(jobId);
       else if (updated.enabled) await startScheduledJob(updated);
@@ -57,6 +63,9 @@ export function createSchedulerRuntimeHandlers(): RuntimeHandlerMap {
       const jobId = args[0] as string;
       await stopScheduledJob(jobId);
       return removeScheduledJob(jobId);
+    },
+    async 'scheduledJobs:runNow'(args) {
+      return runScheduledJobNow(args[0] as string);
     },
   };
 }

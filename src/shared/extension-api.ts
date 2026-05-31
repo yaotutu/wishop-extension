@@ -11,10 +11,14 @@ import type {
   Order,
   OrderAddressInfo,
   OrderAssociation,
+  OrderListFilters,
+  LocalOrderListResult,
+  OrderRefreshResult,
   OrderRealAddressCache,
   OrderSearchParams,
-  OrderStatus,
-  OrderTimeScope,
+  OrderScope,
+  OrderSearchSource,
+  OrderSyncState,
   ShipOrderFromPurchaseInput,
   ShipOrderFromPurchaseResult,
   CreatePurchaseLookupSessionInput,
@@ -24,6 +28,9 @@ import type {
   PurchaseLookupSession,
   QuotaResult,
   ScheduledJob,
+  ScheduledJobInput,
+  ScheduledJobView,
+  ScheduledJobRunNowResult,
   ShippingSession,
   StatusRule,
   TaobaoWorkspaceRole,
@@ -36,7 +43,7 @@ import type {
   ViolationMatch,
   ViolationScanResult,
 } from './types';
-import type { GlobalLogEntry } from './global-log';
+import type { ActivityLogEntry } from './activity-log';
 import type { NotificationEntry, NotificationPreference } from './notification';
 import type { AppSettings, AppSettingsPatch } from './settings';
 import type { RuntimeArgs, RuntimeChannel, RuntimeResult } from './runtime-channels';
@@ -103,14 +110,17 @@ export const extensionApi = {
   },
   orders: {
     list: (
-      accountId: string,
-      status?: OrderStatus,
-      pageSize?: number,
-      reset?: boolean,
-      timeScope?: OrderTimeScope,
-    ): Promise<{ orders: Order[]; hasMore: boolean }> => invoke('orders:list', accountId, status, pageSize, reset, timeScope),
-    detail: (accountId: string, orderId: string): Promise<Order> => invoke('orders:detail', accountId, orderId),
-    search: (accountId: string, params: OrderSearchParams): Promise<{ orders: Order[]; hasMore: boolean }> => invoke('orders:search', accountId, params),
+      scope: OrderScope,
+      filters?: OrderListFilters,
+    ): Promise<LocalOrderListResult> => invoke('orders:list', scope, filters),
+    detail: (accountId: string, orderId: string, options?: { refresh?: boolean }): Promise<Order> => invoke('orders:detail', accountId, orderId, options),
+    search: (
+      scope: OrderScope,
+      params: OrderSearchParams,
+      source: OrderSearchSource,
+    ): Promise<LocalOrderListResult> => invoke('orders:search', scope, params, source),
+    refresh: (scope: OrderScope): Promise<OrderRefreshResult> => invoke('orders:refresh', scope),
+    syncState: (scope: OrderScope): Promise<OrderSyncState> => invoke('orders:syncState', scope),
     decodeAddress: (accountId: string, orderId: string): Promise<OrderAddressInfo> => invoke('orders:decodeAddress', accountId, orderId),
     listDeliveryCompanies: (accountId: string): Promise<DeliveryCompanyOption[]> => invoke('orders:listDeliveryCompanies', accountId),
     shipFromPurchase: (input: ShipOrderFromPurchaseInput): Promise<ShipOrderFromPurchaseResult> =>
@@ -193,10 +203,10 @@ export const extensionApi = {
     clear: (accountId: string): Promise<void> => invoke('listingLogs:clear', accountId),
     onAdded: (accountId: string, callback: (log: LogEntry) => void) => onRuntimeEvent(`listingLog:added:${accountId}`, callback),
   },
-  globalLogs: {
-    list: (): Promise<GlobalLogEntry[]> => invoke('globalLogs:list'),
-    clear: (): Promise<void> => invoke('globalLogs:clear'),
-    onAdded: (callback: (log: GlobalLogEntry) => void) => onRuntimeEvent('globalLog:added', callback),
+  activityLogs: {
+    list: (): Promise<ActivityLogEntry[]> => invoke('activityLogs:list'),
+    clear: (): Promise<void> => invoke('activityLogs:clear'),
+    onAdded: (callback: (log: ActivityLogEntry) => void) => onRuntimeEvent('activityLog:added', callback),
   },
   notifications: {
     list: (): Promise<NotificationEntry[]> => invoke('notifications:list'),
@@ -216,11 +226,12 @@ export const extensionApi = {
     update: (patch: AppSettingsPatch): Promise<AppSettings> => invoke('settings:update', patch),
   },
   scheduledJobs: {
-    list: (): Promise<ScheduledJob[]> => invoke('scheduledJobs:list'),
-    add: (job: Omit<ScheduledJob, 'id' | 'stats' | 'createdAt' | 'updatedAt'>): Promise<ScheduledJob> =>
+    list: (): Promise<ScheduledJobView[]> => invoke('scheduledJobs:list'),
+    add: (job: ScheduledJobInput): Promise<ScheduledJob> =>
       invoke('scheduledJobs:add', job),
     update: (jobId: string, patch: Partial<ScheduledJob>): Promise<void> => invoke('scheduledJobs:update', jobId, patch),
     remove: (jobId: string): Promise<void> => invoke('scheduledJobs:remove', jobId),
+    runNow: (jobId: string): Promise<ScheduledJobRunNowResult> => invoke('scheduledJobs:runNow', jobId),
   },
   taskConfig: {
     get: (accountId: string): Promise<TaskConfig> => invoke('taskConfig:get', accountId),

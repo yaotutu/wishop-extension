@@ -1,17 +1,20 @@
-import React from 'react';
-import { Alert, Button, Flex, Input, Select, Space, Tag, Typography } from 'antd';
+import React, { useEffect, useState } from 'react';
+import { Alert, Button, Flex, Input, Select, Space, Switch, Tag, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
-import type { OrderSearchParams, OrderStatus, OrderTimeScope } from '../../../shared/types';
+import type { OrderSearchParams, OrderSearchSource, OrderStatus, OrderSyncState, OrderTimeScope, ScheduledJobView } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
+import { orderSyncCountdownText } from '../order-sync-countdown';
 
 const { Text } = Typography;
+export type OrderStatusFilterValue = OrderStatus | 'aftersales' | undefined;
 
 export const STATUS_FILTER_OPTIONS = [
   { label: '全部', value: 'all' },
   { label: '待付款', value: OrderStatusEnum.PendingPayment },
   { label: '待发货', value: OrderStatusEnum.PendingShipment },
-  { label: '已发货', value: OrderStatusEnum.PendingReceipt },
+  { label: '待收货', value: OrderStatusEnum.PendingReceipt },
   { label: '已完成', value: OrderStatusEnum.Completed },
+  { label: '退货售后', value: 'aftersales' },
 ];
 
 export const SEARCH_TYPE_OPTIONS = [
@@ -30,19 +33,28 @@ export const TIME_SCOPE_OPTIONS: { value: OrderTimeScope; label: string }[] = [
 ];
 
 interface Props {
-  activeStatus: OrderStatus | undefined;
+  activeStatus: OrderStatusFilterValue;
   timeScope: OrderTimeScope;
   searchActive: boolean;
   searchType: OrderSearchParams['search_type'];
+  searchSource: OrderSearchSource;
   searchKeyword: string;
   loading: boolean;
+  refreshing: boolean;
   error: string | null;
+  syncState?: OrderSyncState;
+  autoSyncJob?: ScheduledJobView;
+  autoShipEnabled?: boolean;
+  autoShipVisible?: boolean;
+  autoShipUpdating?: boolean;
   onStatusChange: (value: string | number | null) => void;
   onTimeScopeChange: (value: OrderTimeScope) => void;
   onSearchTypeChange: (value: OrderSearchParams['search_type']) => void;
+  onSearchSourceChange: (value: OrderSearchSource) => void;
   onSearchKeywordChange: (value: string) => void;
   onSearch: (value: string) => void;
   onRefresh: () => void;
+  onAutoShipChange?: (enabled: boolean) => void;
   onClearError: () => void;
 }
 
@@ -51,17 +63,33 @@ export const OrderToolbar: React.FC<Props> = ({
   timeScope,
   searchActive,
   searchType,
+  searchSource,
   searchKeyword,
   loading,
+  refreshing,
   error,
+  syncState,
+  autoSyncJob,
+  autoShipEnabled = false,
+  autoShipVisible = false,
+  autoShipUpdating = false,
   onStatusChange,
   onTimeScopeChange,
   onSearchTypeChange,
+  onSearchSourceChange,
   onSearchKeywordChange,
   onSearch,
   onRefresh,
+  onAutoShipChange,
   onClearError,
 }) => {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   return (
     <Flex vertical gap={8} style={{ flexShrink: 0, borderBottom: '1px solid #f0f0f0', paddingBottom: 10 }}>
       <Tag.CheckableTagGroup
@@ -77,6 +105,16 @@ export const OrderToolbar: React.FC<Props> = ({
             onChange={onSearchTypeChange}
             options={SEARCH_TYPE_OPTIONS}
             style={{ width: 120 }}
+          />
+          <Select
+            size="small"
+            value={searchSource}
+            onChange={onSearchSourceChange}
+            options={[
+              { value: 'local', label: '本地搜索' },
+              { value: 'remote', label: '服务器最新' },
+            ]}
+            style={{ width: 112 }}
           />
           <Input.Search
             size="small"
@@ -97,8 +135,21 @@ export const OrderToolbar: React.FC<Props> = ({
           disabled={searchActive}
           style={{ width: 112 }}
         />
-        <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={onRefresh}>刷新</Button>
-        <Text type="secondary" style={{ fontSize: 12 }}>列表每页加载 50 条；搜索不受时间范围限制</Text>
+        <Button size="small" icon={<ReloadOutlined />} loading={refreshing} onClick={onRefresh}>立即更新</Button>
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          {orderSyncCountdownText({ syncState, autoSyncJob, now })}
+        </Text>
+        {autoShipVisible && (
+          <Space size={4} style={{ marginLeft: 'auto' }}>
+            <Text type="secondary" style={{ fontSize: 12 }}>自动发货</Text>
+            <Switch
+              size="small"
+              checked={autoShipEnabled}
+              loading={autoShipUpdating}
+              onChange={onAutoShipChange}
+            />
+          </Space>
+        )}
       </Flex>
       {error && (
         <Alert type="error" title={error} showIcon closable={{ onClose: onClearError }} />

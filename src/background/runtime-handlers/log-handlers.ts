@@ -1,5 +1,5 @@
 import { clearListingLogs, getListingLogs } from '../store/log-repository';
-import { clearGlobalLogs, getGlobalLogs } from '../global-logs/global-log-store';
+import { clearActivityLogs, getActivityLogs } from '../activity-logs/activity-log-store';
 import type { RuntimeHandlerMap } from '../router/runtime-router';
 
 export function createLogRuntimeHandlers(): RuntimeHandlerMap {
@@ -10,11 +10,11 @@ export function createLogRuntimeHandlers(): RuntimeHandlerMap {
     async 'listingLogs:clear'(args) {
       return clearListingLogs(args[0] as string);
     },
-    async 'globalLogs:list'() {
-      return getGlobalLogs();
+    async 'activityLogs:list'() {
+      return getActivityLogs();
     },
-    async 'globalLogs:clear'() {
-      return clearGlobalLogs();
+    async 'activityLogs:clear'() {
+      return clearActivityLogs();
     },
   };
 }

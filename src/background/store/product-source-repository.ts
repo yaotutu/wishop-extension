@@ -1,10 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { ProductSourceBinding, ProductSourceItem } from '../../shared/types';
-import { getAccount } from './account-repository';
-import { updateAccountData } from './core';
+import { ensureAccountWorkspace, updateAccountWorkspace } from './workspace-repository.ts';
 
 export async function getProductSources(accountId: string): Promise<ProductSourceBinding[]> {
-  return (await getAccount(accountId))?.productSources || [];
+  return (await ensureAccountWorkspace(accountId)).productSources;
 }
 
 export async function setProductSources(
@@ -25,9 +24,9 @@ export async function setProductSources(
     .filter(source => source.url);
   const binding: ProductSourceBinding = { productId, sources: normalizedSources };
 
-  await updateAccountData(accountId, account => {
-    const existing = account.productSources || [];
-    account.productSources = normalizedSources.length > 0
+  await updateAccountWorkspace(accountId, workspace => {
+    const existing = workspace.productSources || [];
+    workspace.productSources = normalizedSources.length > 0
       ? [...existing.filter(item => item.productId !== productId), binding]
       : existing.filter(item => item.productId !== productId);
   });
@@ -36,7 +35,7 @@ export async function setProductSources(
 }
 
 export async function removeProductSource(accountId: string, productId: string, sourceId: string): Promise<ProductSourceBinding> {
-  const sources = ((await getAccount(accountId))?.productSources || [])
+  const sources = (await getProductSources(accountId))
     .find(item => item.productId === productId)
     ?.sources
     .filter(source => source.id !== sourceId) || [];

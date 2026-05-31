@@ -20,11 +20,11 @@ export function useOrders(accountId: string) {
     setError(null);
 
     if (!append) {
-      setLoading(true);
-      try {
-        const result = await extensionApi.orders.list(accountId, status, undefined, true);
+        setLoading(true);
+        try {
+        const result = await extensionApi.orders.list({ type: 'account', accountId }, { status });
         if (fetchIdRef.current !== fetchId) return;
-        setOrders(result.orders);
+        setOrders(result.orders.map(snapshot => snapshot.order));
         setHasMore(result.hasMore);
       } catch (err: any) {
         if (fetchIdRef.current !== fetchId) return;
@@ -36,9 +36,9 @@ export function useOrders(accountId: string) {
     } else {
       // 追加加载：直接 IPC，不更新 loading
       try {
-        const result = await extensionApi.orders.list(accountId, status);
+        const result = await extensionApi.orders.list({ type: 'account', accountId }, { status });
         if (fetchIdRef.current !== fetchId) return;
-        setOrders(prev => [...prev, ...result.orders]);
+        setOrders(prev => [...prev, ...result.orders.map(snapshot => snapshot.order)]);
         setHasMore(result.hasMore);
       } catch (err: any) {
         if (fetchIdRef.current !== fetchId) return;
@@ -63,9 +63,9 @@ export function useOrders(accountId: string) {
     const fetchId = ++fetchIdRef.current;
     setError(null);
     try {
-      const result = await extensionApi.orders.search(accountId, params);
+      const result = await extensionApi.orders.search({ type: 'account', accountId }, params, 'local');
       if (fetchIdRef.current !== fetchId) return;
-      setOrders(result.orders);
+      setOrders(result.orders.map(snapshot => snapshot.order));
       setHasMore(result.hasMore);
     } catch (err: any) {
       if (fetchIdRef.current !== fetchId) return;

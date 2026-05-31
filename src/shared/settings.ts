@@ -1,5 +1,6 @@
 export interface ShipmentCheckSettings {
   enabled: boolean;
+  autoShipEnabled: boolean;
   windowMinutes: number;
   maxChecksPerAccountPerWindow: number;
   minDispatchDelaySeconds: number;
@@ -23,6 +24,7 @@ export const MAX_SHIPMENT_CHECK_ORDER_LOOKBACK_DAYS = 7;
 
 export const DEFAULT_SHIPMENT_CHECK_SETTINGS: ShipmentCheckSettings = {
   enabled: true,
+  autoShipEnabled: false,
   windowMinutes: 10,
   maxChecksPerAccountPerWindow: 3,
   minDispatchDelaySeconds: 30,
@@ -53,6 +55,9 @@ function cappedNumber(value: unknown, fallback: number, min: number, max: number
 export function normalizeShipmentCheckSettings(input?: Partial<ShipmentCheckSettings>): ShipmentCheckSettings {
   const normalized = {
     enabled: typeof input?.enabled === 'boolean' ? input.enabled : DEFAULT_SHIPMENT_CHECK_SETTINGS.enabled,
+    autoShipEnabled: typeof input?.autoShipEnabled === 'boolean'
+      ? input.autoShipEnabled
+      : DEFAULT_SHIPMENT_CHECK_SETTINGS.autoShipEnabled,
     windowMinutes: boundedNumber(input?.windowMinutes, DEFAULT_SHIPMENT_CHECK_SETTINGS.windowMinutes, 5, 120),
     maxChecksPerAccountPerWindow: cappedNumber(input?.maxChecksPerAccountPerWindow, DEFAULT_SHIPMENT_CHECK_SETTINGS.maxChecksPerAccountPerWindow, 1, 10),
     minDispatchDelaySeconds: boundedNumber(input?.minDispatchDelaySeconds, DEFAULT_SHIPMENT_CHECK_SETTINGS.minDispatchDelaySeconds, 10, 3600),

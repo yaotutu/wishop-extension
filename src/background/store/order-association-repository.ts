@@ -1,8 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { LinkedPlatformOrder, OrderAssociation } from '../../shared/types';
-import { normalizeLinkedPurchaseOrder } from '../../shared/purchase-status';
-import { getAccount } from './account-repository';
-import { updateAccountData } from './core';
+import { normalizeLinkedPurchaseOrder } from '../../shared/purchase-status.ts';
+import { ensureAccountWorkspace, updateAccountWorkspace } from './workspace-repository.ts';
 
 function normalizeLinkedOrder(order: Partial<LinkedPlatformOrder>, now: number): LinkedPlatformOrder {
   return normalizeLinkedPurchaseOrder({
@@ -33,7 +32,7 @@ function normalizeAssociationForRead(association: OrderAssociation): OrderAssoci
 }
 
 export async function getOrderAssociations(accountId: string): Promise<OrderAssociation[]> {
-  return ((await getAccount(accountId))?.orderAssociations || []).map(normalizeAssociationForRead);
+  return (await ensureAccountWorkspace(accountId)).orderAssociations.map(normalizeAssociationForRead);
 }
 
 export async function setOrderAssociation(
@@ -42,7 +41,7 @@ export async function setOrderAssociation(
   input: Pick<OrderAssociation, 'internalRemark' | 'linkedOrders'>,
 ): Promise<OrderAssociation> {
   const now = Date.now();
-  const existing = ((await getAccount(accountId))?.orderAssociations || []).find(item => item.orderId === orderId);
+  const existing = (await getOrderAssociations(accountId)).find(item => item.orderId === orderId);
   const linkedOrders = input.linkedOrders
     .map(order => normalizeLinkedOrder(order, now))
     .filter(order => order.platformOrderId || order.platformOrderStatus || order.logisticsStatus || order.logisticsCompany || order.trackingNumber || order.remark);
@@ -54,10 +53,10 @@ export async function setOrderAssociation(
     updatedAt: now,
   };
 
-  await updateAccountData(accountId, account => {
-    const associations = account.orderAssociations || [];
+  await updateAccountWorkspace(accountId, workspace => {
+    const associations = workspace.orderAssociations || [];
     const hasContent = association.internalRemark || association.linkedOrders.length > 0;
-    account.orderAssociations = hasContent
+    workspace.orderAssociations = hasContent
       ? [...associations.filter(item => item.orderId !== orderId), association]
       : associations.filter(item => item.orderId !== orderId);
   });
@@ -79,9 +78,9 @@ export async function updateLinkedOrderShipmentCheck(
   >>,
 ): Promise<OrderAssociation | null> {
   let updated: OrderAssociation | null = null;
-  await updateAccountData(accountId, account => {
-    const associations = account.orderAssociations || [];
-    account.orderAssociations = associations.map(association => {
+  await updateAccountWorkspace(accountId, workspace => {
+    const associations = workspace.orderAssociations || [];
+    workspace.orderAssociations = associations.map(association => {
       if (association.orderId !== orderId || association.linkedOrders.length === 0) return association;
       const [linked, ...rest] = association.linkedOrders;
       const nextAssociation: OrderAssociation = {

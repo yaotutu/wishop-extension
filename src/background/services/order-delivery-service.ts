@@ -2,12 +2,16 @@ import type { Order, OrderProductInfo, ShipOrderFromPurchaseInput, ShipOrderFrom
 import { OrderStatus } from '../../shared/types';
 import { DELIVERY_COMPANY_UNMATCHED_PREFIX } from '../../shared/errors';
 import {
-  recordTaskCompleted,
-  recordTaskFailed,
-  recordTaskStarted,
-} from '../global-logs/global-log-service';
+  recordActivityCompleted,
+  recordActivityFailed,
+  recordActivityStarted,
+} from '../activity-logs/activity-log-service.ts';
 import { getClient } from '../wxshop/client-registry';
 import type { DeliveryCompany, SendOrderDeliveryPayload } from '../wxshop/client';
+
+interface ShipOrderFromPurchaseOptions {
+  wxOrder?: Order;
+}
 
 function normalizeDeliveryName(value: string): string {
   return value
@@ -69,13 +73,19 @@ function findDeliveryCompanyById(deliveryId: string, companies: DeliveryCompany[
   return companies.find(company => normalizeDeliveryName(company.delivery_id) === normalized) || null;
 }
 
-function assertShippableOrder(order: Order): void {
+export function getOrderDeliveryBlockReason(order: Order): string | null {
   if (order.status !== OrderStatus.PendingShipment) {
-    throw new Error('当前微信小店订单不是待发货状态，无法提交发货');
+    return '当前微信小店订单不是待发货状态，无法提交发货';
   }
   if (order.order_detail?.delivery_info?.delivery_product_info?.length > 0) {
-    throw new Error('当前微信小店订单已有物流信息，请勿重复发货');
+    return '当前微信小店订单已有物流信息，请勿重复发货';
   }
+  return null;
+}
+
+function assertShippableOrder(order: Order): void {
+  const reason = getOrderDeliveryBlockReason(order);
+  if (reason) throw new Error(reason);
 }
 
 function buildProductInfos(products: OrderProductInfo[]): SendOrderDeliveryPayload['delivery_list'][number]['product_infos'] {
@@ -92,22 +102,26 @@ function buildProductInfos(products: OrderProductInfo[]): SendOrderDeliveryPaylo
   return productInfos;
 }
 
-export async function shipOrderFromPurchase(input: ShipOrderFromPurchaseInput): Promise<ShipOrderFromPurchaseResult> {
+export async function shipOrderFromPurchase(
+  input: ShipOrderFromPurchaseInput,
+  options: ShipOrderFromPurchaseOptions = {},
+): Promise<ShipOrderFromPurchaseResult> {
   const logisticsCompany = input.logisticsCompany.trim();
   const trackingNumber = input.trackingNumber.trim();
+  const isAuto = input.sourceAction === 'auto';
   const runId = `ship-${input.orderId}-${Date.now()}`;
   if (!input.accountId) throw new Error('缺少账号 ID');
   if (!input.orderId.trim()) throw new Error('缺少微信小店订单号');
   if (!logisticsCompany) throw new Error('缺少快递公司，无法提交发货');
   if (!trackingNumber) throw new Error('缺少快递单号，无法提交发货');
 
-  void recordTaskStarted({
-    module: 'orders',
+  void recordActivityStarted({
+    domain: 'orders',
     scope: 'account',
     accountId: input.accountId,
-    taskKind: 'manual',
+    trigger: isAuto ? 'background' : 'manual',
     runId,
-    title: '手动回填微信小店发货已开始',
+    title: isAuto ? '自动发货已开始' : '手动回填微信小店发货已开始',
     detail: `订单号：${input.orderId}，快递：${logisticsCompany} ${trackingNumber}`,
     metadata: {
       orderId: input.orderId,
@@ -117,7 +131,7 @@ export async function shipOrderFromPurchase(input: ShipOrderFromPurchaseInput): 
 
   try {
     const client = await getClient(input.accountId);
-    const order = await client.getOrderDetail(input.orderId);
+    const order = options.wxOrder || await client.getOrderDetail(input.orderId);
     assertShippableOrder(order);
 
     const companies = await client.getDeliveryCompanyList(false);
@@ -142,14 +156,18 @@ export async function shipOrderFromPurchase(input: ShipOrderFromPurchaseInput): 
     });
 
     const updatedOrder = await client.getOrderDetail(input.orderId);
-    void recordTaskCompleted({
-      module: 'orders',
+    void recordActivityCompleted({
+      domain: 'orders',
       scope: 'account',
       accountId: input.accountId,
-      taskKind: 'manual',
+      trigger: isAuto ? 'background' : 'manual',
       runId,
-      title: '手动回填微信小店发货完成',
+      title: isAuto ? '自动发货成功' : '手动回填微信小店发货完成',
       detail: `订单号：${input.orderId}，快递：${company.delivery_name} ${trackingNumber}`,
+      notification: isAuto ? {
+        topic: 'orders.auto_shipment_completed',
+        urgency: 'normal',
+      } : undefined,
       metadata: {
         orderId: input.orderId,
         deliveryId: company.delivery_id,
@@ -165,14 +183,18 @@ export async function shipOrderFromPurchase(input: ShipOrderFromPurchaseInput): 
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : '提交微信小店发货失败';
-    void recordTaskFailed({
-      module: 'orders',
+    void recordActivityFailed({
+      domain: 'orders',
       scope: 'account',
       accountId: input.accountId,
-      taskKind: 'manual',
+      trigger: isAuto ? 'background' : 'manual',
       runId,
-      title: '手动回填微信小店发货失败',
+      title: isAuto ? '自动发货失败' : '手动回填微信小店发货失败',
       error: { message },
+      notification: {
+        topic: isAuto ? 'orders.auto_shipment_failed' : 'orders.shipment_failed',
+        urgency: 'important',
+      },
       metadata: {
         orderId: input.orderId,
         source: 'purchaseLookup',

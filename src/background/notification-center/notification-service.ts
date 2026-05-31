@@ -1,8 +1,5 @@
-import { v4 as uuidv4 } from 'uuid';
-import type { GlobalLogEntry } from '../../shared/global-log';
 import type { NotificationEntry, NotificationPreference } from '../../shared/notification';
 import {
-  appendNotification,
   clearNotifications,
   getNotificationPreference,
   getNotifications,
@@ -12,44 +9,6 @@ import {
 
 function emitNotificationEvent(event: string, payload: unknown): void {
   chrome.runtime.sendMessage({ type: 'event', event, payload }).catch(() => {});
-}
-
-function shouldNotify(log: GlobalLogEntry, preference: NotificationPreference): boolean {
-  if (!preference.inAppEnabled) return false;
-  if (!preference.levelEnabled[log.level]) return false;
-  if (preference.moduleEnabled[log.module] === false) return false;
-  return preference.eventTypeEnabled[log.eventType] !== false;
-}
-
-function createNotificationFromLog(log: GlobalLogEntry): NotificationEntry {
-  return {
-    id: uuidv4(),
-    sourceLogId: log.id,
-    timestamp: Date.now(),
-    channel: 'inApp',
-    deliveryStatus: 'created',
-    level: log.level,
-    module: log.module,
-    eventType: log.eventType,
-    title: log.title,
-    detail: log.detail,
-    errorMessage: log.error?.message,
-    accountId: log.accountId,
-    accountName: log.accountName,
-    taskKind: log.taskKind,
-    runId: log.runId,
-    metadata: log.metadata,
-  };
-}
-
-export async function createNotificationForGlobalLog(log: GlobalLogEntry): Promise<NotificationEntry | null> {
-  const preference = await getNotificationPreference();
-  if (!shouldNotify(log, preference)) return null;
-
-  const notification = createNotificationFromLog(log);
-  await appendNotification(notification);
-  emitNotificationEvent('notification:added', notification);
-  return notification;
 }
 
 export async function listNotifications(): Promise<NotificationEntry[]> {

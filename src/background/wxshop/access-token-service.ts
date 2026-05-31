@@ -1,5 +1,6 @@
 import axios from 'axios';
 import type { Config } from '../../shared/types';
+import { normalizeExternalRequestError } from '../errors/external-error.ts';
 import { getConfig } from '../store/account-repository';
 import { readStore, writeStore, type StoredWxAccessToken } from '../store/core';
 
@@ -52,13 +53,23 @@ async function persistToken(token: StoredWxAccessToken, generation: number): Pro
 async function requestNewToken(accountId: string, config: Config, generation: number): Promise<string> {
   assertValidConfig(config);
   const now = Date.now();
-  const response = await axios.get(`${BASE_URL}/cgi-bin/token`, {
-    params: {
-      grant_type: 'client_credential',
-      appid: config.appId,
-      secret: config.appSecret,
-    },
-  });
+  let response;
+  try {
+    response = await axios.get(`${BASE_URL}/cgi-bin/token`, {
+      params: {
+        grant_type: 'client_credential',
+        appid: config.appId,
+        secret: config.appSecret,
+      },
+    });
+  } catch (error) {
+    throw normalizeExternalRequestError(error, {
+      service: '微信小店',
+      method: 'GET',
+      path: '/cgi-bin/token',
+      stage: '获取微信接口 access_token',
+    });
+  }
   const data = response.data;
 
   if (data.errcode) {

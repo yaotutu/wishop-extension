@@ -6,12 +6,15 @@ export interface Config {
 }
 
 export type ScheduledJobModule = 'listing' | 'orders' | 'violation' | 'store' | 'system';
-export type ScheduledJobScope = 'account' | 'global';
+export type ScheduledJobScope = 'account' | 'global' | 'system';
 export type ScheduledJobType =
   | 'listing.submitDrafts'
   | 'orders.checkShipmentStatus'
+  | 'orders.syncRecent'
+  | 'orders.backfillHistory'
   | 'violation.scanProducts';
 export type ScheduledJobStatus = 'idle' | 'running' | 'waiting_user' | 'completed' | 'failed' | 'skipped';
+export type ScheduledJobRunMode = 'recurring' | 'untilComplete';
 
 export interface ScheduledJobRunStats {
   lastRunDate: string;
@@ -19,26 +22,73 @@ export interface ScheduledJobRunStats {
   lastRunAt?: number;
   lastFinishedAt?: number;
   lastStatus?: ScheduledJobStatus;
+  lastMessage?: string;
+  lastListed?: number;
   lastError?: string;
 }
 
-export interface ScheduledJob<TPayload = unknown> {
+export interface ScheduledJobBase<TPayload = unknown> {
   id: string;
   name: string;
   enabled: boolean;
   module: ScheduledJobModule;
   jobType: ScheduledJobType;
-  scope: ScheduledJobScope;
-  accountId?: string;
-  excludedAccountIds?: string[];
+  runMode: ScheduledJobRunMode;
   cronExpression: string;
-  staggerMinutes?: number;
-  dailyLimit?: number;
+  dailyLimit: number;
   payload: TPayload;
+  completedAt: number | null;
   stats: ScheduledJobRunStats;
-  accountStats?: Record<string, ScheduledJobRunStats>;
   createdAt: number;
   updatedAt: number;
+}
+
+export type AccountScheduledJob<TPayload = unknown> = ScheduledJobBase<TPayload> & {
+  scope: 'account';
+  accountId: string;
+};
+
+export type GlobalScheduledJob<TPayload = unknown> = ScheduledJobBase<TPayload> & {
+  scope: 'global';
+  excludedAccountIds: string[];
+  staggerMinutes: number;
+  accountStats: Record<string, ScheduledJobRunStats>;
+};
+
+export type SystemScheduledJob<TPayload = unknown> = ScheduledJobBase<TPayload> & {
+  scope: 'system';
+};
+
+export type ScheduledJob<TPayload = unknown> =
+  | AccountScheduledJob<TPayload>
+  | GlobalScheduledJob<TPayload>
+  | SystemScheduledJob<TPayload>;
+
+export type AccountScheduledJobInput<TPayload = unknown> = Omit<AccountScheduledJob<TPayload>, 'id' | 'stats' | 'createdAt' | 'updatedAt'>;
+export type GlobalScheduledJobInput<TPayload = unknown> = Omit<GlobalScheduledJob<TPayload>, 'id' | 'stats' | 'createdAt' | 'updatedAt'>;
+export type SystemScheduledJobInput<TPayload = unknown> = Omit<SystemScheduledJob<TPayload>, 'id' | 'stats' | 'createdAt' | 'updatedAt'>;
+export type ScheduledJobInput<TPayload = unknown> =
+  | AccountScheduledJobInput<TPayload>
+  | GlobalScheduledJobInput<TPayload>
+  | SystemScheduledJobInput<TPayload>;
+
+export type ScheduledJobView<TPayload = unknown> = ScheduledJob<TPayload> & {
+  nextRunAt: number | null;
+};
+
+export interface ScheduledJobExecutorResult {
+  listed: number;
+  status: ScheduledJobStatus;
+  message: string | null;
+  error: string | null;
+  completed: boolean;
+}
+
+export type ScheduledJobRunNowResult = ScheduledJobExecutorResult;
+
+export interface OrderHistoryBackfillPayload {
+  lookbackDays?: number;
+  cursorByAccountId?: Record<string, number>;
 }
 
 export interface LogEntry {
@@ -230,6 +280,7 @@ export interface ShipOrderFromPurchaseInput {
   logisticsCompany: string;
   trackingNumber: string;
   deliveryId?: string;
+  sourceAction?: 'manual' | 'auto';
 }
 
 export interface ShipOrderFromPurchaseResult {
@@ -253,6 +304,7 @@ export interface OrderRealAddressCache {
 
 export type ShippingSessionStatus = 'created' | 'opened' | 'page-ready' | 'completed' | 'failed';
 export type ShippingPurchaseAssociationStatus = 'waiting-payment' | 'detected' | 'associated' | 'failed';
+export type ShippingPaymentWorkflow = 'manualPasswordPayment';
 
 export interface ShippingOrderSnapshot {
   orderId: string;
@@ -285,6 +337,7 @@ export interface ShippingSession {
   productId: string;
   source: ShippingSourceSnapshot;
   order: ShippingOrderSnapshot;
+  paymentWorkflow: ShippingPaymentWorkflow;
   status: ShippingSessionStatus;
   createdAt: number;
   updatedAt: number;
@@ -302,6 +355,7 @@ export interface CreateShippingSessionInput {
   productId: string;
   source: ShippingSourceSnapshot;
   order: ShippingOrderSnapshot;
+  paymentWorkflow?: ShippingPaymentWorkflow;
 }
 
 export type LicensedFeature = 'orders' | 'listing' | 'violation' | 'shipping';
@@ -358,6 +412,88 @@ export interface OrderProductInfo {
   on_aftersale_sku_cnt: number;
   finish_aftersale_sku_cnt: number;
   delivery_deadline?: number;
+}
+
+export interface OrderAftersaleListItem {
+  aftersale_order_id: string;
+  /**
+   * 微信订单详情接口里的这个 status 官方已标记废弃。
+   * 这里只保留原始字段形状，业务展示必须以售后详情接口返回的 status 为准。
+   */
+  status?: number;
+}
+
+export interface OrderAftersaleDetail {
+  aftersale_order_list?: OrderAftersaleListItem[];
+  on_aftersale_order_cnt?: number;
+}
+
+export type AfterSaleOrderStatus =
+  | 'USER_CANCELD'
+  | 'MERCHANT_PROCESSING'
+  | 'MERCHANT_REJECT_REFUND'
+  | 'MERCHANT_REJECT_RETURN'
+  | 'USER_WAIT_RETURN'
+  | 'RETURN_CLOSED'
+  | 'MERCHANT_WAIT_RECEIPT'
+  | 'MERCHANT_OVERDUE_REFUND'
+  | 'MERCHANT_REFUND_SUCCESS'
+  | 'MERCHANT_RETURN_SUCCESS'
+  | 'PLATFORM_REFUNDING'
+  | 'PLATFORM_REFUND_FAIL'
+  | 'USER_WAIT_CONFIRM'
+  | 'MERCHANT_REFUND_RETRY_FAIL'
+  | 'MERCHANT_FAIL'
+  | 'USER_WAIT_CONFIRM_UPDATE'
+  | 'USER_WAIT_HANDLE_MERCHANT_AFTER_SALE'
+  | 'WAIT_PACKAGE_INTERCEPT'
+  | 'MERCHANT_REJECT_EXCHANGE'
+  | 'MERCHANT_REJECT_RESHIP'
+  | 'USER_WAIT_RECEIPT'
+  | 'MERCHANT_EXCHANGE_SUCCESS'
+  | (string & {});
+
+export type AfterSaleOrderType = 'REFUND' | 'RETURN' | 'EXCHANGE' | (string & {});
+
+export interface AfterSaleProductInfo {
+  product_id?: string;
+  sku_id?: string;
+  count?: number;
+}
+
+export interface WxAfterSaleOrder {
+  after_sale_order_id: string;
+  status: AfterSaleOrderStatus;
+  order_id?: string;
+  product_info?: AfterSaleProductInfo;
+  type?: AfterSaleOrderType;
+  reason_text?: string;
+  create_time?: number;
+  update_time?: number;
+  complete_time?: number;
+}
+
+export interface OrderAftersaleSummaryItem {
+  afterSaleOrderId: string;
+  status?: AfterSaleOrderStatus;
+  statusText: string;
+  type?: AfterSaleOrderType;
+  productId?: string;
+  skuId?: string;
+  count?: number;
+  updateTime?: number;
+  completeTime?: number;
+}
+
+export interface OrderAftersaleSummary {
+  hasAftersale: true;
+  status?: AfterSaleOrderStatus;
+  statusText: string;
+  onAftersaleOrderCount: number;
+  onAftersaleSkuCount: number;
+  finishAftersaleSkuCount: number;
+  items: OrderAftersaleSummaryItem[];
+  detailFetchFailed?: boolean;
 }
 
 export interface OrderPriceInfo {
@@ -437,6 +573,8 @@ export interface Order {
   create_time: number;
   update_time: number;
   order_detail: OrderDetail;
+  aftersale_detail?: OrderAftersaleDetail;
+  aftersale_summary?: OrderAftersaleSummary;
 }
 
 export interface OrderListParams {
@@ -460,6 +598,75 @@ export interface OrderSearchParams {
   status?: OrderStatus;
   next_key?: string;
   page_size?: number;
+}
+
+export type OrderScope =
+  | { type: 'all' }
+  | { type: 'account'; accountId: string };
+
+export type OrderSearchSource = 'local' | 'remote';
+
+export type StoredOrderSource = 'autoSync' | 'manualRefresh' | 'historyBackfill' | 'remoteSearch' | 'detailRefresh';
+
+export interface StoredOrderSnapshot {
+  accountId: string;
+  accountName: string;
+  orderId: string;
+  order: Order;
+  indexedText: string;
+  lastFetchedAt: number;
+  lastChangedAt: number;
+  source: StoredOrderSource;
+}
+
+export interface OrderListFilters {
+  status?: OrderStatus;
+  aftersaleOnly?: boolean;
+  search?: OrderSearchParams | null;
+  timeScope?: OrderTimeScope;
+  pageSize?: number;
+  cursor?: string;
+  nowSeconds?: number;
+}
+
+export interface LocalOrderListResult {
+  orders: StoredOrderSnapshot[];
+  hasMore: boolean;
+  total: number;
+  nextCursor?: string;
+}
+
+export interface OrderSyncAccountState {
+  accountId: string;
+  accountName?: string;
+  running: boolean;
+  lastStartedAt?: number;
+  lastFinishedAt?: number;
+  lastSuccessAt?: number;
+  lastError?: string;
+  nextSyncAt?: number;
+}
+
+export interface OrderSyncState {
+  scope: OrderScope;
+  running: boolean;
+  lastStartedAt?: number;
+  lastFinishedAt?: number;
+  lastSuccessAt?: number;
+  lastError?: string;
+  nextSyncAt?: number;
+  accountStates: OrderSyncAccountState[];
+}
+
+export interface OrderRefreshResult {
+  status: 'completed' | 'partial_failed' | 'failed';
+  scope: OrderScope;
+  refreshedAccountIds: string[];
+  failedAccounts: Array<{ accountId: string; accountName?: string; error: string }>;
+  fetchedOrderCount: number;
+  updatedOrderCount: number;
+  startedAt: number;
+  finishedAt: number;
 }
 
 export interface ViolationMatch {

@@ -1,30 +1,30 @@
 import { useCallback, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { extensionApi } from '../shared/extension-api';
-import type { GlobalLogEntry } from '../shared/global-log';
+import type { ActivityLogEntry } from '../shared/activity-log';
 import { queryKeys } from '../query/query-keys';
 
-export function useGlobalLogs() {
+export function useActivityLogs() {
   const queryClient = useQueryClient();
   const query = useQuery({
-    queryKey: queryKeys.globalLogs.list,
-    queryFn: () => extensionApi.globalLogs.list(),
+    queryKey: queryKeys.activityLogs.list,
+    queryFn: () => extensionApi.activityLogs.list(),
   });
 
-  useEffect(() => extensionApi.globalLogs.onAdded((log) => {
-    queryClient.setQueryData<GlobalLogEntry[]>(queryKeys.globalLogs.list, (current = []) => [...current, log].slice(-500));
+  useEffect(() => extensionApi.activityLogs.onAdded((log) => {
+    queryClient.setQueryData<ActivityLogEntry[]>(queryKeys.activityLogs.list, (current = []) => [...current, log].slice(-500));
   }), [queryClient]);
 
   const clearMutation = useMutation({
-    mutationFn: () => extensionApi.globalLogs.clear(),
+    mutationFn: () => extensionApi.activityLogs.clear(),
     onSuccess: () => {
-      queryClient.setQueryData<GlobalLogEntry[]>(queryKeys.globalLogs.list, []);
+      queryClient.setQueryData<ActivityLogEntry[]>(queryKeys.activityLogs.list, []);
     },
   });
 
   const fetchLogs = useCallback(async () => queryClient.fetchQuery({
-    queryKey: queryKeys.globalLogs.list,
-    queryFn: () => extensionApi.globalLogs.list(),
+    queryKey: queryKeys.activityLogs.list,
+    queryFn: () => extensionApi.activityLogs.list(),
   }), [queryClient]);
 
   const clearLogs = useCallback(async () => {

@@ -2,12 +2,13 @@ import React, { useMemo, useState } from 'react';
 import { Button, Drawer, Empty, FloatButton, List, Space, Switch, Tag, Typography } from 'antd';
 import { BellOutlined, CheckOutlined, ClearOutlined, ReloadOutlined, SettingOutlined } from '@ant-design/icons';
 import { useNotifications } from '../hooks/useIpc';
-import type { GlobalLogEventType, GlobalLogLevel, GlobalLogModule, GlobalLogTaskKind } from '../shared/global-log';
-import type { NotificationEntry, NotificationPreference } from '../shared/notification';
+import type { ActivityLogDomain, ActivityLogEvent, ActivityLogLevel, ActivityLogTrigger } from '../shared/activity-log';
+import type { NotificationEntry, NotificationPreference, NotificationTopic } from '../shared/notification';
+import { NOTIFICATION_TOPIC_DEFINITIONS } from '../shared/notification';
 
 const { Text } = Typography;
 
-const moduleLabels: Record<GlobalLogModule, string> = {
+const domainLabels: Record<ActivityLogDomain, string> = {
   listing: '商品提审',
   violation: '违规词',
   orders: '订单',
@@ -16,21 +17,21 @@ const moduleLabels: Record<GlobalLogModule, string> = {
   system: '系统',
 };
 
-const levelLabels: Record<GlobalLogLevel, string> = {
+const levelLabels: Record<ActivityLogLevel, string> = {
   error: '失败',
   warning: '警告',
   success: '成功',
   info: '信息',
 };
 
-const levelColors: Record<GlobalLogLevel, string> = {
+const levelColors: Record<ActivityLogLevel, string> = {
   error: 'red',
   warning: 'orange',
   success: 'green',
   info: 'blue',
 };
 
-const eventLabels: Record<GlobalLogEventType, string> = {
+const eventLabels: Record<ActivityLogEvent, string> = {
   started: '开始',
   queued: '排队',
   waiting_user: '需处理',
@@ -39,14 +40,21 @@ const eventLabels: Record<GlobalLogEventType, string> = {
   failed: '失败',
 };
 
-const taskKindLabels: Record<GlobalLogTaskKind, string> = {
+const triggerLabels: Record<ActivityLogTrigger, string> = {
   manual: '手动',
   scheduled: '单账号定时',
   globalScheduled: '全部账号定时',
   background: '后台',
 };
 
-const notificationModules: GlobalLogModule[] = ['listing', 'orders', 'violation', 'store', 'scheduler', 'system'];
+const notificationDomains: ActivityLogDomain[] = ['listing', 'orders', 'violation', 'store', 'scheduler', 'system'];
+const notificationTopicsByDomain = NOTIFICATION_TOPIC_DEFINITIONS.reduce((acc, definition) => {
+  const current = acc[definition.domain] || [];
+  return { ...acc, [definition.domain]: [...current, definition.topic] };
+}, {} as Partial<Record<ActivityLogDomain, NotificationTopic[]>>);
+const notificationTopicById = Object.fromEntries(
+  NOTIFICATION_TOPIC_DEFINITIONS.map(definition => [definition.topic, definition]),
+) as Record<NotificationTopic, typeof NOTIFICATION_TOPIC_DEFINITIONS[number]>;
 
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleString('zh-CN', {
@@ -59,7 +67,7 @@ function formatTime(timestamp: number): string {
   });
 }
 
-function unreadSeverity(notifications: NotificationEntry[]): GlobalLogLevel | null {
+function unreadSeverity(notifications: NotificationEntry[]): ActivityLogLevel | null {
   const unread = notifications.filter(notification => !notification.readAt);
   if (unread.some(notification => notification.level === 'error')) return 'error';
   if (unread.some(notification => notification.level === 'warning')) return 'warning';
@@ -69,16 +77,25 @@ function unreadSeverity(notifications: NotificationEntry[]): GlobalLogLevel | nu
 
 function PreferenceRow({
   label,
+  description,
   checked,
   onChange,
 }: {
   label: string;
+  description?: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-      <Text>{label}</Text>
+      <div style={{ minWidth: 0 }}>
+        <Text>{label}</Text>
+        {description && (
+          <div>
+            <Text type="secondary" style={{ fontSize: 12 }}>{description}</Text>
+          </div>
+        )}
+      </div>
       <Switch size="small" checked={checked} onChange={onChange} />
     </div>
   );
@@ -98,42 +115,44 @@ function NotificationPreferencePanel({
         checked={preference.inAppEnabled}
         onChange={checked => onChange({ inAppEnabled: checked })}
       />
-      <PreferenceRow
-        label="失败时通知"
-        checked={preference.levelEnabled.error}
-        onChange={checked => onChange({
-          levelEnabled: { ...preference.levelEnabled, error: checked },
-          eventTypeEnabled: { ...preference.eventTypeEnabled, failed: checked },
-        })}
-      />
-      <PreferenceRow
-        label="需要处理/警告时通知"
-        checked={preference.levelEnabled.warning}
-        onChange={checked => onChange({
-          levelEnabled: { ...preference.levelEnabled, warning: checked },
-          eventTypeEnabled: { ...preference.eventTypeEnabled, waiting_user: checked, skipped: checked },
-        })}
-      />
-      <PreferenceRow
-        label="成功时通知"
-        checked={preference.levelEnabled.success}
-        onChange={checked => onChange({
-          levelEnabled: { ...preference.levelEnabled, success: checked },
-          eventTypeEnabled: { ...preference.eventTypeEnabled, completed: checked },
-        })}
-      />
       <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 10, display: 'grid', gap: 8 }}>
-        <Text type="secondary" style={{ fontSize: 12 }}>按模块接收</Text>
-        {notificationModules.map(module => (
+        <Text type="secondary" style={{ fontSize: 12 }}>按业务域接收</Text>
+        {notificationDomains.map(domain => (
           <PreferenceRow
-            key={module}
-            label={moduleLabels[module]}
-            checked={preference.moduleEnabled[module] !== false}
+            key={domain}
+            label={domainLabels[domain]}
+            checked={preference.domainEnabled[domain] !== false}
             onChange={checked => onChange({
-              moduleEnabled: { ...preference.moduleEnabled, [module]: checked },
+              domainEnabled: { ...preference.domainEnabled, [domain]: checked },
             })}
           />
         ))}
+      </div>
+      <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 10, display: 'grid', gap: 12 }}>
+        <Text type="secondary" style={{ fontSize: 12 }}>按业务场景接收</Text>
+        {notificationDomains.map(domain => {
+          const topics = notificationTopicsByDomain[domain] || [];
+          if (topics.length === 0) return null;
+          return (
+            <div key={domain} style={{ display: 'grid', gap: 8 }}>
+              <Text strong style={{ fontSize: 13 }}>{domainLabels[domain]}</Text>
+              {topics.map(topic => {
+                const definition = notificationTopicById[topic];
+                return (
+                  <PreferenceRow
+                    key={topic}
+                    label={definition.label}
+                    description={definition.description}
+                    checked={preference.topicEnabled[topic] !== false}
+                    onChange={checked => onChange({
+                      topicEnabled: { ...preference.topicEnabled, [topic]: checked },
+                    })}
+                  />
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -158,9 +177,10 @@ function NotificationItem({
         title={(
           <Space size={6} wrap>
             <Tag color={levelColors[notification.level]} variant="filled">{levelLabels[notification.level]}</Tag>
-            <Tag color={levelColors[notification.level]} variant="outlined">{eventLabels[notification.eventType]}</Tag>
-            <Tag>{moduleLabels[notification.module]}</Tag>
-            {notification.taskKind && <Tag>{taskKindLabels[notification.taskKind]}</Tag>}
+            <Tag color={levelColors[notification.level]} variant="outlined">{eventLabels[notification.event]}</Tag>
+            <Tag>{domainLabels[notification.domain]}</Tag>
+            <Tag>{notificationTopicById[notification.topic]?.label || notification.topic}</Tag>
+            {notification.trigger && <Tag>{triggerLabels[notification.trigger]}</Tag>}
             {!notification.readAt && <Tag color="red">未读</Tag>}
           </Space>
         )}

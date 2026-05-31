@@ -1,23 +1,12 @@
 import React from 'react';
-import { Descriptions, Empty, Flex, Image, Modal, Spin, Tag, Typography } from 'antd';
+import { Descriptions, Empty, Flex, Image, Modal, Space, Spin, Tag, Typography } from 'antd';
 import type { Order, OrderRealAddressCache } from '../../../shared/types';
-import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
 import { formatOrderAddressLine, formatOrderPhoneInline } from '../../../shared/address-format';
-import { formatPrice, getEstimatedCommissionFee } from '../order-display';
+import { getOrderAftersaleDisplay } from '../../../shared/order-aftersale';
+import { formatPrice, getEstimatedCommissionFee, STATUS_CONFIG } from '../order-display';
+import { wrappingProductTextStyle } from './product-text-styles';
 
 const { Text } = Typography;
-
-const STATUS_CONFIG: Record<number, { color: string; text: string }> = {
-  [OrderStatusEnum.PendingPayment]: { color: 'orange', text: '待付款' },
-  [OrderStatusEnum.GiftPendingAccept]: { color: 'purple', text: '礼物待收下' },
-  [OrderStatusEnum.GroupBuying]: { color: 'cyan', text: '凑单中' },
-  [OrderStatusEnum.PendingShipment]: { color: 'blue', text: '待发货' },
-  [OrderStatusEnum.PartialShipment]: { color: 'geekblue', text: '部分发货' },
-  [OrderStatusEnum.PendingReceipt]: { color: 'cyan', text: '待收货' },
-  [OrderStatusEnum.Completed]: { color: 'green', text: '已完成' },
-  [OrderStatusEnum.CancelledByAfterSale]: { color: 'red', text: '售后取消' },
-  [OrderStatusEnum.CancelledByUser]: { color: 'default', text: '已取消' },
-};
 
 interface Props {
   open: boolean;
@@ -41,6 +30,7 @@ export const OrderDetailModal: React.FC<Props> = ({ open, loading, order, realAd
     ? new Date(realAddressCache.fetchedAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
     : '';
   const estimatedCommissionFee = order ? getEstimatedCommissionFee(order) : undefined;
+  const aftersaleDisplay = order ? getOrderAftersaleDisplay(order) : null;
 
   return (
     <Modal
@@ -64,7 +54,16 @@ export const OrderDetailModal: React.FC<Props> = ({ open, loading, order, realAd
               {
                 key: 'status',
                 label: '状态',
-                children: <Tag color={(STATUS_CONFIG[order.status] || {}).color}>{(STATUS_CONFIG[order.status] || { text: `未知(${order.status})` }).text}</Tag>,
+                children: (
+                  <Space size={4} wrap>
+                    <Tag color={(STATUS_CONFIG[order.status] || {}).color}>{(STATUS_CONFIG[order.status] || { text: `未知(${order.status})` }).text}</Tag>
+                    {aftersaleDisplay && (
+                      <Tag color={aftersaleDisplay.color} title={aftersaleDisplay.title}>
+                        售后：{aftersaleDisplay.text}
+                      </Tag>
+                    )}
+                  </Space>
+                ),
               },
               { key: 'createTime', label: '下单时间', children: formatTime(order.create_time) },
               { key: 'updateTime', label: '更新时间', children: formatTime(order.update_time) },
@@ -76,10 +75,18 @@ export const OrderDetailModal: React.FC<Props> = ({ open, loading, order, realAd
               <div style={{ fontWeight: 600, marginBottom: 8 }}>商品信息</div>
               {order.order_detail.product_infos.map((p, i) => (
                 <div key={i} style={{ display: 'flex', gap: 8, padding: '8px 0', borderBottom: '1px solid #f0f0f0', alignItems: 'center' }}>
-                  {p.thumb_img && <Image src={p.thumb_img} width={50} height={50} alt={p.title || '商品图片'} style={{ borderRadius: 4, objectFit: 'cover' }} preview={false} />}
+                  {p.thumb_img && (
+                    <Image
+                      src={p.thumb_img}
+                      width={50}
+                      height={50}
+                      alt={p.title || '商品图片'}
+                      style={{ borderRadius: 4, objectFit: 'cover', cursor: 'zoom-in' }}
+                    />
+                  )}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
+                    <div style={{ ...wrappingProductTextStyle, fontWeight: 500 }}>{p.title}</div>
+                    <Text type="secondary" style={{ ...wrappingProductTextStyle, fontSize: 12, display: 'block' }}>
                       {p.sku_attrs?.map(a => `${a.attr_key}: ${a.attr_value}`).join(' / ')}
                     </Text>
                     <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>

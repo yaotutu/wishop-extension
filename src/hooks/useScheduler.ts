@@ -1,12 +1,24 @@
 import { useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { extensionApi } from '../shared/extension-api';
-import type { ScheduledJob, TaskConfig } from '../shared/types';
+import type {
+  AccountScheduledJob,
+  AccountScheduledJobInput,
+  GlobalScheduledJob,
+  GlobalScheduledJobInput,
+  ScheduledJob,
+  ScheduledJobView,
+  TaskConfig,
+} from '../shared/types';
 import { queryKeys } from '../query/query-keys';
 
-export type ListingScheduledJob = ScheduledJob<TaskConfig>;
-
-type ListingJobInput = Omit<ListingScheduledJob, 'id' | 'stats' | 'createdAt' | 'updatedAt'>;
+export type ListingScheduledJob =
+  | (AccountScheduledJob<TaskConfig> & { nextRunAt: number | null })
+  | (GlobalScheduledJob<TaskConfig> & { nextRunAt: number | null });
+type AccountListingScheduledJob = Extract<ListingScheduledJob, { scope: 'account' }>;
+type GlobalListingScheduledJob = Extract<ListingScheduledJob, { scope: 'global' }>;
+type AccountListingJobInput = AccountScheduledJobInput<TaskConfig>;
+type GlobalListingJobInput = GlobalScheduledJobInput<TaskConfig>;
 
 const defaultTaskConfig: TaskConfig = {
   listUnreviewed: true,
@@ -14,8 +26,16 @@ const defaultTaskConfig: TaskConfig = {
   autoDeleteFailed: true,
 };
 
-function isListingJob(job: ScheduledJob): job is ListingScheduledJob {
+function isListingJob(job: ScheduledJobView): job is ListingScheduledJob {
   return job.jobType === 'listing.submitDrafts';
+}
+
+function isAccountListingJob(job: ListingScheduledJob, accountId: string): job is AccountListingScheduledJob {
+  return job.scope === 'account' && job.accountId === accountId;
+}
+
+function isGlobalListingJob(job: ListingScheduledJob): job is GlobalListingScheduledJob {
+  return job.scope === 'global';
 }
 
 export function useSchedulers(accountId: string) {
@@ -25,7 +45,7 @@ export function useSchedulers(accountId: string) {
     enabled: !!accountId,
     queryFn: async () => (await extensionApi.scheduledJobs.list())
       .filter(isListingJob)
-      .filter(job => job.scope === 'account' && job.accountId === accountId),
+      .filter(job => isAccountListingJob(job, accountId)),
   });
 
   const fetchTasks = useCallback(async () => {
@@ -34,12 +54,12 @@ export function useSchedulers(accountId: string) {
       queryKey: queryKeys.scheduledJobs.accountListing(accountId),
       queryFn: async () => (await extensionApi.scheduledJobs.list())
         .filter(isListingJob)
-        .filter(job => job.scope === 'account' && job.accountId === accountId),
+        .filter(job => isAccountListingJob(job, accountId)),
     });
   }, [accountId, queryClient]);
 
   const addMutation = useMutation({
-    mutationFn: (job: ListingJobInput) => extensionApi.scheduledJobs.add(job),
+    mutationFn: (job: AccountListingJobInput) => extensionApi.scheduledJobs.add(job),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.list });
       queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.accountListing(accountId) });
@@ -61,7 +81,7 @@ export function useSchedulers(accountId: string) {
     },
   });
 
-  const addTask = useCallback(async (job: ListingJobInput): Promise<ScheduledJob> => {
+  const addTask = useCallback(async (job: AccountListingJobInput): Promise<ScheduledJob> => {
     return addMutation.mutateAsync(job);
   }, [addMutation]);
 
@@ -82,18 +102,18 @@ export function useGlobalSchedulers() {
     queryKey: queryKeys.scheduledJobs.globalListing,
     queryFn: async () => (await extensionApi.scheduledJobs.list())
       .filter(isListingJob)
-      .filter(job => job.scope === 'global'),
+      .filter(isGlobalListingJob),
   });
 
   const fetchTasks = useCallback(async () => queryClient.fetchQuery({
     queryKey: queryKeys.scheduledJobs.globalListing,
     queryFn: async () => (await extensionApi.scheduledJobs.list())
       .filter(isListingJob)
-      .filter(job => job.scope === 'global'),
+      .filter(isGlobalListingJob),
   }), [queryClient]);
 
   const addMutation = useMutation({
-    mutationFn: (job: ListingJobInput) => extensionApi.scheduledJobs.add(job),
+    mutationFn: (job: GlobalListingJobInput) => extensionApi.scheduledJobs.add(job),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.list });
       queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.globalListing });
@@ -115,7 +135,7 @@ export function useGlobalSchedulers() {
     },
   });
 
-  const addTask = useCallback(async (job: ListingJobInput): Promise<ScheduledJob> => {
+  const addTask = useCallback(async (job: GlobalListingJobInput): Promise<ScheduledJob> => {
     return addMutation.mutateAsync(job);
   }, [addMutation]);
 

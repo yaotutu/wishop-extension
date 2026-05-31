@@ -9,11 +9,29 @@ const HOST_PERMISSIONS = [
   'https://*.tmall.com/*',
 ];
 
+const EXTENSION_PERMISSIONS = [
+  'storage',
+  'unlimitedStorage',
+  'alarms',
+  'tabs',
+  'notifications',
+];
+
+function formatBuildTime(date = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+const BUILD_TIME = formatBuildTime();
+
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   outDir: 'output',
   vite: () => ({
+    define: {
+      __WISHOP_BUILD_TIME__: JSON.stringify(BUILD_TIME),
+    },
     build: {
       sourcemap: false,
       minify: 'esbuild',
@@ -35,7 +53,7 @@ export default defineConfig({
     name: '微店管家',
     description: '微信小店多账户商品提审、订单管理和违规词检测工具',
     version: packageJson.version,
-    permissions: ['storage', 'alarms', 'tabs', 'notifications'],
+    permissions: EXTENSION_PERMISSIONS,
     host_permissions: HOST_PERMISSIONS,
     action: {
       default_title: '打开微店管家',

@@ -20,7 +20,6 @@ import { createViolationRuntimeHandlers } from '../runtime-handlers/violation-ha
 import { createLicenseRuntimeHandlers } from '../runtime-handlers/license-handlers';
 import { assertFeatureAccess } from '../licensing/licensing-service';
 import { clearDraftPagination, fetchDrafts, listDraft } from '../services/draft-service';
-import { listOrders, searchOrders } from '../services/order-service';
 import { runTask } from '../services/task-runner-service';
 import { runViolationBatchScan, runViolationStep, type ScanSessionState } from '../services/violation-service';
 import type { SessionManager } from '../utils/session-manager';
@@ -38,6 +37,8 @@ const FEATURE_CHANNELS = {
   'orders:list': 'orders',
   'orders:detail': 'orders',
   'orders:search': 'orders',
+  'orders:refresh': 'orders',
+  'orders:syncState': 'orders',
   'orders:decodeAddress': 'orders',
   'orders:listDeliveryCompanies': 'shipping',
   'orders:shipFromPurchase': 'shipping',
@@ -70,8 +71,8 @@ const FEATURE_CHANNELS = {
   'quota:get': 'listing',
   'listingLogs:get': null,
   'listingLogs:clear': null,
-  'globalLogs:list': null,
-  'globalLogs:clear': null,
+  'activityLogs:list': null,
+  'activityLogs:clear': null,
   'notifications:list': null,
   'notifications:markRead': null,
   'notifications:markAllRead': null,
@@ -84,6 +85,7 @@ const FEATURE_CHANNELS = {
   'scheduledJobs:add': 'listing',
   'scheduledJobs:update': 'listing',
   'scheduledJobs:remove': 'listing',
+  'scheduledJobs:runNow': 'listing',
   'task:run': 'listing',
   'task:stop': 'listing',
   'taskConfig:get': 'listing',
@@ -135,10 +137,7 @@ export function createBackgroundRouter(options: CreateBackgroundRouterOptions): 
         clearDraftPagination(accountId);
       },
     }),
-    ...createOrderRuntimeHandlers({
-      listOrders,
-      searchOrders,
-    }),
+    ...createOrderRuntimeHandlers(),
     ...createRealAddressRuntimeHandlers(),
     ...createOrderAssociationRuntimeHandlers(),
     ...createPurchaseLookupRuntimeHandlers(options.getCurrentTabPurchaseLookupSession),

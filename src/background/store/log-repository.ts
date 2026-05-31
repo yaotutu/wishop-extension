@@ -1,6 +1,7 @@
+import Dexie from 'dexie';
 import type { AddLogFn, LogEntry } from '../../shared/types';
-import { getAccount } from './account-repository';
-import { updateAccountData } from './core';
+import { extensionDb, type AccountLogKind } from '../db/extension-db.ts';
+import { markAccountDirty } from './account-sync-state-repository.ts';
 
 export type ModuleLogKind = 'listing' | 'violation';
 type StoreListener = (log: LogEntry) => void;
@@ -13,12 +14,12 @@ function key(kind: ModuleLogKind, accountId: string): string {
   return `${kind}:${accountId}`;
 }
 
-function logField(kind: ModuleLogKind): 'listingLogs' | 'violationLogs' {
-  return kind === 'listing' ? 'listingLogs' : 'violationLogs';
-}
-
 function eventName(kind: ModuleLogKind, accountId: string): string {
   return `${kind}Log:added:${accountId}`;
+}
+
+function toLogKind(kind: ModuleLogKind): AccountLogKind {
+  return kind;
 }
 
 export function onModuleLog(kind: ModuleLogKind, accountId: string, listener: StoreListener): () => void {
@@ -41,23 +42,35 @@ export function createScopedModuleLog(kind: ModuleLogKind, accountId: string): A
 }
 
 export async function getModuleLogs(kind: ModuleLogKind, accountId: string): Promise<LogEntry[]> {
-  const account = await getAccount(accountId);
   const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  return (account?.[logField(kind)] || []).filter(log => log.timestamp > sevenDaysAgo);
+  const records = await extensionDb.accountLogs
+    .where('[accountId+kind+timestamp]')
+    .between([accountId, toLogKind(kind), sevenDaysAgo], [accountId, toLogKind(kind), Dexie.maxKey])
+    .toArray();
+  return records.map(record => record.entry as LogEntry);
 }
 
 export async function addModuleLog(kind: ModuleLogKind, accountId: string, log: Omit<LogEntry, 'id' | 'timestamp'>): Promise<void> {
   logCounter++;
   const entry: LogEntry = { ...log, id: `${Date.now()}-${logCounter}`, timestamp: Date.now() };
   const queueKey = key(kind, accountId);
-  const field = logField(kind);
   const previous = writeQueues.get(queueKey) || Promise.resolve();
   const write = previous.catch(() => undefined).then(async () => {
-    await updateAccountData(accountId, account => {
-      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-      account[field] = (account[field] || []).filter(item => item.timestamp > sevenDaysAgo);
-      account[field].push(entry);
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    await extensionDb.transaction('rw', extensionDb.accountLogs, async () => {
+      await extensionDb.accountLogs
+        .where('[accountId+kind+timestamp]')
+        .between([accountId, toLogKind(kind), Dexie.minKey], [accountId, toLogKind(kind), sevenDaysAgo])
+        .delete();
+      await extensionDb.accountLogs.put({
+        id: entry.id,
+        accountId,
+        kind: toLogKind(kind),
+        timestamp: entry.timestamp,
+        entry,
+      });
     });
+    await markAccountDirty(accountId);
     emitModuleLog(kind, accountId, entry);
   });
   const queued = write.finally(() => {
@@ -69,11 +82,12 @@ export async function addModuleLog(kind: ModuleLogKind, accountId: string, log: 
 
 export async function clearModuleLogs(kind: ModuleLogKind, accountId: string): Promise<void> {
   const queueKey = key(kind, accountId);
-  const field = logField(kind);
   const previous = writeQueues.get(queueKey) || Promise.resolve();
-  const write = previous.catch(() => undefined).then(() => updateAccountData(accountId, account => {
-    account[field] = [];
-  }));
+  const write = previous.catch(() => undefined).then(() => extensionDb.accountLogs
+    .where('[accountId+kind+timestamp]')
+    .between([accountId, toLogKind(kind), Dexie.minKey], [accountId, toLogKind(kind), Dexie.maxKey])
+    .delete()
+    .then(() => undefined));
   const queued = write.finally(() => {
     if (writeQueues.get(queueKey) === queued) writeQueues.delete(queueKey);
   });

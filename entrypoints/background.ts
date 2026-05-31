@@ -6,6 +6,7 @@ import {
   installOrderShipmentCheckDispatchListener,
   registerOrderShipmentScheduledJobs,
 } from '../src/background/scheduler/order-shipment-job-executor';
+import { ensureOrderHistoryBackfillScheduledJob, ensureOrderSyncScheduledJob, registerOrderSyncScheduledJobs } from '../src/background/scheduler/order-sync-job-executor';
 import { installScheduledJobAlarmListener, startAllScheduledJobs } from '../src/background/scheduler/scheduler-center';
 import { installShippingPaymentSuccessWatcher, installShippingTabCleanup } from '../src/background/shipping/shipping-session-service';
 import { migrateStore } from '../src/background/store';
@@ -15,6 +16,7 @@ import { installTaobaoWorkTabCleanup } from '../src/background/taobao-workspace/
 export default defineBackground(() => {
   registerListingScheduledJobs();
   registerOrderShipmentScheduledJobs();
+  registerOrderSyncScheduledJobs();
   installRuntimeHandlers();
   installShippingTabCleanup();
   installShippingPaymentSuccessWatcher();
@@ -24,6 +26,8 @@ export default defineBackground(() => {
   installOrderShipmentCheckDispatchListener();
   installScheduledJobAlarmListener();
   void migrateStore().then(async () => {
+    await ensureOrderSyncScheduledJob();
+    await ensureOrderHistoryBackfillScheduledJob();
     await ensureOrderShipmentCheckScheduledJob();
     await startAllScheduledJobs();
   });
