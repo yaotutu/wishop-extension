@@ -9,6 +9,10 @@ import {
 import { getClient } from '../wxshop/client-registry';
 import type { DeliveryCompany, SendOrderDeliveryPayload } from '../wxshop/client';
 
+interface ShipOrderFromPurchaseOptions {
+  wxOrder?: Order;
+}
+
 function normalizeDeliveryName(value: string): string {
   return value
     .trim()
@@ -69,13 +73,19 @@ function findDeliveryCompanyById(deliveryId: string, companies: DeliveryCompany[
   return companies.find(company => normalizeDeliveryName(company.delivery_id) === normalized) || null;
 }
 
-function assertShippableOrder(order: Order): void {
+export function getOrderDeliveryBlockReason(order: Order): string | null {
   if (order.status !== OrderStatus.PendingShipment) {
-    throw new Error('当前微信小店订单不是待发货状态，无法提交发货');
+    return '当前微信小店订单不是待发货状态，无法提交发货';
   }
   if (order.order_detail?.delivery_info?.delivery_product_info?.length > 0) {
-    throw new Error('当前微信小店订单已有物流信息，请勿重复发货');
+    return '当前微信小店订单已有物流信息，请勿重复发货';
   }
+  return null;
+}
+
+function assertShippableOrder(order: Order): void {
+  const reason = getOrderDeliveryBlockReason(order);
+  if (reason) throw new Error(reason);
 }
 
 function buildProductInfos(products: OrderProductInfo[]): SendOrderDeliveryPayload['delivery_list'][number]['product_infos'] {
@@ -92,7 +102,10 @@ function buildProductInfos(products: OrderProductInfo[]): SendOrderDeliveryPaylo
   return productInfos;
 }
 
-export async function shipOrderFromPurchase(input: ShipOrderFromPurchaseInput): Promise<ShipOrderFromPurchaseResult> {
+export async function shipOrderFromPurchase(
+  input: ShipOrderFromPurchaseInput,
+  options: ShipOrderFromPurchaseOptions = {},
+): Promise<ShipOrderFromPurchaseResult> {
   const logisticsCompany = input.logisticsCompany.trim();
   const trackingNumber = input.trackingNumber.trim();
   const isAuto = input.sourceAction === 'auto';
@@ -118,7 +131,7 @@ export async function shipOrderFromPurchase(input: ShipOrderFromPurchaseInput): 
 
   try {
     const client = await getClient(input.accountId);
-    const order = await client.getOrderDetail(input.orderId);
+    const order = options.wxOrder || await client.getOrderDetail(input.orderId);
     assertShippableOrder(order);
 
     const companies = await client.getDeliveryCompanyList(false);
