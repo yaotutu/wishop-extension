@@ -1,5 +1,5 @@
 import type { TaobaoSecurityChallengeKind, TaobaoSecurityChallengeSnapshot } from '../../../shared/types';
-import { normalizeText } from '../dom/text';
+import { normalizeText } from '../dom/text.ts';
 
 interface ChallengeSignal {
   kind: TaobaoSecurityChallengeKind;

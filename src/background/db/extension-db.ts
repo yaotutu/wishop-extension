@@ -4,6 +4,7 @@ import type { AppSettings } from '../../shared/settings';
 import type {
   BlacklistRule,
   Config,
+  CollectedProductListing,
   Order,
   OrderAssociation,
   OrderRealAddressCache,
@@ -85,6 +86,7 @@ export class ExtensionDb extends Dexie {
   accountWorkspaces!: Table<AccountWorkspaceRecord, string>;
   accountLogs!: Table<AccountLogRecord, string>;
   accountSyncStates!: Table<AccountSyncStateRecord, string>;
+  collectedProductListings!: Table<CollectedProductListing, string>;
 
   constructor() {
     super('wishop-extension');
@@ -94,6 +96,14 @@ export class ExtensionDb extends Dexie {
       accountWorkspaces: 'accountId, updatedAt',
       accountLogs: 'id, accountId, kind, [accountId+kind+timestamp], timestamp',
       accountSyncStates: 'accountId, appId, revision, updatedAt',
+    });
+    this.version(2).stores({
+      accounts: 'id, appId, updatedAt',
+      orders: '[accountId+orderId], accountId, [accountId+status+updateTime], [accountId+createTime], [accountId+lastFetchedAt]',
+      accountWorkspaces: 'accountId, updatedAt',
+      accountLogs: 'id, accountId, kind, [accountId+kind+timestamp], timestamp',
+      accountSyncStates: 'accountId, appId, revision, updatedAt',
+      collectedProductListings: 'id, [platform+itemId], updatedAt, collectedAt',
     });
   }
 }

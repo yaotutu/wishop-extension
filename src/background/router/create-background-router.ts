@@ -8,6 +8,7 @@ import { createOrderAssociationRuntimeHandlers } from '../runtime-handlers/order
 import { createPurchaseLookupRuntimeHandlers } from '../runtime-handlers/purchase-lookup-handlers';
 import { createRealAddressRuntimeHandlers } from '../runtime-handlers/real-address-handlers';
 import { createProductRuntimeHandlers } from '../runtime-handlers/product-handlers';
+import { createProductListingCollectionRuntimeHandlers } from '../runtime-handlers/product-listing-collection-handlers';
 import { createProductSourceRuntimeHandlers } from '../runtime-handlers/product-source-handlers';
 import { createQuotaRuntimeHandlers } from '../runtime-handlers/quota-handlers';
 import { createRuleRuntimeHandlers } from '../runtime-handlers/rule-handlers';
@@ -68,6 +69,15 @@ const FEATURE_CHANNELS = {
   'productSources:set': 'orders',
   'productSources:remove': 'orders',
   'products:getQrcode': 'orders',
+  'productListingCollection:list': 'listing',
+  'productListingCollection:remove': 'listing',
+  'productListingCollection:open': 'listing',
+  'productListingCollection:getCurrentTabSession': 'listing',
+  'productListingCollection:markPageReady': 'listing',
+  'productListingCollection:reportChallenge': 'listing',
+  'productListingCollection:resolveChallenge': 'listing',
+  'productListingCollection:complete': 'listing',
+  'productListingCollection:fail': 'listing',
   'drafts:fetch': 'listing',
   'drafts:list': 'listing',
   'quota:get': 'listing',
@@ -125,6 +135,7 @@ interface CreateBackgroundRouterOptions {
   getCurrentTabShippingSession: (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
   getCurrentTabPurchaseLookupSession: (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
   getCurrentTabTaobaoRefundSession: (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
+  getCurrentTabProductListingCollectionSession: (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
 }
 
 /**
@@ -144,6 +155,7 @@ export function createBackgroundRouter(options: CreateBackgroundRouterOptions): 
     ...createOrderAssociationRuntimeHandlers(),
     ...createPurchaseLookupRuntimeHandlers(options.getCurrentTabPurchaseLookupSession),
     ...createTaobaoRefundRuntimeHandlers(options.getCurrentTabTaobaoRefundSession),
+    ...createProductListingCollectionRuntimeHandlers(options.getCurrentTabProductListingCollectionSession),
     ...createDraftRuntimeHandlers({
       fetchDrafts,
       listDraft,

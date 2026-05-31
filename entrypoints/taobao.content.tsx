@@ -1,5 +1,6 @@
 import { installCheckoutAddressFrameBridge, isTaobaoAddressFramePage } from '../src/content/taobao/adapters/checkout-address-adapter';
 import { mountTaobaoToolbar } from '../src/content/taobao/runtime/mount-toolbar';
+import { runProductListingCollectionWorkflow } from '../src/content/taobao/runtime/product-listing-collection-workflow';
 import { resolveTaobaoContentSessions } from '../src/content/taobao/runtime/session-resolver';
 
 export default defineContentScript({
@@ -14,7 +15,16 @@ export default defineContentScript({
     }
     if (window.top !== window) return;
 
-    const { shippingSession, purchaseLookupSession, taobaoRefundSession, workspaceRole } = await resolveTaobaoContentSessions();
+    const {
+      shippingSession,
+      purchaseLookupSession,
+      taobaoRefundSession,
+      productListingCollectionSession,
+      workspaceRole,
+    } = await resolveTaobaoContentSessions();
+    if (productListingCollectionSession) {
+      await runProductListingCollectionWorkflow(productListingCollectionSession);
+    }
     if (!shippingSession && !purchaseLookupSession && !taobaoRefundSession && !workspaceRole) return;
     await mountTaobaoToolbar(ctx, {
       shippingSession,

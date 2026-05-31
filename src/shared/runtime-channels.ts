@@ -4,7 +4,9 @@ import type { AppSettings, AppSettingsPatch } from './settings';
 import type {
   Account,
   BlacklistRule,
+  CollectedProductListing,
   Config,
+  CreateProductListingCollectionSessionInput,
   CreateShippingSessionInput,
   DeliveryCompanyOption,
   DraftProduct,
@@ -29,6 +31,7 @@ import type {
   ProductSourceBinding,
   ProductSourceItem,
   ProductQrcodeResult,
+  ProductListingCollectionSession,
   PurchaseLookupSession,
   QuotaResult,
   ScheduledJob,
@@ -42,6 +45,7 @@ import type {
   TaobaoWorkspaceRole,
   TaobaoSecurityChallengeSnapshot,
   TaobaoPurchaseOrderSnapshot,
+  TaobaoProductSnapshot,
   TaskConfig,
   TaskCycleResult,
   ViolationMatch,
@@ -108,6 +112,16 @@ export interface RuntimeChannels {
   'productSources:set': { args: [accountId: string, productId: string, sources: ProductSourceItem[]]; result: ProductSourceBinding };
   'productSources:remove': { args: [accountId: string, productId: string, sourceId: string]; result: ProductSourceBinding };
   'products:getQrcode': { args: [accountId: string, productId: string]; result: ProductQrcodeResult };
+
+  'productListingCollection:list': { args: []; result: CollectedProductListing[] };
+  'productListingCollection:remove': { args: [listingId: string]; result: void };
+  'productListingCollection:open': { args: [input: CreateProductListingCollectionSessionInput]; result: ProductListingCollectionSession };
+  'productListingCollection:getCurrentTabSession': { args: []; result: ProductListingCollectionSession | null };
+  'productListingCollection:markPageReady': { args: [sessionId: string]; result: ProductListingCollectionSession };
+  'productListingCollection:reportChallenge': { args: [sessionId: string, snapshot: TaobaoSecurityChallengeSnapshot]; result: ProductListingCollectionSession };
+  'productListingCollection:resolveChallenge': { args: [sessionId: string]; result: ProductListingCollectionSession };
+  'productListingCollection:complete': { args: [sessionId: string, snapshot: TaobaoProductSnapshot]; result: CollectedProductListing };
+  'productListingCollection:fail': { args: [sessionId: string, error: string]; result: ProductListingCollectionSession };
 
   'shipping:open': { args: [input: CreateShippingSessionInput]; result: ShippingSession };
   'shipping:getCurrentTabSession': { args: []; result: ShippingSession | null };

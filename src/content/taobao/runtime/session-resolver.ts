@@ -1,4 +1,10 @@
-import type { PurchaseLookupSession, ShippingSession, TaobaoRefundSession, TaobaoWorkspaceRole } from '../../../shared/types';
+import type {
+  ProductListingCollectionSession,
+  PurchaseLookupSession,
+  ShippingSession,
+  TaobaoRefundSession,
+  TaobaoWorkspaceRole,
+} from '../../../shared/types';
 import { extensionApi } from '../../../shared/extension-api';
 
 const SESSION_RETRY_COUNT = 10;
@@ -23,15 +29,17 @@ export interface TaobaoContentSessions {
   shippingSession: ShippingSession | null;
   purchaseLookupSession: PurchaseLookupSession | null;
   taobaoRefundSession: TaobaoRefundSession | null;
+  productListingCollectionSession: ProductListingCollectionSession | null;
   workspaceRole: TaobaoWorkspaceRole | null;
 }
 
 export async function resolveTaobaoContentSessions(): Promise<TaobaoContentSessions> {
-  const [shippingSession, purchaseLookupSession, taobaoRefundSession, workspaceRole] = await Promise.all([
+  const [shippingSession, purchaseLookupSession, taobaoRefundSession, productListingCollectionSession, workspaceRole] = await Promise.all([
     waitForSession(() => extensionApi.shipping.getCurrentTabSession()),
     waitForSession(() => extensionApi.purchaseLookup.getCurrentTabSession()),
     waitForSession(() => extensionApi.taobaoRefund.getCurrentTabSession()),
+    waitForSession(() => extensionApi.productListingCollection.getCurrentTabSession()),
     extensionApi.taobaoWorkspace.getCurrentRole().catch(() => null),
   ]);
-  return { shippingSession, purchaseLookupSession, taobaoRefundSession, workspaceRole };
+  return { shippingSession, purchaseLookupSession, taobaoRefundSession, productListingCollectionSession, workspaceRole };
 }

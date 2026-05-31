@@ -271,10 +271,27 @@ export interface TaobaoProductSkuGroup {
 
 export interface TaobaoProductSkuMatrixItem {
   id: string;
+  skuId?: string;
+  propPath?: string;
   specs: TaobaoProductSkuSpec[];
   priceText: string;
+  priceMoney?: number;
   stockText: string;
+  quantity?: number;
   imageUrl: string;
+  logisticsTime?: string;
+}
+
+export interface TaobaoProductParam {
+  name: string;
+  value: string;
+  group: 'basic' | 'enhance' | 'other';
+}
+
+export interface TaobaoProductSellerSnapshot {
+  shopName: string;
+  sellerId: string;
+  shopId: string;
 }
 
 export interface TaobaoProductSnapshot {
@@ -283,14 +300,49 @@ export interface TaobaoProductSnapshot {
   itemId: string;
   title: string;
   shopName: string;
+  seller: TaobaoProductSellerSnapshot;
   priceRangeText: string;
   mainImages: string[];
   detailImages: string[];
+  productParams: TaobaoProductParam[];
   skuGroups: TaobaoProductSkuGroup[];
   skuMatrix: TaobaoProductSkuMatrixItem[];
   salesText: string;
   deliveryText: string;
   collectedAt: number;
+}
+
+export interface CollectedProductListing extends Omit<TaobaoProductSnapshot, 'url'> {
+  id: string;
+  sourceUrl: string;
+  missingFields: string[];
+  updatedAt: number;
+}
+
+export interface CreateProductListingCollectionSessionInput {
+  url: string;
+}
+
+export type ProductListingCollectionSessionStatus =
+  | 'created'
+  | 'queued'
+  | 'opened'
+  | 'page-ready'
+  | 'waiting-user-verification'
+  | 'completed'
+  | 'failed';
+
+export interface ProductListingCollectionSession {
+  id: string;
+  url: string;
+  status: ProductListingCollectionSessionStatus;
+  createdAt: number;
+  updatedAt: number;
+  expiresAt: number;
+  tabId?: number;
+  listingId?: string;
+  lastError?: string;
+  challenge?: TaobaoSecurityChallengeSnapshot;
 }
 
 export interface PurchaseLookupSession {

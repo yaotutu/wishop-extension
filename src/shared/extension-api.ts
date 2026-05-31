@@ -1,7 +1,9 @@
 import type {
   Account,
   BlacklistRule,
+  CollectedProductListing,
   Config,
+  CreateProductListingCollectionSessionInput,
   CreateShippingSessionInput,
   DeliveryCompanyOption,
   DraftProduct,
@@ -26,6 +28,7 @@ import type {
   ProductSourceBinding,
   ProductSourceItem,
   ProductQrcodeResult,
+  ProductListingCollectionSession,
   PurchaseLookupSession,
   QuotaResult,
   ScheduledJob,
@@ -39,6 +42,7 @@ import type {
   TaobaoRefundSession,
   TaobaoSecurityChallengeSnapshot,
   TaobaoPurchaseOrderSnapshot,
+  TaobaoProductSnapshot,
   TaskConfig,
   TaskCycleResult,
   ViolationMatch,
@@ -183,6 +187,32 @@ export const extensionApi = {
   },
   products: {
     getQrcode: (accountId: string, productId: string): Promise<ProductQrcodeResult> => invoke('products:getQrcode', accountId, productId),
+  },
+  productListingCollection: {
+    list: (): Promise<CollectedProductListing[]> => invoke('productListingCollection:list'),
+    remove: (listingId: string): Promise<void> => invoke('productListingCollection:remove', listingId),
+    open: (input: CreateProductListingCollectionSessionInput): Promise<ProductListingCollectionSession> =>
+      invoke('productListingCollection:open', input),
+    getCurrentTabSession: (): Promise<ProductListingCollectionSession | null> =>
+      invoke('productListingCollection:getCurrentTabSession'),
+    markPageReady: (sessionId: string): Promise<ProductListingCollectionSession> =>
+      invoke('productListingCollection:markPageReady', sessionId),
+    reportChallenge: (
+      sessionId: string,
+      snapshot: TaobaoSecurityChallengeSnapshot,
+    ): Promise<ProductListingCollectionSession> => invoke('productListingCollection:reportChallenge', sessionId, snapshot),
+    resolveChallenge: (sessionId: string): Promise<ProductListingCollectionSession> =>
+      invoke('productListingCollection:resolveChallenge', sessionId),
+    complete: (sessionId: string, snapshot: TaobaoProductSnapshot): Promise<CollectedProductListing> =>
+      invoke('productListingCollection:complete', sessionId, snapshot),
+    fail: (sessionId: string, error: string): Promise<ProductListingCollectionSession> =>
+      invoke('productListingCollection:fail', sessionId, error),
+    onCompleted: (callback: (listing: CollectedProductListing) => void) =>
+      onRuntimeEvent('productListingCollection:completed', callback),
+    onFailed: (callback: (payload: { url: string; error: string }) => void) =>
+      onRuntimeEvent('productListingCollection:failed', callback),
+    onChallenge: (callback: (payload: { url: string; reason: string }) => void) =>
+      onRuntimeEvent('productListingCollection:challenge', callback),
   },
   shipping: {
     open: (input: CreateShippingSessionInput): Promise<ShippingSession> => invoke('shipping:open', input),

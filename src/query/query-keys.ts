@@ -42,6 +42,9 @@ export const queryKeys = {
   productSources: {
     list: (accountId: string) => ['productSources', accountId] as const,
   },
+  productListingCollection: {
+    list: ['productListingCollection', 'list'] as const,
+  },
   orderAssociations: {
     list: (accountId: string) => ['orderAssociations', accountId] as const,
   },
