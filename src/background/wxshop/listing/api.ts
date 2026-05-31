@@ -55,6 +55,31 @@ export function createWxShopListingClient(accountId: string): WxShopListingClien
     };
   }
 
+  async function getProductQrcode(productId: string) {
+    const path = '/channels/ec/product/qrcode/get';
+    const stage = '获取商品二维码';
+    // 官方接口要求在服务端调用，并且只支持上架销售中的小店自营商品。
+    // 这里保持最小请求体，避免把企业微信归因参数误带到普通商家查看场景里。
+    const data = await wxshop.request<any>(path, {
+      product_id: productId,
+      qrcode_type: 1,
+    }, stage);
+
+    if (data.errcode && data.errcode !== 0) {
+      wxshop.throwWxApiError(path, stage, data);
+    }
+
+    const qrcodeUrl = typeof data.product_qrcode === 'string' ? data.product_qrcode.trim() : '';
+    if (!qrcodeUrl) {
+      throw new Error(`商品 ${productId} 二维码链接为空`);
+    }
+
+    return {
+      productId,
+      qrcodeUrl,
+    };
+  }
+
   async function listProduct(productId: string): Promise<ListingResult> {
     return wxshop.request<ListingResult>('/channels/ec/product/listing', { product_id: productId }, '提交商品提审');
   }
@@ -85,6 +110,7 @@ export function createWxShopListingClient(accountId: string): WxShopListingClien
   return {
     getDraftProducts,
     getProductDetail,
+    getProductQrcode,
     listProduct,
     getAuditQuota,
     deleteProduct,

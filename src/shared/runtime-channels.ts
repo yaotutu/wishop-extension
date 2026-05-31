@@ -28,6 +28,7 @@ import type {
   CreateTaobaoRefundSessionInput,
   ProductSourceBinding,
   ProductSourceItem,
+  ProductQrcodeResult,
   PurchaseLookupSession,
   QuotaResult,
   ScheduledJob,
@@ -106,6 +107,7 @@ export interface RuntimeChannels {
   'productSources:list': { args: [accountId: string]; result: ProductSourceBinding[] };
   'productSources:set': { args: [accountId: string, productId: string, sources: ProductSourceItem[]]; result: ProductSourceBinding };
   'productSources:remove': { args: [accountId: string, productId: string, sourceId: string]; result: ProductSourceBinding };
+  'products:getQrcode': { args: [accountId: string, productId: string]; result: ProductQrcodeResult };
 
   'shipping:open': { args: [input: CreateShippingSessionInput]; result: ShippingSession };
   'shipping:getCurrentTabSession': { args: []; result: ShippingSession | null };

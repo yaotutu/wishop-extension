@@ -36,6 +36,7 @@ export {
   useOrderSyncStateQuery,
   useOrdersQuery,
   useProductSourcesQuery,
+  useProductQrcodeMutation,
   useRealAddressCachesQuery,
   useRefreshOrdersMutation,
   useSaveOrderAssociationMutation,

@@ -7,6 +7,7 @@ import { createOrderRuntimeHandlers } from '../runtime-handlers/order-handlers';
 import { createOrderAssociationRuntimeHandlers } from '../runtime-handlers/order-association-handlers';
 import { createPurchaseLookupRuntimeHandlers } from '../runtime-handlers/purchase-lookup-handlers';
 import { createRealAddressRuntimeHandlers } from '../runtime-handlers/real-address-handlers';
+import { createProductRuntimeHandlers } from '../runtime-handlers/product-handlers';
 import { createProductSourceRuntimeHandlers } from '../runtime-handlers/product-source-handlers';
 import { createQuotaRuntimeHandlers } from '../runtime-handlers/quota-handlers';
 import { createRuleRuntimeHandlers } from '../runtime-handlers/rule-handlers';
@@ -66,6 +67,7 @@ const FEATURE_CHANNELS = {
   'productSources:list': 'orders',
   'productSources:set': 'orders',
   'productSources:remove': 'orders',
+  'products:getQrcode': 'orders',
   'drafts:fetch': 'listing',
   'drafts:list': 'listing',
   'quota:get': 'listing',
@@ -146,6 +148,7 @@ export function createBackgroundRouter(options: CreateBackgroundRouterOptions): 
       fetchDrafts,
       listDraft,
     }),
+    ...createProductRuntimeHandlers(),
     ...createProductSourceRuntimeHandlers(),
     ...createShippingRuntimeHandlers(options.getCurrentTabShippingSession),
     ...createTaobaoWorkspaceRuntimeHandlers(),

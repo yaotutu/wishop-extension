@@ -1,6 +1,6 @@
-import type { DraftProduct, QuotaResult } from '../../../shared/types';
+import type { DraftProduct, ProductQrcodeResult, QuotaResult } from '../../../shared/types';
 
-export type { DraftProduct, QuotaResult };
+export type { DraftProduct, ProductQrcodeResult, QuotaResult };
 
 export interface ProductListResult {
   productIds: string[];
@@ -16,6 +16,7 @@ export interface ListingResult {
 export interface WxShopListingClient {
   getDraftProducts(pageSize?: number, nextKey?: string): Promise<ProductListResult>;
   getProductDetail(productId: string): Promise<DraftProduct>;
+  getProductQrcode(productId: string): Promise<ProductQrcodeResult>;
   listProduct(productId: string): Promise<ListingResult>;
   getAuditQuota(): Promise<QuotaResult>;
   deleteProduct(productId: string): Promise<ListingResult>;

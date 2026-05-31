@@ -8,6 +8,7 @@ import {
   useOrderSyncStateQuery,
   useOrdersQuery,
   useProductSourcesQuery,
+  useProductQrcodeMutation,
   useRealAddressCachesQuery,
   useRefreshOrdersMutation,
   useSaveOrderAssociationMutation,
@@ -18,11 +19,12 @@ import {
 import { extensionApi } from '../../shared/extension-api';
 import { latestOrderSyncFinishedAt } from '../../shared/order-sync-state';
 import { OrderStatus as OrderStatusEnum } from '../../shared/types';
-import type { Account, DeliveryCompanyOption, Order, OrderScope, OrderSearchSource, OrderStatus, OrderProductInfo, OrderSearchParams, OrderRealAddressCache, OrderAssociation, ProductSourceItem, OrderTimeScope, TaobaoRefundSession } from '../../shared/types';
+import type { Account, DeliveryCompanyOption, Order, OrderScope, OrderSearchSource, OrderStatus, OrderProductInfo, OrderSearchParams, OrderRealAddressCache, OrderAssociation, ProductQrcodeResult, ProductSourceItem, OrderTimeScope, TaobaoRefundSession } from '../../shared/types';
 import { getDeliveryCompanyUnmatchedMessage, isDeliveryCompanyUnmatchedError } from '../../shared/errors';
 import { formatOrderAddressForCopy } from '../../shared/address-format';
 import { newProductSourceRow, ShippingSourceModal, SourceManagementModal } from './components/ProductSourceModals';
 import { OrderDetailModal } from './components/OrderDetailModal';
+import { ProductQrcodeModal } from './components/ProductQrcodeModal';
 import { createOrderColumns, type OrderTableRecord } from './components/OrderTableColumns';
 import { OrderToolbar, type OrderStatusFilterValue } from './components/OrderToolbar';
 import { OrderAssociationModal } from './components/OrderAssociationModal';
@@ -82,6 +84,9 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
   const [sourceAccountId, setSourceAccountId] = useState('');
   const [sourceProduct, setSourceProduct] = useState<OrderProductInfo | null>(null);
   const [sourceRows, setSourceRows] = useState<ProductSourceItem[]>([]);
+  const [qrcodeModalOpen, setQrcodeModalOpen] = useState(false);
+  const [qrcodeProduct, setQrcodeProduct] = useState<OrderProductInfo | null>(null);
+  const [qrcodeResult, setQrcodeResult] = useState<ProductQrcodeResult | null>(null);
   const [shipSourceModalOpen, setShipSourceModalOpen] = useState(false);
   const [shipSourceOrder, setShipSourceOrder] = useState<OrderTableRecord | null>(null);
   const [shipSourceProduct, setShipSourceProduct] = useState<OrderProductInfo | null>(null);
@@ -107,6 +112,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
   const refetchOrderAssociations = orderAssociationsQuery.refetch;
   const realAddressCachesQuery = useRealAddressCachesQuery(accountIds);
   const saveProductSourcesMutation = useSaveProductSourcesMutation();
+  const productQrcodeMutation = useProductQrcodeMutation();
   const saveOrderAssociationMutation = useSaveOrderAssociationMutation();
   const shipOrderFromPurchaseMutation = useShipOrderFromPurchaseMutation();
   const fetchRealAddressMutation = useFetchRealAddressMutation();
@@ -398,6 +404,26 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
       message.warning('图片复制受限，已复制图片链接');
     }
   }, []);
+
+  const openProductQrcode = useCallback(async (order: OrderTableRecord, product: OrderProductInfo) => {
+    const productId = product.product_id?.trim();
+    if (!productId) {
+      message.warning('暂无商品ID，无法获取商品二维码');
+      return;
+    }
+
+    setQrcodeProduct(product);
+    setQrcodeResult(null);
+    setQrcodeModalOpen(true);
+    try {
+      // 二维码只用于当前人工查看场景，按点击即时获取，避免展示已下架商品的旧二维码。
+      const result = await productQrcodeMutation.mutateAsync({ accountId: order.accountId, productId });
+      setQrcodeResult(result);
+    } catch (err: any) {
+      message.error(`获取商品二维码失败: ${err.message}`);
+      setQrcodeModalOpen(false);
+    }
+  }, [productQrcodeMutation]);
 
   const openSourceManager = useCallback((order: OrderTableRecord, product: OrderProductInfo) => {
     setSourceAccountId(order.accountId);
@@ -710,6 +736,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
     preparingTaobaoRefundOrderIds,
     onCopyText: handleCopyText,
     onCopyImage: handleCopyImage,
+    onOpenProductQrcode: openProductQrcode,
     onCopyAddress: handleCopyAddress,
     onDecodeAddress: handleDecodeAddress,
     onRefreshAddress: handleRefreshAddress,
@@ -731,6 +758,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
     preparingTaobaoRefundOrderIds,
     handleCopyText,
     handleCopyImage,
+    openProductQrcode,
     handleCopyAddress,
     handleDecodeAddress,
     handleRefreshAddress,
@@ -858,6 +886,16 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
         onRowsChange={setSourceRows}
         onCancel={() => setSourceModalOpen(false)}
         onSave={handleSaveSources}
+      />
+
+      <ProductQrcodeModal
+        open={qrcodeModalOpen}
+        loading={productQrcodeMutation.isPending}
+        product={qrcodeProduct}
+        qrcode={qrcodeResult}
+        onCancel={() => setQrcodeModalOpen(false)}
+        onCopyLink={(url) => handleCopyText(url, '二维码链接')}
+        onCopyImage={handleCopyImage}
       />
 
       <ShippingSourceModal

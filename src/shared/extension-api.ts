@@ -25,6 +25,7 @@ import type {
   CreateTaobaoRefundSessionInput,
   ProductSourceBinding,
   ProductSourceItem,
+  ProductQrcodeResult,
   PurchaseLookupSession,
   QuotaResult,
   ScheduledJob,
@@ -179,6 +180,9 @@ export const extensionApi = {
     list: (accountId: string): Promise<ProductSourceBinding[]> => invoke('productSources:list', accountId),
     set: (accountId: string, productId: string, sources: ProductSourceItem[]): Promise<ProductSourceBinding> => invoke('productSources:set', accountId, productId, sources),
     remove: (accountId: string, productId: string, sourceId: string): Promise<ProductSourceBinding> => invoke('productSources:remove', accountId, productId, sourceId),
+  },
+  products: {
+    getQrcode: (accountId: string, productId: string): Promise<ProductQrcodeResult> => invoke('products:getQrcode', accountId, productId),
   },
   shipping: {
     open: (input: CreateShippingSessionInput): Promise<ShippingSession> => invoke('shipping:open', input),

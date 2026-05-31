@@ -166,6 +166,11 @@ export interface ProductSourceBinding {
   sources: ProductSourceItem[];
 }
 
+export interface ProductQrcodeResult {
+  productId: string;
+  qrcodeUrl: string;
+}
+
 export type LinkedOrderPlatform = 'taobao' | 'tmall' | '1688' | 'manual';
 export type PurchaseShipmentCheckStatus = 'queued' | 'running' | 'waiting_user' | 'completed' | 'failed' | 'skipped';
 
