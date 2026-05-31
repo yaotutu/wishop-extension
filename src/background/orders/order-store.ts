@@ -10,6 +10,7 @@ import type {
   StoredOrderSnapshot,
   StoredOrderSource,
 } from '../../shared/types';
+import { orderHasAftersaleSignal } from '../../shared/order-aftersale.ts';
 import { extensionDb, type OrderRecord } from '../db/extension-db.ts';
 import { markAccountDirty } from '../store/account-sync-state-repository.ts';
 import { updateAccountWorkspace } from '../store/workspace-repository.ts';
@@ -305,6 +306,7 @@ function minCreateTime(filters: OrderListFilters): number | null {
 
 function matchesFilters(snapshot: StoredOrderSnapshot, filters: OrderListFilters): boolean {
   if (filters.status !== undefined && snapshot.order.status !== filters.status) return false;
+  if (filters.aftersaleOnly && !snapshot.order.aftersale_summary?.hasAftersale && !orderHasAftersaleSignal(snapshot.order)) return false;
   const minTime = minCreateTime(filters);
   if (minTime !== null && snapshot.order.create_time < minTime) return false;
   if (filters.search?.keyword?.trim() && !orderMatchesSearch(snapshot.order, snapshot.indexedText, filters.search)) return false;

@@ -33,13 +33,14 @@ export function useOrdersQuery(
   search?: OrderSearchParams | null,
   timeScope: OrderTimeScope = 'all',
   searchSource: OrderSearchSource = 'local',
+  aftersaleOnly = false,
 ) {
   const reportError = useReportQueryError();
   const queryKey = useMemo(
     () => search?.keyword?.trim()
       ? queryKeys.orders.search(scope, search, searchSource)
-      : queryKeys.orders.list(scope, status, search, timeScope),
-    [scope, search, searchSource, status, timeScope],
+      : queryKeys.orders.list(scope, status, search, timeScope, aftersaleOnly),
+    [aftersaleOnly, scope, search, searchSource, status, timeScope],
   );
   const query = useInfiniteQuery({
     queryKey,
@@ -54,6 +55,7 @@ export function useOrdersQuery(
           timeScope,
           pageSize: 50,
           cursor: pageParam,
+          aftersaleOnly,
         });
       } catch (error) {
         reportError(error);

@@ -120,6 +120,50 @@ test('filters by account, status, time scope, and local indexed text', async () 
   assert.deepEqual(search.orders.map(item => item.orderId), ['pending']);
 });
 
+test('filters aftersale orders from local order snapshots', async () => {
+  const store = createOrderStore(createMemoryStorage());
+  await store.upsertMany('account-1', '店铺一', [
+    makeOrder('normal'),
+    makeOrder('active-aftersale', {
+      aftersale_detail: {
+        on_aftersale_order_cnt: 1,
+        aftersale_order_list: [{ aftersale_order_id: 'after-1' }],
+      },
+    }),
+    makeOrder('finished-aftersale', {
+      order_detail: {
+        ...makeOrder('finished-aftersale').order_detail,
+        product_infos: [{
+          ...makeOrder('finished-aftersale').order_detail.product_infos[0],
+          finish_aftersale_sku_cnt: 1,
+        }],
+      },
+    }),
+    makeOrder('summary-aftersale', {
+      aftersale_summary: {
+        hasAftersale: true,
+        status: 'MERCHANT_RETURN_SUCCESS',
+        statusText: '退货退款完成',
+        onAftersaleOrderCount: 0,
+        onAftersaleSkuCount: 0,
+        finishAftersaleSkuCount: 1,
+        items: [],
+      },
+    }),
+  ], 'autoSync');
+
+  const result = await store.list(
+    { type: 'account', accountId: 'account-1' },
+    { aftersaleOnly: true },
+  );
+
+  assert.deepEqual(result.orders.map(item => item.orderId), [
+    'active-aftersale',
+    'finished-aftersale',
+    'summary-aftersale',
+  ]);
+});
+
 test('keeps only the newest orders per account', async () => {
   const store = createOrderStore(createMemoryStorage(), { maxOrdersPerAccount: 2 });
 

@@ -24,7 +24,7 @@ import { formatOrderAddressForCopy } from '../../shared/address-format';
 import { newProductSourceRow, ShippingSourceModal, SourceManagementModal } from './components/ProductSourceModals';
 import { OrderDetailModal } from './components/OrderDetailModal';
 import { createOrderColumns, type OrderTableRecord } from './components/OrderTableColumns';
-import { OrderToolbar } from './components/OrderToolbar';
+import { OrderToolbar, type OrderStatusFilterValue } from './components/OrderToolbar';
 import { OrderAssociationModal } from './components/OrderAssociationModal';
 import { getEstimatedCommissionFee } from './order-display';
 import { hasLinkedPurchaseLogistics, isLinkedPurchaseRefundFinished } from './purchase-refund';
@@ -65,7 +65,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
     [accounts, scope],
   );
   const accountIdSet = useMemo(() => new Set(accountIds), [accountIds]);
-  const [activeStatus, setActiveStatus] = useState<OrderStatus | undefined>(DEFAULT_ORDER_STATUS);
+  const [activeStatus, setActiveStatus] = useState<OrderStatusFilterValue>(DEFAULT_ORDER_STATUS);
   const [timeScope, setTimeScope] = useState<OrderTimeScope>('all');
   const [searchType, setSearchType] = useState<OrderSearchParams['search_type']>('order_id');
   const [searchSource, setSearchSource] = useState<OrderSearchSource>('local');
@@ -93,7 +93,9 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
   const initialRefreshStartedRef = useRef<Set<string>>(new Set());
   const observedSyncFinishedAtRef = useRef(0);
   const [scrollY, setScrollY] = useState(400);
-  const ordersQuery = useOrdersQuery(scope, activeStatus, activeSearch, timeScope, searchSource);
+  const isAftersaleModule = activeStatus === 'aftersales';
+  const orderStatus = isAftersaleModule ? undefined : activeStatus;
+  const ordersQuery = useOrdersQuery(scope, orderStatus, activeSearch, timeScope, searchSource, isAftersaleModule);
   const syncStateQuery = useOrderSyncStateQuery(scope);
   const latestSyncFinishedAt = latestOrderSyncFinishedAt(syncStateQuery.data);
   const autoSyncJobQuery = useOrderAutoSyncJobQuery();
@@ -304,7 +306,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
 
   const handleStatusChange = useCallback((val: string | number | null) => {
     if (val === null) return;
-    const status = val === 'all' ? undefined : val as OrderStatus;
+    const status = val === 'all' ? undefined : val === 'aftersales' ? 'aftersales' : val as OrderStatus;
     setActiveStatus(status);
     setSearchKeyword('');
     setActiveSearch(null);

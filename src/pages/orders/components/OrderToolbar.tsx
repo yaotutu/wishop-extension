@@ -6,6 +6,7 @@ import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
 import { orderSyncCountdownText } from '../order-sync-countdown';
 
 const { Text } = Typography;
+export type OrderStatusFilterValue = OrderStatus | 'aftersales' | undefined;
 
 export const STATUS_FILTER_OPTIONS = [
   { label: '全部', value: 'all' },
@@ -13,6 +14,7 @@ export const STATUS_FILTER_OPTIONS = [
   { label: '待发货', value: OrderStatusEnum.PendingShipment },
   { label: '待收货', value: OrderStatusEnum.PendingReceipt },
   { label: '已完成', value: OrderStatusEnum.Completed },
+  { label: '退货售后', value: 'aftersales' },
 ];
 
 export const SEARCH_TYPE_OPTIONS = [
@@ -31,7 +33,7 @@ export const TIME_SCOPE_OPTIONS: { value: OrderTimeScope; label: string }[] = [
 ];
 
 interface Props {
-  activeStatus: OrderStatus | undefined;
+  activeStatus: OrderStatusFilterValue;
   timeScope: OrderTimeScope;
   searchActive: boolean;
   searchType: OrderSearchParams['search_type'];

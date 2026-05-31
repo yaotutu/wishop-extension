@@ -18,12 +18,13 @@ export const queryKeys = {
     list: (accountId: string) => ['drafts', accountId] as const,
   },
   orders: {
-    list: (scope: OrderScope, status?: OrderStatus, search?: OrderSearchParams | null, timeScope?: OrderTimeScope) => [
+    list: (scope: OrderScope, status?: OrderStatus, search?: OrderSearchParams | null, timeScope?: OrderTimeScope, aftersaleOnly = false) => [
       'orders',
       'list',
       ...orderScopeKey(scope),
       status ?? 'all',
       timeScope ?? 'all',
+      aftersaleOnly ? 'aftersale' : 'orders',
       search?.search_type ?? '',
       search?.keyword ?? '',
     ] as const,

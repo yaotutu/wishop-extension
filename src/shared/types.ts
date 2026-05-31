@@ -621,6 +621,7 @@ export interface StoredOrderSnapshot {
 
 export interface OrderListFilters {
   status?: OrderStatus;
+  aftersaleOnly?: boolean;
   search?: OrderSearchParams | null;
   timeScope?: OrderTimeScope;
   pageSize?: number;
