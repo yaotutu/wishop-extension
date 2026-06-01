@@ -83,6 +83,14 @@ function statusTags(listing: CollectedProductListing): React.ReactNode {
   );
 }
 
+function sourceCategoryText(listing?: Pick<CollectedProductListing, 'sourceCategory'> | null): string {
+  const category = listing?.sourceCategory;
+  if (!category) return '-';
+  return category.path?.join(' / ')
+    || category.name
+    || (category.id ? `类目ID ${category.id}` : '-');
+}
+
 interface ProductListingPageProps {
   accounts: Account[];
   activeAccountId: string;
@@ -504,9 +512,7 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
                 { label: '店铺', children: previewListing.shopName || '-' },
                 {
                   label: '原类目',
-                  children: previewListing.sourceCategory?.path?.join(' / ')
-                    || previewListing.sourceCategory?.name
-                    || '-',
+                  children: sourceCategoryText(previewListing),
                 },
                 { label: '价格', children: previewListing.priceRangeText || '-' },
                 { label: '销量', children: previewListing.salesText || '-' },
@@ -584,6 +590,14 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
                 ]}
               />
             </div>
+            <div>
+              <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>采集原始数据</h3>
+              <Input.TextArea
+                readOnly
+                value={JSON.stringify(previewListing, null, 2)}
+                autoSize={{ minRows: 10, maxRows: 24 }}
+              />
+            </div>
           </Space>
         )}
       </Drawer>
@@ -653,9 +667,9 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
             items={[
               {
                 label: '原商品类目',
-                children: draftModalListing?.sourceCategory?.path?.join(' / ')
-                  || draftModalListing?.sourceCategory?.name
-                  || '采集结果未识别到类目名称',
+                children: sourceCategoryText(draftModalListing) === '-'
+                  ? '采集结果未识别到类目名称'
+                  : sourceCategoryText(draftModalListing),
               },
             ]}
           />

@@ -105,8 +105,6 @@ test('maps Taobao ICE page model to a complete listing collection snapshot', () 
   assert.equal(snapshot.title, pageModel.item.title);
   assert.deepEqual(snapshot.sourceCategory, {
     id: '50024407',
-    name: '电子书配件',
-    path: ['数码', '电子教育', '电子书配件'],
   });
   assert.equal(snapshot.shopName, '百鸿胜数码电器');
   assert.equal(snapshot.seller.sellerId, 'seller-1');
@@ -154,6 +152,83 @@ test('sanitizes Taobao page model before content script sends it to background',
   assert.doesNotMatch(serialized, /privateAddressList/);
   assert.doesNotMatch(serialized, /should-not-be-persisted/);
   assert.equal(Object.prototype.hasOwnProperty.call(sanitized as Record<string, unknown>, 'services'), false);
+});
+
+test('ignores Taobao category name text and keeps only the category id from page model', () => {
+  const snapshot = buildTaobaoProductSnapshotFromPageModel({
+    pageModel: {
+      item: {
+        itemId: '860484438535',
+        title: '测试商品',
+        categoryId: '50013886',
+        categoryName: '进店',
+      },
+      componentsVO: {
+        categoryVO: {
+          name: '进店',
+          path: ['店铺', '进店'],
+        },
+      },
+    },
+    url: 'https://item.taobao.com/item.htm?id=860484438535',
+    detailImages: [],
+    collectedAt: 1700000000000,
+  });
+
+  assert.deepEqual(snapshot.sourceCategory, {
+    id: '50013886',
+  });
+});
+
+test('reads Taobao category aliases from page model when official field names vary', () => {
+  const snapshot = buildTaobaoProductSnapshotFromPageModel({
+    pageModel: {
+      item: {
+        itemId: '860484438535',
+        title: '测试商品',
+        leafCatId: '123456',
+        leafCatName: '工业内窥镜',
+        catPaths: ['工业品', '仪器仪表', '工业内窥镜'],
+      },
+    },
+    url: 'https://item.taobao.com/item.htm?id=860484438535',
+    detailImages: [],
+    collectedAt: 1700000000000,
+  });
+
+  assert.deepEqual(snapshot.sourceCategory, {
+    id: '123456',
+  });
+});
+
+test('reads Taobao 2025 detail category id from log params when category name is absent', () => {
+  const snapshot = buildTaobaoProductSnapshotFromPageModel({
+    pageModel: {
+      item: {
+        itemId: '860484438535',
+        title: '测试商品',
+      },
+      plusViewVO: {
+        leftButtonStyleVO: {
+          logParams: {
+            catId: '50013886',
+          },
+        },
+      },
+      pcTrade: {
+        pcBuyParams: {
+          rootCatId: '50013886',
+        },
+      },
+    },
+    url: 'https://item.taobao.com/item.htm?id=860484438535',
+    detailImages: [],
+    collectedAt: 1700000000000,
+  });
+
+  assert.deepEqual(snapshot.sourceCategory, {
+    id: '50013886',
+  });
 });
 
 test('normalizes Taobao cropped image urls before rendering previews', () => {

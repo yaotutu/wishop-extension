@@ -52,12 +52,28 @@ function readProductPageModel(): unknown {
   const plusViewVO = isRecord(res.plusViewVO) ? res.plusViewVO : {};
   const skuCore = isRecord(res.skuCore) ? res.skuCore : {};
   const componentsVO = isRecord(res.componentsVO) ? res.componentsVO : {};
+  const leftButtonStyleVO = isRecord(plusViewVO.leftButtonStyleVO) ? plusViewVO.leftButtonStyleVO : {};
+  const logParams = isRecord(leftButtonStyleVO.logParams) ? leftButtonStyleVO.logParams : {};
+  const pcTrade = isRecord(res.pcTrade) ? res.pcTrade : {};
+  const pcBuyParams = isRecord(pcTrade.pcBuyParams) ? pcTrade.pcBuyParams : {};
   return sanitizeModelValue({
     seller: res.seller,
     item: res.item,
-    plusViewVO: { industryParamVO: plusViewVO.industryParamVO },
+    plusViewVO: {
+      industryParamVO: plusViewVO.industryParamVO,
+      leftButtonStyleVO: {
+        logParams: {
+          catId: logParams.catId,
+        },
+      },
+    },
     skuBase: res.skuBase,
     skuCore: { sku2info: skuCore.sku2info },
+    pcTrade: {
+      pcBuyParams: {
+        rootCatId: pcBuyParams.rootCatId,
+      },
+    },
     componentsVO: {
       headImageVO: componentsVO.headImageVO,
       titleVO: componentsVO.titleVO,

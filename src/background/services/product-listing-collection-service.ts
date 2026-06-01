@@ -20,6 +20,7 @@ import {
   saveCollectedProductListing,
 } from '../store/collected-product-listing-repository.ts';
 import { activateTaobaoWorkTab, openTaobaoWorkTab } from '../taobao-workspace/work-tab-service.ts';
+import { enrichTaobaoProductSnapshotWithItemcat } from './taobao-itemcat-lookup.ts';
 
 const SESSION_TTL_MS = 30 * 60 * 1000;
 const sessions = new Map<string, ProductListingCollectionSession>();
@@ -272,7 +273,8 @@ export async function completeProductListingCollectionSession(
 ): Promise<CollectedProductListing> {
   const session = getFreshSession(sessionId);
   if (!session) throw new Error('商品采集会话已过期，请重新采集');
-  const listing = await saveCollectedProductListing(toCollectedListing(snapshot));
+  const enrichedSnapshot = await enrichTaobaoProductSnapshotWithItemcat(snapshot);
+  const listing = await saveCollectedProductListing(toCollectedListing(enrichedSnapshot));
   const next = {
     ...session,
     status: 'completed' as const,
