@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  DEFAULT_AI_LISTING_SETTINGS,
   DEFAULT_SHIPMENT_CHECK_SETTINGS,
   normalizeAppSettings,
+  normalizeAiListingSettings,
   normalizeShipmentCheckSettings,
 } from '../src/shared/settings.ts';
 
@@ -48,6 +50,30 @@ test('app settings normalize nested shipment check settings', () => {
   assert.equal(settings.shipmentCheck.enabled, false);
   assert.equal(settings.shipmentCheck.windowMinutes, 15);
   assert.equal(settings.shipmentCheck.maxChecksPerAccountPerWindow, 3);
+});
+
+test('AI listing settings keep SiliconFlow credentials local and normalize optional defaults', () => {
+  const settings = normalizeAiListingSettings({
+    siliconFlowApiKey: '  sk-test-123  ',
+    siliconFlowModel: '  Qwen/QwQ-32B  ',
+    defaultExpressTemplateId: '  47428464001  ',
+  });
+
+  assert.equal(settings.siliconFlowApiKey, 'sk-test-123');
+  assert.equal(settings.siliconFlowModel, 'Qwen/QwQ-32B');
+  assert.equal(settings.defaultExpressTemplateId, '47428464001');
+});
+
+test('AI listing settings fall back to a documented SiliconFlow chat model when model is empty', () => {
+  const settings = normalizeAppSettings({
+    aiListing: {
+      siliconFlowApiKey: '',
+      siliconFlowModel: '',
+      defaultExpressTemplateId: '',
+    },
+  });
+
+  assert.deepEqual(settings.aiListing, DEFAULT_AI_LISTING_SETTINGS);
 });
 
 test('shipment check dispatch delay stays inside the configured window', () => {

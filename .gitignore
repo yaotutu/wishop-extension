@@ -16,6 +16,9 @@ stats-*.json
 wxt-chrome-data
 web-ext.config.ts
 
+# One-off Taobao browser dumps can contain personalized page payloads.
+data/taobao-home-categories/taobao-home-raw.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

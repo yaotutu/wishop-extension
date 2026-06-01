@@ -104,7 +104,7 @@ export function useOrderAutoSyncJobQuery() {
 
 export function useAppSettingsQuery() {
   return useQuery({
-    queryKey: ['appSettings'],
+    queryKey: queryKeys.appSettings.item,
     queryFn: () => extensionApi.settings.get(),
   });
 }
@@ -114,7 +114,7 @@ export function useUpdateAppSettingsMutation() {
   return useMutation({
     mutationFn: extensionApi.settings.update,
     onSuccess: (settings) => {
-      queryClient.setQueryData(['appSettings'], settings);
+      queryClient.setQueryData(queryKeys.appSettings.item, settings);
     },
   });
 }

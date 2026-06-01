@@ -232,7 +232,7 @@ const Layout: React.FC = () => {
               )}
               {activeModule === 'productListing' && (
                 <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                  <ProductListingPage />
+                  <ProductListingPage accounts={accounts} activeAccountId={activeAccountId} />
                 </div>
               )}
               {activeModule === 'settings' && (

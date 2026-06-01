@@ -7,6 +7,9 @@ import type {
   CollectedProductListing,
   Config,
   CreateProductListingCollectionSessionInput,
+  CreateWxProductDraftPrepareInput,
+  CreateWxProductDraftSuggestionInput,
+  CreateWxProductDraftInput,
   CreateShippingSessionInput,
   DeliveryCompanyOption,
   DraftProduct,
@@ -50,6 +53,10 @@ import type {
   TaskCycleResult,
   ViolationMatch,
   ViolationScanResult,
+  SubmitPreparedWxProductDraftInput,
+  WxProductDraftPrepareResult,
+  WxProductDraftSuggestionResult,
+  WxProductDraftCreationResult,
 } from './types';
 
 export interface RuntimeChannels {
@@ -122,6 +129,10 @@ export interface RuntimeChannels {
   'productListingCollection:resolveChallenge': { args: [sessionId: string]; result: ProductListingCollectionSession };
   'productListingCollection:complete': { args: [sessionId: string, snapshot: TaobaoProductSnapshot]; result: CollectedProductListing };
   'productListingCollection:fail': { args: [sessionId: string, error: string]; result: ProductListingCollectionSession };
+  'productListingCollection:suggestWxDraft': { args: [input: CreateWxProductDraftSuggestionInput]; result: WxProductDraftSuggestionResult };
+  'productListingCollection:prepareWxDraft': { args: [input: CreateWxProductDraftPrepareInput]; result: WxProductDraftPrepareResult };
+  'productListingCollection:submitPreparedWxDraft': { args: [input: SubmitPreparedWxProductDraftInput]; result: WxProductDraftCreationResult };
+  'productListingCollection:createWxDraft': { args: [input: CreateWxProductDraftInput]; result: WxProductDraftCreationResult };
 
   'shipping:open': { args: [input: CreateShippingSessionInput]; result: ShippingSession };
   'shipping:getCurrentTabSession': { args: []; result: ShippingSession | null };

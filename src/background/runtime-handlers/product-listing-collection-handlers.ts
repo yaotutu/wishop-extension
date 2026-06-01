@@ -1,5 +1,9 @@
 import type {
   CreateProductListingCollectionSessionInput,
+  CreateWxProductDraftPrepareInput,
+  CreateWxProductDraftSuggestionInput,
+  CreateWxProductDraftInput,
+  SubmitPreparedWxProductDraftInput,
   TaobaoProductSnapshot,
   TaobaoSecurityChallengeSnapshot,
 } from '../../shared/types.ts';
@@ -13,6 +17,12 @@ import {
   resolveProductListingCollectionChallenge,
   updateProductListingCollectionSessionStatus,
 } from '../services/product-listing-collection-service.ts';
+import { createWxProductDraftSuggestion } from '../services/product-listing-ai-draft-service.ts';
+import {
+  createWxProductDraftFromCollectedListing,
+  prepareWxProductDraftFromCollectedListing,
+  submitPreparedWxProductDraft,
+} from '../services/product-listing-wx-draft-service.ts';
 
 type GetCurrentTabSession = (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
 
@@ -46,6 +56,18 @@ export function createProductListingCollectionRuntimeHandlers(
     },
     async 'productListingCollection:fail'(args) {
       return failProductListingCollectionSession(args[0] as string, args[1] as string);
+    },
+    async 'productListingCollection:suggestWxDraft'(args) {
+      return createWxProductDraftSuggestion(args[0] as CreateWxProductDraftSuggestionInput);
+    },
+    async 'productListingCollection:prepareWxDraft'(args) {
+      return prepareWxProductDraftFromCollectedListing(args[0] as CreateWxProductDraftPrepareInput);
+    },
+    async 'productListingCollection:submitPreparedWxDraft'(args) {
+      return submitPreparedWxProductDraft(args[0] as SubmitPreparedWxProductDraftInput);
+    },
+    async 'productListingCollection:createWxDraft'(args) {
+      return createWxProductDraftFromCollectedListing(args[0] as CreateWxProductDraftInput);
     },
   };
 }

@@ -63,6 +63,8 @@ function readProductPageModel(): unknown {
       titleVO: componentsVO.titleVO,
       deliveryVO: componentsVO.deliveryVO,
       priceVO: componentsVO.priceVO,
+      categoryVO: componentsVO.categoryVO,
+      breadcrumbVO: componentsVO.breadcrumbVO,
     },
   });
 }

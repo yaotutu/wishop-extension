@@ -1,6 +1,7 @@
 import type {
   TaobaoProductParam,
   TaobaoProductSellerSnapshot,
+  TaobaoProductSourceCategorySnapshot,
   TaobaoProductSkuGroup,
   TaobaoProductSkuMatrixItem,
   TaobaoProductSkuSpec,
@@ -125,6 +126,83 @@ function uniqueStrings(values: string[], limit: number): string[] {
   return Array.from(new Set(values.filter(Boolean))).slice(0, limit);
 }
 
+function normalizeCategoryPath(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return uniqueStrings(value.map(item => {
+      if (typeof item === 'string' || typeof item === 'number') return normalizeText(String(item));
+      if (!isRecord(item)) return '';
+      return normalizeText(
+        getString(item, 'name')
+          || getString(item, 'title')
+          || getString(item, 'label')
+          || getString(item, 'catName')
+          || getString(item, 'categoryName'),
+      );
+    }), 8);
+  }
+  if (typeof value === 'string') {
+    return uniqueStrings(
+      normalizeText(value)
+        .split(/[>/｜|/]+/u)
+        .map(item => item.trim())
+        .filter(Boolean),
+      8,
+    );
+  }
+  return [];
+}
+
+function pickFirstString(record: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = getString(record, key);
+    if (value) return value;
+  }
+  return '';
+}
+
+function pickFirstCategoryPath(record: Record<string, unknown>, keys: string[]): string[] {
+  for (const key of keys) {
+    const value = normalizeCategoryPath(record[key]);
+    if (value.length > 0) return value;
+  }
+  return [];
+}
+
+function firstNonEmptyCategoryPath(...values: string[][]): string[] {
+  return values.find(value => value.length > 0) || [];
+}
+
+function normalizeSourceCategory(input: TaobaoProductSourceCategorySnapshot): TaobaoProductSourceCategorySnapshot | undefined {
+  const path = uniqueStrings(input.path || [], 8);
+  const name = normalizeText(input.name || '') || path[path.length - 1] || '';
+  const id = normalizeText(input.id || '');
+  if (!id && !name && path.length === 0) return undefined;
+  return {
+    ...(id ? { id } : {}),
+    ...(name ? { name } : {}),
+    ...(path.length > 0 ? { path } : {}),
+  };
+}
+
+function readSourceCategoryFromPageModel(pageModel: unknown): TaobaoProductSourceCategorySnapshot | undefined {
+  const item = getRecord(pageModel, 'item');
+  const components = getRecord(pageModel, 'componentsVO');
+  const categoryVO = getRecord(components, 'categoryVO');
+  const breadcrumbVO = getRecord(components, 'breadcrumbVO');
+  const path = firstNonEmptyCategoryPath(
+    pickFirstCategoryPath(item, ['categoryPath', 'catPath', 'breadcrumb', 'breadcrumbs']),
+    pickFirstCategoryPath(categoryVO, ['categoryPath', 'catPath', 'breadcrumb', 'breadcrumbs', 'path']),
+    pickFirstCategoryPath(breadcrumbVO, ['categoryPath', 'catPath', 'breadcrumb', 'breadcrumbs', 'path']),
+  );
+  return normalizeSourceCategory({
+    id: pickFirstString(item, ['categoryId', 'catId', 'cid', 'leafCategoryId'])
+      || pickFirstString(categoryVO, ['categoryId', 'catId', 'cid', 'leafCategoryId']),
+    name: pickFirstString(item, ['categoryName', 'catName', 'leafCategoryName'])
+      || pickFirstString(categoryVO, ['categoryName', 'catName', 'leafCategoryName', 'name']),
+    path,
+  });
+}
+
 function normalizeImageList(values: unknown[], limit: number): string[] {
   return uniqueStrings(values.map(value => typeof value === 'string' ? normalizeImageUrl(value) : ''), limit);
 }
@@ -145,6 +223,26 @@ function readProductImages(root: ParentNode): { mainImages: string[]; detailImag
   const mainImages = uniqueStrings([...metaImages, ...allImages], 12);
   const detailImages = uniqueStrings(allImages.filter(url => !mainImages.includes(url)), 40);
   return { mainImages, detailImages };
+}
+
+function readSourceCategoryFromDocument(root: ParentNode): TaobaoProductSourceCategorySnapshot | undefined {
+  const metaCategory = readMetaContent(root, 'product:category') || readMetaContent(root, 'category');
+  const metaPath = normalizeCategoryPath(metaCategory);
+  if (metaPath.length > 0) {
+    return normalizeSourceCategory({
+      name: metaPath[metaPath.length - 1],
+      path: metaPath,
+    });
+  }
+
+  const ignoredLabels = new Set(['首页', '店铺', '淘宝', '天猫', '全部分类', '商品分类']);
+  const linkPath = uniqueStrings(Array.from(root.querySelectorAll('a[href*="cat"], a[href*="category"]'))
+    .map(link => normalizeText(link.textContent || ''))
+    .filter(text => text.length >= 2 && text.length <= 30 && !ignoredLabels.has(text)), 8);
+  return normalizeSourceCategory({
+    name: linkPath[linkPath.length - 1],
+    path: linkPath,
+  });
 }
 
 function tokenizeSkuText(text: string): string[] {
@@ -349,6 +447,7 @@ export function readTaobaoProductSnapshotFromDocument(root: Document, url: strin
     itemId: current?.searchParams.get('id')?.trim() || '',
     title: readProductTitle(root),
     shopName,
+    sourceCategory: readSourceCategoryFromDocument(root),
     seller: { shopName, sellerId: '', shopId: '' },
     priceRangeText: readPriceRangeText(root),
     mainImages,
@@ -380,6 +479,7 @@ export function buildTaobaoProductSnapshotFromPageModel(input: BuildTaobaoProduc
     itemId: getString(item, 'itemId') || current?.searchParams.get('id')?.trim() || '',
     title: getString(item, 'title'),
     shopName: seller.shopName,
+    sourceCategory: readSourceCategoryFromPageModel(input.pageModel),
     seller,
     priceRangeText: readPriceRangeFromPageModel(input.pageModel),
     mainImages: readMainImagesFromPageModel(input.pageModel),
@@ -425,6 +525,8 @@ export function sanitizeTaobaoProductPageModel(pageModel: unknown): unknown {
       titleVO: pageModel.componentsVO.titleVO,
       deliveryVO: pageModel.componentsVO.deliveryVO,
       priceVO: pageModel.componentsVO.priceVO,
+      categoryVO: pageModel.componentsVO.categoryVO,
+      breadcrumbVO: pageModel.componentsVO.breadcrumbVO,
     } : undefined,
   });
 }

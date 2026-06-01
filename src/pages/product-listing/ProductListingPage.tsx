@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { DeleteOutlined, EyeOutlined, ImportOutlined, ReloadOutlined } from '@ant-design/icons';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { CloudUploadOutlined, DeleteOutlined, EyeOutlined, ImportOutlined, ReloadOutlined, RobotOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  Alert,
   Button,
   Card,
   Descriptions,
@@ -9,16 +10,30 @@ import {
   Form,
   Image,
   Input,
+  InputNumber,
   message,
+  Modal,
   Popconfirm,
+  Select,
   Space,
+  Steps,
+  Switch,
   Table,
   Tag,
 } from 'antd';
 import type { TableProps } from 'antd';
+import { useAppSettingsQuery } from '../../hooks/useOrderQueries';
 import { queryKeys } from '../../query/query-keys';
 import { extensionApi } from '../../shared/extension-api';
-import type { CollectedProductListing, ProductListingCollectionSession } from '../../shared/types';
+import type {
+  Account,
+  CollectedProductListing,
+  ProductListingCollectionSession,
+  WxProductDraftAttribute,
+  WxProductDraftCreationResult,
+  WxProductDraftPrepareResult,
+  WxProductDraftSuggestionResult,
+} from '../../shared/types';
 
 const missingFieldLabels: Record<string, string> = {
   title: '标题',
@@ -68,11 +83,60 @@ function statusTags(listing: CollectedProductListing): React.ReactNode {
   );
 }
 
-const ProductListingPage: React.FC = () => {
+interface ProductListingPageProps {
+  accounts: Account[];
+  activeAccountId: string;
+}
+
+interface WxDraftFormValues {
+  accountId: string;
+  catIdsText?: string;
+  expressTemplateId?: string;
+  brandId?: string;
+  defaultStockNum: number;
+  autoListing?: boolean;
+}
+
+function parseCatIds(value?: string): string[] {
+  return (value || '')
+    .split(/[,\s，、/]+/u)
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
+function isValidCategoryPathIds(catIds: string[]): boolean {
+  return catIds.length >= 3 && catIds.length <= 4;
+}
+
+function categoryCandidateSourceText(source?: WxProductDraftSuggestionResult['categoryCandidateSource']): string {
+  if (source === 'taobaoWxLookup') return '本地类目 lookup';
+  if (source === 'wxApi') return '微信全量类目筛选';
+  return '未记录来源';
+}
+
+function categoryCandidateScopeText(
+  scope?: NonNullable<WxProductDraftSuggestionResult['categoryLookup']>['candidateScope'],
+): string {
+  if (scope === 'exact') return '完整路径命中';
+  if (scope === 'level3Children') return '三级父类候选';
+  if (scope === 'level2Children') return '二级父类候选';
+  if (scope === 'level1Children') return '一级父类候选';
+  if (scope === 'wxApiFallback') return '微信全量回退';
+  return '未记录范围';
+}
+
+const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activeAccountId }) => {
   const [form] = Form.useForm<{ url: string }>();
+  const [draftForm] = Form.useForm<WxDraftFormValues>();
   const queryClient = useQueryClient();
+  const appSettingsQuery = useAppSettingsQuery();
   const [activeSession, setActiveSession] = useState<ProductListingCollectionSession | null>(null);
   const [previewListing, setPreviewListing] = useState<CollectedProductListing | null>(null);
+  const [draftModalListing, setDraftModalListing] = useState<CollectedProductListing | null>(null);
+  const [draftAiAttrs, setDraftAiAttrs] = useState<WxProductDraftAttribute[]>([]);
+  const [draftPrepared, setDraftPrepared] = useState<WxProductDraftPrepareResult | null>(null);
+  const [draftSuggestion, setDraftSuggestion] = useState<WxProductDraftSuggestionResult | null>(null);
+  const [draftSubmittedResult, setDraftSubmittedResult] = useState<WxProductDraftCreationResult | null>(null);
 
   const listingsQuery = useQuery({
     queryKey: queryKeys.productListingCollection.list,
@@ -93,6 +157,85 @@ const ProductListingPage: React.FC = () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.productListingCollection.list });
       setPreviewListing(null);
       message.success('采集记录已删除');
+    },
+  });
+
+  const prepareDraftMutation = useMutation({
+    mutationFn: async () => {
+      if (!draftModalListing) throw new Error('请选择要准备的采集商品');
+      const values = await draftForm.validateFields();
+      const catIds = parseCatIds(values.catIdsText);
+      if (!isValidCategoryPathIds(catIds)) {
+        throw new Error('请先运行 AI 测试生成微信小店类目路径，或手动填写 3 到 4 个类目 ID');
+      }
+      return extensionApi.productListingCollection.prepareWxDraft({
+        accountId: values.accountId,
+        listingId: draftModalListing.id,
+        catIds,
+        expressTemplateId: values.expressTemplateId?.trim() || undefined,
+        brandId: values.brandId?.trim() || undefined,
+        defaultStockNum: values.defaultStockNum,
+        autoListing: Boolean(values.autoListing),
+        attrs: draftAiAttrs.length > 0 ? draftAiAttrs : undefined,
+      });
+    },
+    onSuccess: prepared => {
+      setDraftPrepared(prepared);
+      setDraftSubmittedResult(null);
+      message.success('商品准备完成，可以提交草稿');
+    },
+    onError: error => {
+      const detail = error instanceof Error ? error.message : '商品准备失败';
+      message.error(detail);
+    },
+  });
+
+  const submitPreparedDraftMutation = useMutation({
+    mutationFn: () => {
+      if (!draftPrepared) throw new Error('请先完成商品准备');
+      return extensionApi.productListingCollection.submitPreparedWxDraft({
+        accountId: draftPrepared.accountId,
+        listingId: draftPrepared.listingId,
+        request: draftPrepared.request,
+        uploadedImageCount: draftPrepared.uploadedImageCount,
+        autoListing: draftPrepared.request.listing === 1,
+      });
+    },
+    onSuccess: result => {
+      setDraftSubmittedResult(result);
+      message.success(`微信小店草稿已创建：${result.productId}`);
+    },
+    onError: error => {
+      const detail = error instanceof Error ? error.message : '提交微信小店草稿失败';
+      message.error(detail);
+    },
+  });
+
+  const suggestDraftMutation = useMutation({
+    mutationFn: async () => {
+      if (!draftModalListing) throw new Error('请选择要处理的采集商品');
+      const values = await draftForm.validateFields(['accountId', 'catIdsText']);
+      const manualCatIds = parseCatIds(values.catIdsText);
+      return extensionApi.productListingCollection.suggestWxDraft({
+        accountId: values.accountId,
+        listingId: draftModalListing.id,
+        wxCatIds: manualCatIds.length > 0 ? manualCatIds : undefined,
+      });
+    },
+    onSuccess: suggestion => {
+      setDraftSuggestion(suggestion);
+      setDraftAiAttrs(suggestion.attrs);
+      setDraftPrepared(null);
+      setDraftSubmittedResult(null);
+      draftForm.setFieldsValue({
+        catIdsText: suggestion.catIds.join(','),
+        expressTemplateId: suggestion.expressTemplateId || draftForm.getFieldValue('expressTemplateId'),
+      });
+      message.success('AI 已选择微信类目并整理上架属性');
+    },
+    onError: error => {
+      const detail = error instanceof Error ? error.message : 'AI 处理失败';
+      message.error(detail);
     },
   });
 
@@ -119,6 +262,61 @@ const ProductListingPage: React.FC = () => {
       cleanupChallenge();
     };
   }, [queryClient]);
+
+  const openDraftModal = useCallback((listing: CollectedProductListing) => {
+    const defaultAccountId = activeAccountId || accounts[0]?.id || '';
+    const defaultExpressTemplateId = appSettingsQuery.data?.aiListing.defaultExpressTemplateId || '';
+    setDraftModalListing(listing);
+    setDraftAiAttrs([]);
+    setDraftPrepared(null);
+    setDraftSuggestion(null);
+    setDraftSubmittedResult(null);
+    draftForm.setFieldsValue({
+      accountId: defaultAccountId,
+      catIdsText: '',
+      expressTemplateId: defaultExpressTemplateId,
+      brandId: '2100000000',
+      defaultStockNum: 100,
+      autoListing: false,
+    });
+  }, [accounts, activeAccountId, appSettingsQuery.data?.aiListing.defaultExpressTemplateId, draftForm]);
+
+  const closeDraftModal = () => {
+    setDraftModalListing(null);
+    setDraftAiAttrs([]);
+    setDraftPrepared(null);
+    setDraftSuggestion(null);
+    setDraftSubmittedResult(null);
+    draftForm.resetFields();
+  };
+
+  const resetPreparedDraft = () => {
+    setDraftPrepared(null);
+    setDraftSubmittedResult(null);
+  };
+
+  const draftStepItems: React.ComponentProps<typeof Steps>['items'] = [
+    {
+      title: '采集商品',
+      description: draftModalListing ? '已完成' : '等待采集',
+      status: draftModalListing ? 'finish' : 'wait',
+    },
+    {
+      title: 'AI 测试',
+      description: draftSuggestion ? '已生成建议' : '可选',
+      status: suggestDraftMutation.isPending ? 'process' : draftSuggestion ? 'finish' : 'wait',
+    },
+    {
+      title: '商品准备',
+      description: draftPrepared ? '请求体已生成' : '待准备',
+      status: prepareDraftMutation.isPending ? 'process' : draftPrepared ? 'finish' : 'wait',
+    },
+    {
+      title: '提交草稿',
+      description: draftSubmittedResult ? draftSubmittedResult.productId : '待提交',
+      status: submitPreparedDraftMutation.isPending ? 'process' : draftSubmittedResult ? 'finish' : 'wait',
+    },
+  ];
 
   const columns = useMemo<TableProps<CollectedProductListing>['columns']>(() => [
     {
@@ -192,11 +390,20 @@ const ProductListingPage: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 150,
+      width: 240,
       render: (_: unknown, record) => (
         <Space size={4}>
           <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => setPreviewListing(record)}>
             查看
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            icon={<CloudUploadOutlined />}
+            disabled={accounts.length === 0}
+            onClick={() => openDraftModal(record)}
+          >
+            分步上架
           </Button>
           <Popconfirm
             title="删除采集记录？"
@@ -213,7 +420,7 @@ const ProductListingPage: React.FC = () => {
         </Space>
       ),
     },
-  ], [removeMutation]);
+  ], [accounts.length, openDraftModal, removeMutation]);
 
   const handleCollect = async (values: { url: string }) => {
     await collectMutation.mutateAsync(values.url.trim());
@@ -295,6 +502,12 @@ const ProductListingPage: React.FC = () => {
                 { label: '商品 ID', children: previewListing.itemId },
                 { label: '平台', children: previewListing.platform },
                 { label: '店铺', children: previewListing.shopName || '-' },
+                {
+                  label: '原类目',
+                  children: previewListing.sourceCategory?.path?.join(' / ')
+                    || previewListing.sourceCategory?.name
+                    || '-',
+                },
                 { label: '价格', children: previewListing.priceRangeText || '-' },
                 { label: '销量', children: previewListing.salesText || '-' },
                 { label: '发货', children: previewListing.deliveryText || '-' },
@@ -374,6 +587,214 @@ const ProductListingPage: React.FC = () => {
           </Space>
         )}
       </Drawer>
+
+      <Modal
+        title="分步上架到微信小店草稿"
+        open={Boolean(draftModalListing)}
+        destroyOnHidden
+        width={760}
+        footer={[
+          <Button key="close" onClick={closeDraftModal}>
+            关闭
+          </Button>,
+          <Button
+            key="ai"
+            icon={<RobotOutlined />}
+            loading={suggestDraftMutation.isPending}
+            onClick={() => suggestDraftMutation.mutate()}
+          >
+            AI 测试
+          </Button>,
+          <Button
+            key="prepare"
+            loading={prepareDraftMutation.isPending}
+            onClick={() => prepareDraftMutation.mutate()}
+          >
+            商品准备
+          </Button>,
+          <Button
+            key="submit"
+            type="primary"
+            disabled={!draftPrepared || Boolean(draftSubmittedResult)}
+            loading={submitPreparedDraftMutation.isPending}
+            onClick={() => submitPreparedDraftMutation.mutate()}
+          >
+            提交草稿
+          </Button>,
+        ]}
+        onCancel={closeDraftModal}
+      >
+        <Steps
+          size="small"
+          current={draftSubmittedResult ? 3 : draftPrepared ? 2 : draftSuggestion ? 1 : 0}
+          items={draftStepItems}
+          style={{ marginBottom: 20 }}
+        />
+        <Form
+          form={draftForm}
+          layout="vertical"
+          preserve={false}
+          onValuesChange={resetPreparedDraft}
+        >
+          <Form.Item
+            name="accountId"
+            label="微信小店账号"
+            rules={[{ required: true, message: '请选择微信小店账号' }]}
+          >
+            <Select
+              placeholder="选择账号"
+              options={accounts.map(account => ({ label: account.name, value: account.id }))}
+            />
+          </Form.Item>
+          <Descriptions
+            size="small"
+            column={1}
+            style={{ marginBottom: 16 }}
+            items={[
+              {
+                label: '原商品类目',
+                children: draftModalListing?.sourceCategory?.path?.join(' / ')
+                  || draftModalListing?.sourceCategory?.name
+                  || '采集结果未识别到类目名称',
+              },
+            ]}
+          />
+          <Form.Item
+            name="catIdsText"
+            label="微信小店类目路径 ID（AI 回填）"
+            extra="正常流程不用填写；AI 测试会先用淘宝原类目查本地 lookup，再从候选中选择。手动兜底时按完整路径填写 3 到 4 个 ID。"
+            rules={[
+              {
+                validator: async (_, value: string) => {
+                  const catIds = parseCatIds(value);
+                  if (catIds.length === 0 || isValidCategoryPathIds(catIds)) return;
+                  throw new Error('手动指定时需要填写 3 到 4 个类目 ID');
+                },
+              },
+            ]}
+          >
+            <Input placeholder="AI 自动回填，或手动输入 10000111,10000113,6091" />
+          </Form.Item>
+          {draftSuggestion && (
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+              title={draftSuggestion.reason}
+              description={(
+                <Space vertical size={8} style={{ width: '100%' }}>
+                  <Tag color={draftSuggestion.confidence >= 0.7 ? 'green' : 'orange'}>
+                    置信度 {Math.round(draftSuggestion.confidence * 100)}%
+                  </Tag>
+                  <Space size={4} wrap>
+                    <Tag color="blue">类目 ID {draftSuggestion.catIds.join(' / ')}</Tag>
+                    {draftSuggestion.categoryPath && (
+                      <Tag color="cyan">类目 {draftSuggestion.categoryPath.join(' / ')}</Tag>
+                    )}
+                    <Tag color={draftSuggestion.categoryCandidateSource === 'taobaoWxLookup' ? 'green' : 'default'}>
+                      来源 {categoryCandidateSourceText(draftSuggestion.categoryCandidateSource)}
+                    </Tag>
+                  </Space>
+                  {draftSuggestion.categoryLookup && (
+                    <Space size={4} wrap>
+                      <Tag>淘宝匹配 {draftSuggestion.categoryLookup.matchedTaobaoPath || draftSuggestion.categoryLookup.taobaoPath || '-'}</Tag>
+                      <Tag>{categoryCandidateScopeText(draftSuggestion.categoryLookup.candidateScope)}</Tag>
+                      <Tag>
+                        层级 {draftSuggestion.categoryLookup.matchDepth ?? 0}
+                        /{draftSuggestion.categoryLookup.sourceDepth ?? 0}
+                      </Tag>
+                      <Tag>候选 {draftSuggestion.categoryLookup.candidateCount}</Tag>
+                    </Space>
+                  )}
+                  {draftSuggestion.categoryCandidates && draftSuggestion.categoryCandidates.length > 0 && (
+                    <Space size={4} wrap>
+                      {draftSuggestion.categoryCandidates.map(candidate => (
+                        <Tag key={candidate.catIds.join('/')}>
+                          {candidate.names.join(' / ')}
+                          {typeof candidate.confidence === 'number' ? ` ${Math.round(candidate.confidence * 100)}%` : ''}
+                        </Tag>
+                      ))}
+                    </Space>
+                  )}
+                  <Space size={4} wrap>
+                    {draftAiAttrs.length > 0
+                      ? draftAiAttrs.map(attr => (
+                        <Tag key={`${attr.attrKey}:${attr.attrValue}`}>
+                          {attr.attrKey}: {attr.attrValue}
+                        </Tag>
+                      ))
+                      : <Tag>沿用采集参数</Tag>}
+                  </Space>
+                  {draftSuggestion.warnings.length > 0 && (
+                    <Space size={4} wrap>
+                      {draftSuggestion.warnings.map(warning => (
+                        <Tag key={warning} color="orange">{warning}</Tag>
+                      ))}
+                    </Space>
+                  )}
+                </Space>
+              )}
+            />
+          )}
+          {draftPrepared && (
+            <Alert
+              type="success"
+              showIcon
+              style={{ marginBottom: 16 }}
+              title="商品准备完成"
+              description={(
+                <Space size={4} wrap>
+                  <Tag>主图 {draftPrepared.summary.headImageCount}</Tag>
+                  <Tag>详情图 {draftPrepared.summary.detailImageCount}</Tag>
+                  <Tag>SKU {draftPrepared.summary.skuCount}</Tag>
+                  <Tag>属性 {draftPrepared.summary.attrCount}</Tag>
+                  <Tag>已上传图片 {draftPrepared.uploadedImageCount}</Tag>
+                  <Tag color={draftPrepared.summary.listing ? 'blue' : 'default'}>
+                    {draftPrepared.summary.listing ? '创建后提审' : '草稿箱'}
+                  </Tag>
+                </Space>
+              )}
+            />
+          )}
+          {draftSubmittedResult && (
+            <Alert
+              type="success"
+              showIcon
+              style={{ marginBottom: 16 }}
+              title="微信小店草稿提交完成"
+              description={`商品 ID：${draftSubmittedResult.productId}`}
+            />
+          )}
+          <Form.Item
+            name="expressTemplateId"
+            label="运费模板 ID"
+            extra="不填写时不传 express_info，由微信小店接口按店铺规则处理。"
+          >
+            <Input allowClear placeholder="47428464001" />
+          </Form.Item>
+          <Form.Item
+            name="brandId"
+            label="品牌 ID"
+            extra="默认 2100000000 表示无品牌。"
+          >
+            <Input allowClear placeholder="2100000000" />
+          </Form.Item>
+          <Form.Item
+            name="defaultStockNum"
+            label="默认库存"
+            rules={[{ required: true, message: '请输入默认库存' }]}
+          >
+            <InputNumber min={0} precision={0} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item
+            name="autoListing"
+            label="创建后提交审核"
+            valuePropName="checked"
+          >
+            <Switch />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 };

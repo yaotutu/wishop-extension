@@ -294,12 +294,19 @@ export interface TaobaoProductSellerSnapshot {
   shopId: string;
 }
 
+export interface TaobaoProductSourceCategorySnapshot {
+  id?: string;
+  name?: string;
+  path?: string[];
+}
+
 export interface TaobaoProductSnapshot {
   url: string;
   platform: 'taobao' | 'tmall';
   itemId: string;
   title: string;
   shopName: string;
+  sourceCategory?: TaobaoProductSourceCategorySnapshot;
   seller: TaobaoProductSellerSnapshot;
   priceRangeText: string;
   mainImages: string[];
@@ -321,6 +328,155 @@ export interface CollectedProductListing extends Omit<TaobaoProductSnapshot, 'ur
 
 export interface CreateProductListingCollectionSessionInput {
   url: string;
+}
+
+export interface WxProductDraftAttribute {
+  attrKey: string;
+  attrValue: string;
+}
+
+export interface WxProductCategoryPath {
+  catIds: string[];
+  names: string[];
+  leaf: boolean;
+  qualificationTips?: string[];
+}
+
+export type WxProductCategoryCandidateSource = 'taobaoWxLookup' | 'wxApi';
+
+export type WxProductCategoryMatchStatus = 'high' | 'review' | 'low';
+
+export type WxProductCategoryCandidateScope =
+  | 'exact'
+  | 'level3Children'
+  | 'level2Children'
+  | 'level1Children'
+  | 'wxApiFallback';
+
+export interface WxProductCategoryCandidate extends WxProductCategoryPath {
+  source: WxProductCategoryCandidateSource;
+  confidence?: number;
+  status?: WxProductCategoryMatchStatus;
+  reason?: string;
+}
+
+export interface WxProductCategoryLookupSummary {
+  source: WxProductCategoryCandidateSource;
+  status: 'matched' | 'not_found' | 'missing_source_category' | 'fallback_wx_api';
+  taobaoPath?: string;
+  matchedTaobaoPath?: string;
+  sourceDepth?: number;
+  matchDepth?: number;
+  candidateScope?: WxProductCategoryCandidateScope;
+  candidateCount: number;
+  warnings: string[];
+}
+
+export interface WxProductDraftPreparedAttr {
+  attr_key: string;
+  attr_value: string;
+}
+
+export interface WxProductDraftPreparedSku {
+  thumb_img: string;
+  sale_price: number;
+  stock_num: number;
+  sku_code?: string;
+  sku_attrs: WxProductDraftPreparedAttr[];
+  sku_deliver_info: {
+    stock_type: number;
+  };
+}
+
+export interface WxProductDraftPreparedRequest {
+  out_product_id: string;
+  title: string;
+  short_title?: string;
+  head_imgs: string[];
+  deliver_method: number;
+  deliver_acct_type: number[];
+  desc_info?: {
+    imgs?: string[];
+    desc?: string;
+  };
+  cats: [];
+  cats_v2: Array<{ cat_id: string }>;
+  attrs?: WxProductDraftPreparedAttr[];
+  brand_id?: string;
+  express_info?: {
+    template_id: string;
+  };
+  extra_service: {
+    is_open_cod: number;
+  };
+  skus: WxProductDraftPreparedSku[];
+  listing: 0 | 1;
+}
+
+export interface CreateWxProductDraftInput {
+  accountId: string;
+  listingId: string;
+  catIds: string[];
+  expressTemplateId?: string;
+  brandId?: string;
+  defaultStockNum?: number;
+  autoListing?: boolean;
+  attrs?: WxProductDraftAttribute[];
+}
+
+export type CreateWxProductDraftPrepareInput = CreateWxProductDraftInput;
+
+export interface WxProductDraftPrepareResult {
+  accountId: string;
+  listingId: string;
+  request: WxProductDraftPreparedRequest;
+  uploadedImageCount: number;
+  preparedAt: number;
+  summary: {
+    title: string;
+    headImageCount: number;
+    detailImageCount: number;
+    skuCount: number;
+    attrCount: number;
+    listing: boolean;
+  };
+}
+
+export interface SubmitPreparedWxProductDraftInput {
+  accountId: string;
+  listingId: string;
+  request: WxProductDraftPreparedRequest;
+  uploadedImageCount: number;
+  autoListing?: boolean;
+}
+
+export interface WxProductDraftCreationResult {
+  accountId: string;
+  listingId: string;
+  productId: string;
+  createTime?: string;
+  autoListing: boolean;
+  uploadedImageCount: number;
+}
+
+export interface CreateWxProductDraftSuggestionInput {
+  accountId?: string;
+  listingId: string;
+  wxCatIds?: string[];
+}
+
+export interface WxProductDraftSuggestionResult {
+  listingId: string;
+  catIds: string[];
+  categoryPath?: string[];
+  categoryCandidateSource?: WxProductCategoryCandidateSource;
+  categoryCandidates?: WxProductCategoryCandidate[];
+  categoryLookup?: WxProductCategoryLookupSummary;
+  attrs: WxProductDraftAttribute[];
+  confidence: number;
+  reason: string;
+  warnings: string[];
+  expressTemplateId: string;
 }
 
 export type ProductListingCollectionSessionStatus =

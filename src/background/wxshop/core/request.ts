@@ -2,15 +2,16 @@ import axios from 'axios';
 import type { ActivityLogDomain } from '../../../shared/activity-log.ts';
 import { createExternalApiError, normalizeExternalRequestError } from '../../errors/external-error.ts';
 import { createDiagnosticLogger } from '../../logging/diagnostic-logger.ts';
-import { getAccessToken, isAccessTokenInvalidError, removeAccessToken } from '../access-token-service';
-
-const BASE_URL = 'https://api.weixin.qq.com';
+import { getAccessToken, isAccessTokenInvalidError, removeAccessToken } from '../access-token-service.ts';
+import { appendAccessTokenToWxPath } from './request-url.ts';
 
 interface WxShopRequestClientOptions {
   accountId: string;
   domain: ActivityLogDomain;
   component: string;
 }
+
+type WxShopHttpMethod = 'GET' | 'POST';
 
 /**
  * 微信小店接口的唯一 HTTP 入口。
@@ -22,26 +23,31 @@ export function createWxShopRequestClient(options: WxShopRequestClientOptions) {
   const { accountId, domain, component } = options;
   const logger = createDiagnosticLogger({ domain, component, accountId });
 
-  function throwWxApiError(path: string, stage: string, data: { errcode?: number; errmsg?: string }): never {
+  function throwWxApiError(
+    path: string,
+    stage: string,
+    data: { errcode?: number; errmsg?: string },
+    method: WxShopHttpMethod = 'POST',
+  ): never {
     throw createExternalApiError({
       service: '微信小店',
-      method: 'POST',
+      method,
       path,
       stage,
     }, Number(data.errcode), data.errmsg || `${stage}失败`);
   }
 
-  async function request<T>(path: string, body: unknown, stage: string): Promise<T> {
+  async function send<T>(method: WxShopHttpMethod, path: string, body: unknown, stage: string): Promise<T> {
     const send = async (forceRefresh = false) => {
       const token = await getAccessToken(accountId, forceRefresh);
-      const url = `${BASE_URL}${path}?access_token=${token}`;
+      const url = appendAccessTokenToWxPath(path, token);
       let response;
       try {
-        response = await axios.post(url, body);
+        response = method === 'GET' ? await axios.get(url) : await axios.post(url, body);
       } catch (error) {
         throw normalizeExternalRequestError(error, {
           service: '微信小店',
-          method: 'POST',
+          method,
           path,
           stage,
         });
@@ -56,8 +62,17 @@ export function createWxShopRequestClient(options: WxShopRequestClientOptions) {
     return send(true);
   }
 
+  async function request<T>(path: string, body: unknown, stage: string): Promise<T> {
+    return send<T>('POST', path, body, stage);
+  }
+
+  async function get<T>(path: string, stage: string): Promise<T> {
+    return send<T>('GET', path, undefined, stage);
+  }
+
   return {
     logger,
+    get,
     request,
     throwWxApiError,
   };

@@ -1,15 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { extensionApi } from '../../shared/extension-api';
-import { Alert, Button, Card, Descriptions, Image, Input, Menu, Space, Tag, Typography, message } from 'antd';
+import { Alert, Button, Card, Descriptions, Form, Image, Input, Menu, Space, Tag, Typography, message } from 'antd';
 import {
   InfoCircleOutlined,
   AppstoreOutlined,
   CustomerServiceOutlined,
+  RobotOutlined,
   SafetyCertificateOutlined,
 } from '@ant-design/icons';
 import wechatQrcode from '../../assets/wechat-qrcode.png';
 import douyinQrcode from '../../assets/douyin-qrcode.png';
 import type { LicenseState } from '../../shared/types';
+import { DEFAULT_AI_LISTING_SETTINGS } from '../../shared/settings';
+import { useAppSettingsQuery, useUpdateAppSettingsMutation } from '../../hooks/useOrderQueries';
 import type { SettingsTab } from '../../stores/dashboard-ui-preferences-store';
 
 const { Title, Paragraph, Text } = Typography;
@@ -23,6 +26,7 @@ const MENU_ITEMS = [
   { key: 'about', label: '关于/更新', icon: <InfoCircleOutlined /> },
   { key: 'product', label: '产品介绍', icon: <AppstoreOutlined /> },
   { key: 'license', label: '授权状态', icon: <SafetyCertificateOutlined /> },
+  { key: 'aiListing', label: 'AI 上货', icon: <RobotOutlined /> },
   { key: 'contact', label: '联系我们', icon: <CustomerServiceOutlined /> },
 ];
 
@@ -119,7 +123,7 @@ const LicensePanel: React.FC = () => {
         type="info"
         showIcon
         style={{ marginBottom: 16 }}
-        message="授权拦截暂未启用"
+        title="授权拦截暂未启用"
         description="当前版本只保存授权结构和本地状态，不会限制订单、提审、违规检测或发货功能。服务端完成后可打开统一授权开关。"
       />
       <Descriptions column={1} style={{ maxWidth: 620 }}>
@@ -146,6 +150,79 @@ const LicensePanel: React.FC = () => {
       <div style={{ marginTop: 12 }}>
         <Button danger loading={loading} onClick={clear}>清除授权信息</Button>
       </div>
+    </Card>
+  );
+};
+
+interface AiListingFormValues {
+  siliconFlowApiKey: string;
+  siliconFlowModel: string;
+  defaultExpressTemplateId: string;
+}
+
+const AiListingPanel: React.FC = () => {
+  const [form] = Form.useForm<AiListingFormValues>();
+  const settingsQuery = useAppSettingsQuery();
+  const updateSettingsMutation = useUpdateAppSettingsMutation();
+
+  useEffect(() => {
+    const settings = settingsQuery.data?.aiListing;
+    if (!settings) return;
+    form.setFieldsValue(settings);
+  }, [form, settingsQuery.data?.aiListing]);
+
+  const save = async (values: AiListingFormValues) => {
+    await updateSettingsMutation.mutateAsync({
+      aiListing: {
+        siliconFlowApiKey: values.siliconFlowApiKey,
+        siliconFlowModel: values.siliconFlowModel,
+        defaultExpressTemplateId: values.defaultExpressTemplateId,
+      },
+    });
+    message.success('AI 上货设置已保存');
+  };
+
+  return (
+    <Card title="AI 上货">
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 16 }}
+        title="SiliconFlow Key 仅保存在本机浏览器存储"
+      />
+      <Form
+        form={form}
+        layout="vertical"
+        initialValues={DEFAULT_AI_LISTING_SETTINGS}
+        onFinish={save}
+        style={{ maxWidth: 620 }}
+      >
+        <Form.Item
+          name="siliconFlowApiKey"
+          label="SiliconFlow API Key"
+        >
+          <Input.Password allowClear placeholder="sk-..." />
+        </Form.Item>
+        <Form.Item
+          name="siliconFlowModel"
+          label="模型"
+        >
+          <Input allowClear placeholder={DEFAULT_AI_LISTING_SETTINGS.siliconFlowModel} />
+        </Form.Item>
+        <Form.Item
+          name="defaultExpressTemplateId"
+          label="默认运费模板 ID"
+        >
+          <Input allowClear placeholder="47428464001" />
+        </Form.Item>
+        <Button
+          type="primary"
+          htmlType="submit"
+          loading={settingsQuery.isLoading || updateSettingsMutation.isPending}
+        >
+          保存设置
+        </Button>
+      </Form>
     </Card>
   );
 };
@@ -208,6 +285,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ defaultTab = 'about', onTab
         {activeTab === 'about' && <AboutPanel />}
         {activeTab === 'product' && <ProductPanel />}
         {activeTab === 'license' && <LicensePanel />}
+        {activeTab === 'aiListing' && <AiListingPanel />}
         {activeTab === 'contact' && <ContactPanel />}
       </div>
     </div>

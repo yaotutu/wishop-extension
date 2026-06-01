@@ -17,6 +17,9 @@ const pageModel = {
     itemId: '1010211244888',
     title: '适用kindle充电传输数据线paperwhite 2/3/4线558适配oasis电子书',
     images: ['//img.alicdn.com/main-1.jpg', '//img.alicdn.com/main-2.jpg'],
+    categoryId: '50024407',
+    categoryName: '电子书配件',
+    categoryPath: ['数码', '电子教育', '电子书配件'],
     pcADescUrl: '//desc.alicdn.com/detail.html',
     vagueSellCount: '14',
   },
@@ -100,6 +103,11 @@ test('maps Taobao ICE page model to a complete listing collection snapshot', () 
 
   assert.equal(snapshot.itemId, '1010211244888');
   assert.equal(snapshot.title, pageModel.item.title);
+  assert.deepEqual(snapshot.sourceCategory, {
+    id: '50024407',
+    name: '电子书配件',
+    path: ['数码', '电子教育', '电子书配件'],
+  });
   assert.equal(snapshot.shopName, '百鸿胜数码电器');
   assert.equal(snapshot.seller.sellerId, 'seller-1');
   assert.deepEqual(snapshot.mainImages, [

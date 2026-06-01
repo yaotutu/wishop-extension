@@ -61,6 +61,9 @@ export const queryKeys = {
   activityLogs: {
     list: ['activityLogs'] as const,
   },
+  appSettings: {
+    item: ['appSettings'] as const,
+  },
   notifications: {
     list: ['notifications'] as const,
     preference: ['notifications', 'preference'] as const,

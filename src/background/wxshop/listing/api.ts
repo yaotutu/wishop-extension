@@ -1,6 +1,14 @@
-import type { DraftProduct, QuotaResult } from '../../../shared/types';
+import type { DraftProduct, QuotaResult, WxProductCategoryPath } from '../../../shared/types';
 import { createWxShopRequestClient } from '../core/request';
-import type { ListingResult, ProductListResult, WxShopListingClient } from './types';
+import type {
+  ListingResult,
+  ProductListResult,
+  WxShopAddProductRequest,
+  WxShopAddProductResult,
+  WxShopListingClient,
+  WxShopProductImageUploadResult,
+} from './types';
+import { normalizeWxCategoryPaths } from './category-paths.ts';
 
 export function createWxShopListingClient(accountId: string): WxShopListingClient {
   const wxshop = createWxShopRequestClient({
@@ -80,6 +88,59 @@ export function createWxShopListingClient(accountId: string): WxShopListingClien
     };
   }
 
+  async function getAllCategoryPaths(): Promise<WxProductCategoryPath[]> {
+    const path = '/shop/ec/category/all';
+    const stage = '获取微信小店类目';
+    const data = await wxshop.get<any>(path, stage);
+
+    if (data.errcode && data.errcode !== 0) {
+      wxshop.throwWxApiError(path, stage, data, 'GET');
+    }
+
+    const paths = normalizeWxCategoryPaths(data.cats_v2 ?? data.cats ?? data.category_list ?? []);
+    if (paths.length === 0) {
+      throw new Error('微信小店类目接口未返回可用三级叶子类目');
+    }
+    return paths;
+  }
+
+  async function uploadImageByUrl(imgUrl: string): Promise<WxShopProductImageUploadResult> {
+    const path = '/shop/ec/basics/img/upload?upload_type=1&resp_type=1';
+    const stage = '上传商品图片';
+    const data = await wxshop.request<any>(path, { img_url: imgUrl }, stage);
+
+    if (data.errcode && data.errcode !== 0) {
+      wxshop.throwWxApiError(path, stage, data);
+    }
+
+    const uploadedUrl = typeof data.pic_file?.img_url === 'string' ? data.pic_file.img_url.trim() : '';
+    if (!uploadedUrl) {
+      throw new Error('微信小店图片上传接口未返回图片链接');
+    }
+
+    return { imgUrl: uploadedUrl };
+  }
+
+  async function addProduct(input: WxShopAddProductRequest): Promise<WxShopAddProductResult> {
+    const path = '/channels/ec/product/add';
+    const stage = '创建商品草稿';
+    const data = await wxshop.request<any>(path, input, stage);
+
+    if (data.errcode && data.errcode !== 0) {
+      wxshop.throwWxApiError(path, stage, data);
+    }
+
+    const productId = data.data?.product_id ?? data.product_id;
+    if (productId === undefined || productId === null || String(productId).trim() === '') {
+      throw new Error('微信小店新增商品接口未返回商品 ID');
+    }
+
+    return {
+      productId: String(productId),
+      createTime: typeof data.data?.create_time === 'string' ? data.data.create_time : undefined,
+    };
+  }
+
   async function listProduct(productId: string): Promise<ListingResult> {
     return wxshop.request<ListingResult>('/channels/ec/product/listing', { product_id: productId }, '提交商品提审');
   }
@@ -111,6 +172,9 @@ export function createWxShopListingClient(accountId: string): WxShopListingClien
     getDraftProducts,
     getProductDetail,
     getProductQrcode,
+    getAllCategoryPaths,
+    uploadImageByUrl,
+    addProduct,
     listProduct,
     getAuditQuota,
     deleteProduct,

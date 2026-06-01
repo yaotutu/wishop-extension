@@ -23,6 +23,7 @@ function mergeSnapshot(primary: TaobaoProductSnapshot, fallback: TaobaoProductSn
     ...primary,
     title: primary.title || fallback.title,
     shopName: primary.shopName || fallback.shopName,
+    sourceCategory: primary.sourceCategory || fallback.sourceCategory,
     seller: primary.seller.shopName ? primary.seller : fallback.seller,
     priceRangeText: primary.priceRangeText || fallback.priceRangeText,
     mainImages: primary.mainImages.length > 0 ? primary.mainImages : fallback.mainImages,

@@ -4,6 +4,9 @@ import type {
   CollectedProductListing,
   Config,
   CreateProductListingCollectionSessionInput,
+  CreateWxProductDraftPrepareInput,
+  CreateWxProductDraftSuggestionInput,
+  CreateWxProductDraftInput,
   CreateShippingSessionInput,
   DeliveryCompanyOption,
   DraftProduct,
@@ -47,6 +50,10 @@ import type {
   TaskCycleResult,
   ViolationMatch,
   ViolationScanResult,
+  SubmitPreparedWxProductDraftInput,
+  WxProductDraftPrepareResult,
+  WxProductDraftSuggestionResult,
+  WxProductDraftCreationResult,
 } from './types';
 import type { ActivityLogEntry } from './activity-log';
 import type { NotificationEntry, NotificationPreference } from './notification';
@@ -207,6 +214,14 @@ export const extensionApi = {
       invoke('productListingCollection:complete', sessionId, snapshot),
     fail: (sessionId: string, error: string): Promise<ProductListingCollectionSession> =>
       invoke('productListingCollection:fail', sessionId, error),
+    suggestWxDraft: (input: CreateWxProductDraftSuggestionInput): Promise<WxProductDraftSuggestionResult> =>
+      invoke('productListingCollection:suggestWxDraft', input),
+    prepareWxDraft: (input: CreateWxProductDraftPrepareInput): Promise<WxProductDraftPrepareResult> =>
+      invoke('productListingCollection:prepareWxDraft', input),
+    submitPreparedWxDraft: (input: SubmitPreparedWxProductDraftInput): Promise<WxProductDraftCreationResult> =>
+      invoke('productListingCollection:submitPreparedWxDraft', input),
+    createWxDraft: (input: CreateWxProductDraftInput): Promise<WxProductDraftCreationResult> =>
+      invoke('productListingCollection:createWxDraft', input),
     onCompleted: (callback: (listing: CollectedProductListing) => void) =>
       onRuntimeEvent('productListingCollection:completed', callback),
     onFailed: (callback: (payload: { url: string; error: string }) => void) =>

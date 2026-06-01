@@ -12,12 +12,23 @@ export interface ShipmentCheckSettings {
   failureCooldownMinutes: number;
 }
 
+export interface AiListingSettings {
+  /** SiliconFlow API Key 仅保存在本地 chrome.storage，不进入日志和上架请求。 */
+  siliconFlowApiKey: string;
+  /** 默认使用 SiliconFlow 文档里的聊天补全示例模型，设置页允许用户按账号额度自行替换。 */
+  siliconFlowModel: string;
+  /** 微信小店默认运费模板 ID；为空时创建草稿仍允许用户在弹窗里手动填写。 */
+  defaultExpressTemplateId: string;
+}
+
 export interface AppSettings {
   shipmentCheck: ShipmentCheckSettings;
+  aiListing: AiListingSettings;
 }
 
 export interface AppSettingsPatch {
   shipmentCheck?: Partial<ShipmentCheckSettings>;
+  aiListing?: Partial<AiListingSettings>;
 }
 
 export const MAX_SHIPMENT_CHECK_ORDER_LOOKBACK_DAYS = 7;
@@ -36,8 +47,15 @@ export const DEFAULT_SHIPMENT_CHECK_SETTINGS: ShipmentCheckSettings = {
   failureCooldownMinutes: 60,
 };
 
+export const DEFAULT_AI_LISTING_SETTINGS: AiListingSettings = {
+  siliconFlowApiKey: '',
+  siliconFlowModel: 'Qwen/QwQ-32B',
+  defaultExpressTemplateId: '',
+};
+
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   shipmentCheck: DEFAULT_SHIPMENT_CHECK_SETTINGS,
+  aiListing: DEFAULT_AI_LISTING_SETTINGS,
 };
 
 function boundedNumber(value: unknown, fallback: number, min: number, max: number): number {
@@ -83,8 +101,22 @@ export function normalizeShipmentCheckSettings(input?: Partial<ShipmentCheckSett
   };
 }
 
+function normalizeOptionalText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+export function normalizeAiListingSettings(input?: Partial<AiListingSettings>): AiListingSettings {
+  const model = normalizeOptionalText(input?.siliconFlowModel);
+  return {
+    siliconFlowApiKey: normalizeOptionalText(input?.siliconFlowApiKey),
+    siliconFlowModel: model || DEFAULT_AI_LISTING_SETTINGS.siliconFlowModel,
+    defaultExpressTemplateId: normalizeOptionalText(input?.defaultExpressTemplateId),
+  };
+}
+
 export function normalizeAppSettings(input?: AppSettingsPatch): AppSettings {
   return {
     shipmentCheck: normalizeShipmentCheckSettings(input?.shipmentCheck),
+    aiListing: normalizeAiListingSettings(input?.aiListing),
   };
 }
