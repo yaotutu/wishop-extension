@@ -2,6 +2,7 @@ import type { WxShopListingClient } from '../wxshop/listing/types';
 import type {
   AddLogFn,
   ProductAuditFailureRule,
+  ProductAuditFailureDefaultAction,
   ProductAuditTaskConfig,
   ProductAuditTaskResult,
   StatusRule,
@@ -19,6 +20,7 @@ export interface RunProductAuditCycleInput {
   signal?: AbortSignal;
   accountId: string;
   failureRules: ProductAuditFailureRule[];
+  defaultFailureAction: ProductAuditFailureDefaultAction;
   statusRules: StatusRule[];
 }
 
@@ -42,7 +44,7 @@ function trackEmbeddedErrorCodes(result: ProductAuditTaskResult, msg: string | u
 }
 
 export async function runProductAuditCycle(input: RunProductAuditCycleInput): Promise<ProductAuditTaskResult> {
-  const { api, addLog, config, runId, signal, accountId, failureRules, statusRules } = input;
+  const { api, addLog, config, runId, signal, accountId, failureRules, defaultFailureAction, statusRules } = input;
   const logger = createDiagnosticLogger({ domain: 'productAudit', component: 'ProductAuditCycle', accountId });
   logger.info(`开始商品提审 (runId=${runId}): 提交草稿=${config.submitUnauditedDrafts}(${config.submitLimit})`);
 
@@ -92,7 +94,7 @@ export async function runProductAuditCycle(input: RunProductAuditCycleInput): Pr
         signal,
         accountId,
         failureRules,
-        defaultFailureAction: config.defaultFailureAction,
+        defaultFailureAction,
       });
 
       if (submitResult.action === 'success') {

@@ -3,7 +3,7 @@ import { recordActivityCompleted, recordActivityFailed, recordActivityStarted } 
 import { runProductAuditCycle } from '../modules/product-audit-cycle';
 import { getAccount } from '../store/account-repository';
 import { createScopedProductAuditLog } from '../store/log-repository';
-import { getProductAuditFailureRules, getStatusRules } from '../store/rule-repository';
+import { getProductAuditFailurePolicy, getStatusRules } from '../store/rule-repository';
 import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 import type { SessionManager } from '../utils/session-manager';
 import { getListingClient } from '../wxshop/client-registry';
@@ -65,6 +65,7 @@ export async function runProductAuditTask(
 
   const signal = taskSessions.start(accountId, undefined);
   try {
+    const failurePolicy = await getProductAuditFailurePolicy();
     const result = await runProductAuditCycle({
       api: await getListingClient(accountId),
       addLog,
@@ -72,7 +73,8 @@ export async function runProductAuditTask(
       runId,
       signal,
       accountId,
-      failureRules: await getProductAuditFailureRules(),
+      failureRules: failurePolicy.rules,
+      defaultFailureAction: failurePolicy.defaultAction,
       statusRules: await getStatusRules(),
     });
     await recordActivityCompleted({

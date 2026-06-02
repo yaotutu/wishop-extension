@@ -7,10 +7,11 @@ import { queryKeys } from '../query/query-keys';
 // 处理规则 hook — 管理 editStatus → action 的可配置映射
 // 规则为全局配置，不依赖于特定账户
 
-export function useStatusRules() {
+export function useStatusRules(enabled = true) {
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: queryKeys.rules.status,
+    enabled,
     queryFn: () => extensionApi.statusRules.get(),
   });
   const saveMutation = useMutation({

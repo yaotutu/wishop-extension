@@ -8,6 +8,7 @@ import type {
   OrderAssociation,
   OrderRealAddressCache,
   OrderSyncAccountState,
+  ProductAuditFailureDefaultAction,
   ProductAuditFailureRule,
   ProductAuditTaskConfig,
   ProductSourceBinding,
@@ -48,6 +49,7 @@ export interface AccountWorkspaceRecord {
   realAddressCaches: OrderRealAddressCache[];
   rules: {
     productAuditRules: ProductAuditFailureRule[];
+    productAuditDefaultFailureAction: ProductAuditFailureDefaultAction;
     statusRules: StatusRule[];
     violationWords: string[];
   };

@@ -24,6 +24,7 @@ export type { ProductAuditScheduledJob } from './useScheduler';
 export { useActivityLogs } from './useActivityLogs';
 export { useNotifications } from './useNotifications';
 export { useProductAuditConfig } from './useProductAuditConfig';
+export { useProductAuditFailurePolicy } from './useProductAuditFailurePolicy';
 export { useProductAuditLogs } from './useProductAuditLogs';
 export { useQuota } from './useQuota';
 export { useDrafts } from './useDrafts';

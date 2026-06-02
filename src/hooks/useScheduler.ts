@@ -23,7 +23,6 @@ type GlobalProductAuditJobInput = GlobalScheduledJobInput<ProductAuditTaskConfig
 const defaultProductAuditConfig: ProductAuditTaskConfig = {
   submitUnauditedDrafts: true,
   submitLimit: 0,
-  defaultFailureAction: 'keepDraft',
 };
 
 function isProductAuditJob(job: ScheduledJobView): job is ProductAuditScheduledJob {

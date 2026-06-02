@@ -7,14 +7,13 @@ import {
   ExclamationCircleOutlined,
   PlayCircleOutlined,
   PlusOutlined,
-  QuestionCircleOutlined,
   ReloadOutlined,
   StopOutlined,
 } from '@ant-design/icons';
 import { extensionApi } from '../../shared/extension-api';
 import { useGlobalSchedulers, useProductAuditConfig, useProductAuditLogs, useQuota, useSchedulers } from '../../hooks/useIpc';
 import type { ProductAuditScheduledJob } from '../../hooks/useIpc';
-import { useProductAuditRules } from '../../hooks/useProductAuditRules';
+import { useProductAuditFailurePolicy } from '../../hooks/useProductAuditFailurePolicy';
 import { useStatusRules } from '../../hooks/useStatusRules';
 import type {
   Account,
@@ -58,13 +57,11 @@ interface ProductAuditJobFormData {
 const defaultProductAuditConfig: ProductAuditTaskConfig = {
   submitUnauditedDrafts: true,
   submitLimit: 0,
-  defaultFailureAction: 'keepDraft',
 };
 
 const defaultGlobalProductAuditConfig: ProductAuditTaskConfig = {
   submitUnauditedDrafts: true,
   submitLimit: 150,
-  defaultFailureAction: 'keepDraft',
 };
 
 const actionLabels: Record<ProductAuditFailureAction, string> = {
@@ -139,8 +136,9 @@ const ProductAuditPage: React.FC<ProductAuditPageProps> = ({ accountId, accounts
   const { quota, loading: quotaLoading, error: quotaError, fetchQuota } = useQuota(accountId);
   const { tasks, fetchTasks, addTask, updateTask, removeTask } = useSchedulers(accountId);
   const { tasks: globalTasks, fetchTasks: fetchGlobalTasks, addTask: addGlobalTask, updateTask: updateGlobalTask, removeTask: removeGlobalTask } = useGlobalSchedulers();
-  const { rules: failureRules, defaultRules, fetchRules: fetchFailureRules, saveRules: saveFailureRules } = useProductAuditRules();
-  const { rules: statusRules, fetchRules: fetchStatusRules, saveRules: saveStatusRules, resetRules: resetStatusRules } = useStatusRules();
+  const globalRulesEnabled = scope === 'global';
+  const { policy: failurePolicy, defaultPolicy, fetchPolicy: fetchFailurePolicy, savePolicy: saveFailurePolicy } = useProductAuditFailurePolicy(globalRulesEnabled);
+  const { rules: statusRules, fetchRules: fetchStatusRules, saveRules: saveStatusRules, resetRules: resetStatusRules } = useStatusRules(globalRulesEnabled);
 
   const [runningAccountIds, setRunningAccountIds] = useState<Set<string>>(() => new Set());
   const [resultsByAccountId, setResultsByAccountId] = useState<Record<string, ProductAuditTaskResult | null>>({});
@@ -183,14 +181,17 @@ const ProductAuditPage: React.FC<ProductAuditPageProps> = ({ accountId, accounts
 
   useEffect(() => {
     currentAccountIdRef.current = accountId;
-    fetchProductAuditConfig();
-    fetchLogs();
-    fetchQuota();
-    fetchTasks();
+    if (scope === 'account') {
+      fetchProductAuditConfig();
+      fetchLogs();
+      fetchQuota();
+      fetchTasks();
+      return;
+    }
     fetchGlobalTasks();
-    fetchFailureRules();
+    fetchFailurePolicy();
     fetchStatusRules();
-  }, [accountId]);
+  }, [accountId, scope]);
 
   useEffect(() => {
     return () => {
@@ -225,6 +226,7 @@ const ProductAuditPage: React.FC<ProductAuditPageProps> = ({ accountId, accounts
     return ids;
   }, [logs]);
 
+  const failureRules = failurePolicy.rules;
   const failureRulesByAction = useMemo(() => ({
     stopTask: failureRules.filter(rule => rule.action === 'stopTask'),
     keepDraft: failureRules.filter(rule => rule.action === 'keepDraft'),
@@ -444,50 +446,25 @@ const ProductAuditPage: React.FC<ProductAuditPageProps> = ({ accountId, accounts
       message.info('相同失败处理规则已存在');
       return;
     }
-    await saveFailureRules([...failureRules, nextRule]);
+    await saveFailurePolicy({ ...failurePolicy, rules: [...failureRules, nextRule] });
     setNewFailureRuleValue('');
     setNewFailureRuleDesc('');
     message.success('失败处理规则已添加');
   }
 
   async function handleRemoveFailureRule(ruleId: string): Promise<void> {
-    await saveFailureRules(failureRules.filter(rule => rule.id !== ruleId));
+    await saveFailurePolicy({ ...failurePolicy, rules: failureRules.filter(rule => rule.id !== ruleId) });
     message.success('失败处理规则已删除');
   }
 
   async function handleResetFailureRules(): Promise<void> {
-    await saveFailureRules(defaultRules);
+    await saveFailurePolicy(defaultPolicy);
     message.success('已恢复默认失败处理规则');
   }
 
-  async function handleAddRuleFromLog(action: ProductAuditFailureAction, log: LogEntry): Promise<void> {
-    if (log.errorCode == null) return;
-    const nextRule = createFailureRule(
-      action,
-      'outerErrorCode',
-      String(log.errorCode),
-      `${actionLabels[action]}：errcode ${log.errorCode}`,
-    );
-    if (!nextRule) return;
-    if (failureRules.some(rule => rule.action === nextRule.action && sameFailureRuleMatch(rule.match, nextRule.match))) {
-      message.info('相同失败处理规则已存在');
-      return;
-    }
-    await saveFailureRules([...failureRules, nextRule]);
-    message.success(`已添加${actionLabels[action]}规则`);
-  }
-
-  async function handleAddKeywordKeepRule(): Promise<void> {
-    const keyword = window.prompt('输入关键词，后续错误信息包含该词时保留草稿', '');
-    if (!keyword?.trim()) return;
-    const nextRule = createFailureRule('keepDraft', 'keyword', keyword.trim(), `保留草稿：${keyword.trim()}`);
-    if (!nextRule) return;
-    if (failureRules.some(rule => rule.action === nextRule.action && sameFailureRuleMatch(rule.match, nextRule.match))) {
-      message.info('相同失败处理规则已存在');
-      return;
-    }
-    await saveFailureRules([...failureRules, nextRule]);
-    message.success('已添加保留草稿规则');
+  async function handleChangeDefaultFailureAction(defaultAction: ProductAuditFailureDefaultAction): Promise<void> {
+    await saveFailurePolicy({ ...failurePolicy, defaultAction });
+    message.success('默认失败处理动作已更新');
   }
 
   async function handleAddStatusRule(): Promise<void> {
@@ -569,6 +546,18 @@ const ProductAuditPage: React.FC<ProductAuditPageProps> = ({ accountId, accounts
           <div style={{ color: '#999', fontSize: 12, marginTop: 2 }}>只在提审失败后执行，优先级固定为：停止任务、保留草稿、删除草稿、默认动作</div>
         </div>
         <Space>
+          <span>未命中规则时</span>
+          <Select<ProductAuditFailureDefaultAction>
+            size="small"
+            style={{ width: 140 }}
+            value={failurePolicy.defaultAction}
+            onChange={handleChangeDefaultFailureAction}
+            disabled={rulesLocked}
+            options={[
+              { label: '保留草稿', value: 'keepDraft' },
+              { label: '删除草稿', value: 'deleteDraft' },
+            ]}
+          />
           <Button size="small" onClick={() => setRulesLocked(!rulesLocked)}>{rulesLocked ? '编辑规则' : '锁定规则'}</Button>
           {!rulesLocked && (
             <Popconfirm title="恢复默认失败处理规则？" onConfirm={handleResetFailureRules} okText="恢复" cancelText="取消">
@@ -691,18 +680,6 @@ const ProductAuditPage: React.FC<ProductAuditPageProps> = ({ accountId, accounts
           <InputNumber min={0} value={formData.dailyLimit} onChange={value => setFormData(prev => ({ ...prev, dailyLimit: value || 0 }))} />
           <span style={{ color: '#999' }}>0 表示不限</span>
         </Space>
-        <Space>
-          <span>未命中规则时</span>
-          <Select<ProductAuditFailureDefaultAction>
-            style={{ width: 140 }}
-            value={formData.productAuditConfig.defaultFailureAction}
-            onChange={value => setFormData(prev => ({ ...prev, productAuditConfig: { ...prev.productAuditConfig, defaultFailureAction: value } }))}
-            options={[
-              { label: '保留草稿', value: 'keepDraft' },
-              { label: '删除草稿', value: 'deleteDraft' },
-            ]}
-          />
-        </Space>
         <Switch checked={formData.enabled} onChange={enabled => setFormData(prev => ({ ...prev, enabled }))} checkedChildren="启用" unCheckedChildren="停用" />
       </Space>
     </Modal>
@@ -738,18 +715,6 @@ const ProductAuditPage: React.FC<ProductAuditPageProps> = ({ accountId, accounts
             }))}
           />
           <span>个草稿</span>
-        </Space>
-        <Space>
-          <span>未命中规则时</span>
-          <Select<ProductAuditFailureDefaultAction>
-            style={{ width: 140 }}
-            value={globalFormData.productAuditConfig.defaultFailureAction}
-            onChange={value => setGlobalFormData(prev => ({ ...prev, productAuditConfig: { ...prev.productAuditConfig, defaultFailureAction: value } }))}
-            options={[
-              { label: '保留草稿', value: 'keepDraft' },
-              { label: '删除草稿', value: 'deleteDraft' },
-            ]}
-          />
         </Space>
         <Select
           mode="multiple"
@@ -840,12 +805,6 @@ const ProductAuditPage: React.FC<ProductAuditPageProps> = ({ accountId, accounts
                         {log.errorCode != null && <Tag color="error" style={{ fontSize: 11, marginRight: 4, lineHeight: '18px', padding: '0 4px' }}>errcode:{log.errorCode}</Tag>}
                         {log.errorMsg}
                         {log.decisionAction && <Tag color={actionColors[log.decisionAction]} style={{ fontSize: 10, marginLeft: 4, lineHeight: '16px', padding: '0 4px', verticalAlign: 'middle' }}>{actionLabels[log.decisionAction]}</Tag>}
-                        {log.errorCode != null && log.action === 'submitAudit' && !log.decisionAction && (
-                          <>
-                            <Button type="link" size="small" style={{ fontSize: 11, padding: '0 4px', height: 'auto', marginLeft: 4, verticalAlign: 'middle', color: '#ff4d4f' }} onClick={() => handleAddRuleFromLog('stopTask', log)}>设为停止</Button>
-                            <Button type="link" size="small" style={{ fontSize: 11, padding: '0 4px', height: 'auto', marginLeft: 4, verticalAlign: 'middle', color: '#fa8c16' }} onClick={handleAddKeywordKeepRule}>保留关键词</Button>
-                          </>
-                        )}
                       </div>
                     )}
                   </div>
@@ -920,22 +879,6 @@ const ProductAuditPage: React.FC<ProductAuditPageProps> = ({ accountId, accounts
               </Checkbox>
               <InputNumber controls={false} size="small" min={0} value={quota.quota} disabled={!productAuditConfig.submitUnauditedDrafts} style={{ width: 60 }} />
               <span style={{ color: '#666' }}>条</span>
-            </Space>
-            <Space size={8}>
-              <span>未命中规则时</span>
-              <Select<ProductAuditFailureDefaultAction>
-                size="small"
-                style={{ width: 120 }}
-                value={productAuditConfig.defaultFailureAction}
-                onChange={value => updateConfig({ defaultFailureAction: value })}
-                options={[
-                  { label: '保留草稿', value: 'keepDraft' },
-                  { label: '删除草稿', value: 'deleteDraft' },
-                ]}
-              />
-              <Tooltip title="失败处理规则只在提审失败后执行。成功提交提审不会进入停止、保留或删除规则。">
-                <QuestionCircleOutlined style={{ color: '#999', fontSize: 12 }} />
-              </Tooltip>
             </Space>
           </Space>
           <Space>
@@ -1012,12 +955,7 @@ const ProductAuditPage: React.FC<ProductAuditPageProps> = ({ accountId, accounts
         )}
       </div>
 
-      <div style={{ flexShrink: 0, borderBottom: '1px solid #f0f0f0', padding: '8px 0', color: '#999', fontSize: 12 }}>
-        运行规则由「全部账号」统一配置，当前账号执行时会使用同一套全局失败处理规则。
-      </div>
-
       {renderExecutionLogs()}
-      {renderRulesSection()}
       {renderTaskModal()}
     </div>
   );

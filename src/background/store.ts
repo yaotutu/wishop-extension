@@ -50,12 +50,12 @@ export {
 } from './store/product-source-repository';
 
 export {
-  getDefaultProductAuditFailureRules,
+  getDefaultProductAuditFailurePolicy,
   getDefaultStatusRules,
-  getProductAuditFailureRules,
+  getProductAuditFailurePolicy,
   getStatusRules,
   getViolationWords,
-  setProductAuditFailureRules,
+  setProductAuditFailurePolicy,
   setStatusRules,
   setViolationWords,
 } from './store/rule-repository';

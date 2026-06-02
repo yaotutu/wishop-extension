@@ -1,5 +1,6 @@
 import type {
   FullAccount,
+  ProductAuditFailureDefaultAction,
   ProductAuditFailureRule,
   ProductAuditTaskConfig,
   ScheduledJob,
@@ -34,8 +35,9 @@ export const CURRENT_STORAGE_VERSION = 9;
 export const DEFAULT_PRODUCT_AUDIT_CONFIG: ProductAuditTaskConfig = {
   submitUnauditedDrafts: true,
   submitLimit: 0,
-  defaultFailureAction: 'keepDraft',
 };
+
+export const DEFAULT_PRODUCT_AUDIT_FAILURE_DEFAULT_ACTION: ProductAuditFailureDefaultAction = 'keepDraft';
 
 export const DEFAULT_PRODUCT_AUDIT_FAILURE_RULES: ProductAuditFailureRule[] = [
   { id: 'stop-1002002', enabled: true, action: 'stopTask', match: { type: 'outerErrorCode', code: 1002002 }, description: '本店铺近1天内提审次数超过限制，请1天后再试' },
@@ -57,6 +59,13 @@ export const DEFAULT_STATUS_RULES: StatusRule[] = [
   { editStatus: 7, label: '上传中', action: 'skip' },
   { editStatus: 8, label: '上传失败', action: 'skip' },
 ];
+
+export function normalizeProductAuditTaskConfig(config: Partial<ProductAuditTaskConfig> | null | undefined): ProductAuditTaskConfig {
+  return {
+    submitUnauditedDrafts: config?.submitUnauditedDrafts ?? DEFAULT_PRODUCT_AUDIT_CONFIG.submitUnauditedDrafts,
+    submitLimit: typeof config?.submitLimit === 'number' ? config.submitLimit : DEFAULT_PRODUCT_AUDIT_CONFIG.submitLimit,
+  };
+}
 
 export async function readStore(): Promise<StoreSchema> {
   const data = await chrome.storage.local.get([
@@ -96,7 +105,7 @@ export async function writeStore(patch: Partial<StoreSchema>): Promise<void> {
 export function normalizeAccount(account: FullAccount): FullAccount {
   return {
     ...account,
-    productAuditConfig: account.productAuditConfig || DEFAULT_PRODUCT_AUDIT_CONFIG,
+    productAuditConfig: normalizeProductAuditTaskConfig(account.productAuditConfig),
     violationWords: account.violationWords || [],
     productAuditLogs: account.productAuditLogs || [],
     violationLogs: account.violationLogs || [],

@@ -126,6 +126,14 @@ export interface ProductAuditFailureRule {
   priority?: number;
 }
 
+/**
+ * 商品提审失败策略是全局配置，单账号手动任务和全账号定时任务共用这一套策略。
+ */
+export interface ProductAuditFailurePolicy {
+  rules: ProductAuditFailureRule[];
+  defaultAction: ProductAuditFailureDefaultAction;
+}
+
 export interface ProductAuditFailureDecision {
   action: ProductAuditFailureAction;
   reason: string;
@@ -137,7 +145,6 @@ export interface ProductAuditFailureDecision {
 export interface ProductAuditTaskConfig {
   submitUnauditedDrafts: boolean;
   submitLimit: number;
-  defaultFailureAction: ProductAuditFailureDefaultAction;
 }
 
 export interface ProductAuditTaskResult {

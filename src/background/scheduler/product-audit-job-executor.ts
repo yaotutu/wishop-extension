@@ -1,7 +1,7 @@
 import type { ProductAuditTaskConfig } from '../../shared/types';
 import { runProductAuditCycle } from '../modules/product-audit-cycle';
 import { createScopedProductAuditLog } from '../store/log-repository';
-import { getProductAuditFailureRules, getStatusRules } from '../store/rule-repository';
+import { getProductAuditFailurePolicy, getStatusRules } from '../store/rule-repository';
 import { getListingClient } from '../wxshop/client-registry';
 import { registerScheduledJobExecutor } from './scheduler-center';
 
@@ -26,13 +26,15 @@ export function registerProductAuditScheduledJobs(): void {
     const configuredQuantity = configured.submitLimit || quota.quota;
     const submitLimit = Math.min(configuredQuantity, quota.quota);
 
+    const failurePolicy = await getProductAuditFailurePolicy();
     const result = await runProductAuditCycle({
       api,
       addLog: createScopedProductAuditLog(targetAccountId),
       config: { ...configured, submitLimit },
       runId,
       accountId: targetAccountId,
-      failureRules: await getProductAuditFailureRules(),
+      failureRules: failurePolicy.rules,
+      defaultFailureAction: failurePolicy.defaultAction,
       statusRules: await getStatusRules(),
     });
 
@@ -45,4 +47,3 @@ export function registerProductAuditScheduledJobs(): void {
     };
   });
 }
-

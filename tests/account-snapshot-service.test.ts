@@ -15,7 +15,6 @@ const COMPLETED = 100 as OrderStatus;
 const DEFAULT_PRODUCT_AUDIT_CONFIG = {
   submitUnauditedDrafts: true,
   submitLimit: 0,
-  defaultFailureAction: 'keepDraft' as const,
 };
 
 function makeOrder(orderId: string, status: OrderStatus = PENDING_SHIPMENT): Order {
@@ -118,6 +117,7 @@ test('account snapshots replace only the target account data', async () => {
       realAddressCaches: [],
       rules: {
         productAuditRules: [],
+        productAuditDefaultFailureAction: 'keepDraft',
         statusRules: [],
         violationWords: ['违规词'],
       },
@@ -135,6 +135,7 @@ test('account snapshots replace only the target account data', async () => {
       realAddressCaches: [],
       rules: {
         productAuditRules: [],
+        productAuditDefaultFailureAction: 'keepDraft',
         statusRules: [],
         violationWords: [],
       },

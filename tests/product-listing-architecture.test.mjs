@@ -27,6 +27,23 @@ test('product listing has an independent dashboard module boundary', () => {
   assert.match(layout, /activeModule === 'commonFunctions' && <ProductAuditPage/);
 });
 
+test('product audit rules are only editable from the global product audit page', () => {
+  const page = source('src/pages/common-functions/ProductAuditPage.tsx');
+
+  assert.equal((page.match(/\{renderRulesSection\(\)\}/g) || []).length, 1);
+  assert.match(page, /if \(scope === 'global'\)/);
+  assert.doesNotMatch(page, /handleAddRuleFromLog/);
+  assert.doesNotMatch(page, /handleAddKeywordKeepRule/);
+});
+
+test('product audit task config does not carry account-local failure policy', () => {
+  const types = source('src/shared/types.ts');
+  const configBlock = types.match(/export interface ProductAuditTaskConfig \{[\s\S]*?\n\}/)?.[0] || '';
+
+  assert.doesNotMatch(configBlock, /defaultFailureAction/);
+  assert.match(types, /export interface ProductAuditFailurePolicy/);
+});
+
 test('product listing preview renders collected detail images', () => {
   const page = source('src/pages/product-listing/ProductListingPage.tsx');
 

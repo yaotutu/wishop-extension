@@ -1,10 +1,10 @@
-import type { ProductAuditFailureRule, ProductAuditTaskConfig } from '../../shared/types';
+import type { ProductAuditFailurePolicy, ProductAuditTaskConfig } from '../../shared/types';
 import type { RuntimeHandlerMap } from '../router/runtime-router';
 import { getProductAuditConfig, setProductAuditConfig } from '../store/product-audit-config-repository';
 import {
-  getDefaultProductAuditFailureRules,
-  getProductAuditFailureRules,
-  setProductAuditFailureRules,
+  getDefaultProductAuditFailurePolicy,
+  getProductAuditFailurePolicy,
+  setProductAuditFailurePolicy,
 } from '../store/rule-repository';
 import { clearProductAuditLogs, getProductAuditLogs } from '../store/log-repository';
 
@@ -34,15 +34,14 @@ export function createProductAuditRuntimeHandlers(deps: ProductAuditHandlerDeps)
     async 'productAudit:logsClear'(args) {
       return clearProductAuditLogs(args[0] as string);
     },
-    async 'productAudit:failureRulesGet'() {
-      return getProductAuditFailureRules();
+    async 'productAudit:failurePolicyGet'() {
+      return getProductAuditFailurePolicy();
     },
-    async 'productAudit:failureRulesGetDefaults'() {
-      return getDefaultProductAuditFailureRules();
+    async 'productAudit:failurePolicyGetDefaults'() {
+      return getDefaultProductAuditFailurePolicy();
     },
-    async 'productAudit:failureRulesSet'(args) {
-      return setProductAuditFailureRules(args[0] as ProductAuditFailureRule[]);
+    async 'productAudit:failurePolicySet'(args) {
+      return setProductAuditFailurePolicy(args[0] as ProductAuditFailurePolicy);
     },
   };
 }
-

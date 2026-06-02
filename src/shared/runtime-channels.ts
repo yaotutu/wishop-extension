@@ -36,7 +36,7 @@ import type {
   ProductSourceItem,
   ProductQrcodeResult,
   ProductListingCollectionSession,
-  ProductAuditFailureRule,
+  ProductAuditFailurePolicy,
   ProductAuditTaskConfig,
   ProductAuditTaskResult,
   PurchaseLookupSession,
@@ -183,9 +183,9 @@ export interface RuntimeChannels {
   'violation:batchDelete': { args: [accountId: string, violations: ViolationMatch[]]; result: { deleted: number; errors: number; stopped: boolean } };
   'violation:stop': { args: [accountId: string]; result: void };
 
-  'productAudit:failureRulesGet': { args: []; result: ProductAuditFailureRule[] };
-  'productAudit:failureRulesGetDefaults': { args: []; result: ProductAuditFailureRule[] };
-  'productAudit:failureRulesSet': { args: [rules: ProductAuditFailureRule[]]; result: void };
+  'productAudit:failurePolicyGet': { args: []; result: ProductAuditFailurePolicy };
+  'productAudit:failurePolicyGetDefaults': { args: []; result: ProductAuditFailurePolicy };
+  'productAudit:failurePolicySet': { args: [policy: ProductAuditFailurePolicy]; result: void };
   'statusRules:get': { args: []; result: StatusRule[] };
   'statusRules:set': { args: [rules: StatusRule[]]; result: void };
   'statusRules:reset': { args: []; result: StatusRule[] };

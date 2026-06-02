@@ -81,8 +81,10 @@ test('cleanupProductAuditLegacyData removes old audit config, rules, jobs, and l
 
   const workspace = await extensionDb.accountWorkspaces.get('account-1') as any;
   assert.equal('taskConfig' in workspace, false);
+  assert.equal('defaultFailureAction' in workspace.productAuditConfig, false);
   assert.equal('skipKeywords' in workspace.rules, false);
   assert.equal('blacklistRules' in workspace.rules, false);
+  assert.equal(workspace.rules.productAuditDefaultFailureAction, 'keepDraft');
   assert.deepEqual(workspace.scheduledJobs, []);
 
   const logs = await extensionDb.accountLogs.toArray();

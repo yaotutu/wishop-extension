@@ -20,7 +20,6 @@ test('account repositories create account metadata and workspace data in Indexed
   await setProductAuditConfig(account.id, {
     submitUnauditedDrafts: false,
     submitLimit: 20,
-    defaultFailureAction: 'deleteDraft',
   });
   await setProductSources(account.id, 'product-1', [{
     id: '',

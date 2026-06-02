@@ -4,8 +4,10 @@ import { DEFAULT_NOTIFICATION_PREFERENCE, normalizeNotificationPreference } from
 import { DEFAULT_APP_SETTINGS, normalizeAppSettings } from '../../shared/settings.ts';
 import {
   DEFAULT_PRODUCT_AUDIT_CONFIG,
+  DEFAULT_PRODUCT_AUDIT_FAILURE_DEFAULT_ACTION,
   DEFAULT_PRODUCT_AUDIT_FAILURE_RULES,
   DEFAULT_STATUS_RULES,
+  normalizeProductAuditTaskConfig,
 } from './core.ts';
 import { markAccountDirty } from './account-sync-state-repository.ts';
 
@@ -19,6 +21,7 @@ export function createDefaultAccountWorkspace(accountId: string, now = Date.now(
     realAddressCaches: [],
     rules: {
       productAuditRules: DEFAULT_PRODUCT_AUDIT_FAILURE_RULES,
+      productAuditDefaultFailureAction: DEFAULT_PRODUCT_AUDIT_FAILURE_DEFAULT_ACTION,
       statusRules: [],
       violationWords: [],
     },
@@ -32,7 +35,7 @@ export function createDefaultAccountWorkspace(accountId: string, now = Date.now(
 export function normalizeAccountWorkspace(workspace: AccountWorkspaceRecord): AccountWorkspaceRecord {
   return {
     ...workspace,
-    productAuditConfig: workspace.productAuditConfig || DEFAULT_PRODUCT_AUDIT_CONFIG,
+    productAuditConfig: normalizeProductAuditTaskConfig(workspace.productAuditConfig),
     scheduledJobs: Array.isArray(workspace.scheduledJobs)
       ? workspace.scheduledJobs.filter(job => (job as { jobType?: string }).jobType !== 'listing.submitDrafts')
       : [],
@@ -41,6 +44,7 @@ export function normalizeAccountWorkspace(workspace: AccountWorkspaceRecord): Ac
     realAddressCaches: Array.isArray(workspace.realAddressCaches) ? workspace.realAddressCaches : [],
     rules: {
       productAuditRules: Array.isArray(workspace.rules?.productAuditRules) ? workspace.rules.productAuditRules : DEFAULT_PRODUCT_AUDIT_FAILURE_RULES,
+      productAuditDefaultFailureAction: workspace.rules?.productAuditDefaultFailureAction === 'deleteDraft' ? 'deleteDraft' : DEFAULT_PRODUCT_AUDIT_FAILURE_DEFAULT_ACTION,
       statusRules: Array.isArray(workspace.rules?.statusRules) ? workspace.rules.statusRules : [],
       violationWords: Array.isArray(workspace.rules?.violationWords) ? workspace.rules.violationWords : [],
     },

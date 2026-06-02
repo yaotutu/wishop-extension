@@ -1,5 +1,9 @@
-import type { ProductAuditFailureRule, StatusRule } from '../../shared/types';
-import { DEFAULT_PRODUCT_AUDIT_FAILURE_RULES, DEFAULT_STATUS_RULES } from './core.ts';
+import type { ProductAuditFailurePolicy, StatusRule } from '../../shared/types';
+import {
+  DEFAULT_PRODUCT_AUDIT_FAILURE_DEFAULT_ACTION,
+  DEFAULT_PRODUCT_AUDIT_FAILURE_RULES,
+  DEFAULT_STATUS_RULES,
+} from './core.ts';
 import {
   ensureAccountWorkspace,
   mergeStatusRules,
@@ -18,17 +22,25 @@ export async function setViolationWords(accountId: string, words: string[]): Pro
   });
 }
 
-export function getDefaultProductAuditFailureRules(): ProductAuditFailureRule[] {
-  return DEFAULT_PRODUCT_AUDIT_FAILURE_RULES;
+export function getDefaultProductAuditFailurePolicy(): ProductAuditFailurePolicy {
+  return {
+    rules: DEFAULT_PRODUCT_AUDIT_FAILURE_RULES,
+    defaultAction: DEFAULT_PRODUCT_AUDIT_FAILURE_DEFAULT_ACTION,
+  };
 }
 
-export async function getProductAuditFailureRules(): Promise<ProductAuditFailureRule[]> {
-  return (await ensureAccountWorkspace(GLOBAL_RULE_WORKSPACE_ID)).rules.productAuditRules;
+export async function getProductAuditFailurePolicy(): Promise<ProductAuditFailurePolicy> {
+  const rules = (await ensureAccountWorkspace(GLOBAL_RULE_WORKSPACE_ID)).rules;
+  return {
+    rules: rules.productAuditRules,
+    defaultAction: rules.productAuditDefaultFailureAction,
+  };
 }
 
-export async function setProductAuditFailureRules(rules: ProductAuditFailureRule[]): Promise<void> {
+export async function setProductAuditFailurePolicy(policy: ProductAuditFailurePolicy): Promise<void> {
   await updateAccountWorkspace(GLOBAL_RULE_WORKSPACE_ID, workspace => {
-    workspace.rules.productAuditRules = rules;
+    workspace.rules.productAuditRules = policy.rules;
+    workspace.rules.productAuditDefaultFailureAction = policy.defaultAction;
   });
 }
 

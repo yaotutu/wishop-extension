@@ -21,7 +21,6 @@ const keepFreightInsuranceRule: ProductAuditFailureRule = {
 const config: ProductAuditTaskConfig = {
   submitUnauditedDrafts: true,
   submitLimit: 2,
-  defaultFailureAction: 'deleteDraft',
 };
 
 const statusRules: StatusRule[] = [
@@ -78,6 +77,7 @@ test('runProductAuditCycle keeps one failed draft and continues submitting the n
     runId: 'run-1',
     accountId: 'cycle-account-1',
     failureRules: [keepFreightInsuranceRule],
+    defaultFailureAction: 'deleteDraft',
     statusRules,
   });
 
@@ -88,4 +88,3 @@ test('runProductAuditCycle keeps one failed draft and continues submitting the n
   assert.equal(result.stopped, false);
   assert.equal(logs.some(log => log.action === 'keepDraft'), true);
 });
-

@@ -77,9 +77,9 @@ export const queryKeys = {
   productAuditConfig: {
     item: (accountId: string) => ['productAuditConfig', accountId] as const,
   },
-  productAuditRules: {
-    failure: ['productAuditRules', 'failure'] as const,
-    failureDefaults: ['productAuditRules', 'failure', 'defaults'] as const,
+  productAuditFailurePolicy: {
+    item: ['productAuditFailurePolicy'] as const,
+    defaults: ['productAuditFailurePolicy', 'defaults'] as const,
   },
   rules: {
     status: ['rules', 'status'] as const,

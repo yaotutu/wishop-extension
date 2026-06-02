@@ -7,7 +7,6 @@ import { queryKeys } from '../query/query-keys';
 const defaultProductAuditConfig: ProductAuditTaskConfig = {
   submitUnauditedDrafts: true,
   submitLimit: 0,
-  defaultFailureAction: 'keepDraft',
 };
 
 export function useProductAuditConfig(accountId: string) {
@@ -50,4 +49,3 @@ export function useProductAuditConfig(accountId: string) {
     runProductAuditTask,
   };
 }
-
