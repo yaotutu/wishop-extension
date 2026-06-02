@@ -9,7 +9,8 @@ import { NOTIFICATION_TOPIC_DEFINITIONS } from '../shared/notification';
 const { Text } = Typography;
 
 const domainLabels: Record<ActivityLogDomain, string> = {
-  listing: '商品提审',
+  listing: '商品上货',
+  productAudit: '商品提审',
   violation: '违规词',
   orders: '订单',
   store: '店铺',
@@ -47,7 +48,7 @@ const triggerLabels: Record<ActivityLogTrigger, string> = {
   background: '后台',
 };
 
-const notificationDomains: ActivityLogDomain[] = ['listing', 'orders', 'violation', 'store', 'scheduler', 'system'];
+const notificationDomains: ActivityLogDomain[] = ['listing', 'productAudit', 'orders', 'violation', 'store', 'scheduler', 'system'];
 const notificationTopicsByDomain = NOTIFICATION_TOPIC_DEFINITIONS.reduce((acc, definition) => {
   const current = acc[definition.domain] || [];
   return { ...acc, [definition.domain]: [...current, definition.topic] };

@@ -2,9 +2,9 @@ export type { AddLogFn } from '../shared/types';
 export type { StoreSchema } from './store/core';
 
 export {
-  DEFAULT_BLACKLIST,
+  DEFAULT_PRODUCT_AUDIT_CONFIG,
+  DEFAULT_PRODUCT_AUDIT_FAILURE_RULES,
   DEFAULT_STATUS_RULES,
-  DEFAULT_TASK_CONFIG,
   CURRENT_STORAGE_VERSION,
   normalizeAccount,
   readStore,
@@ -28,20 +28,20 @@ export {
 
 export {
   addModuleLog,
-  clearListingLogs,
+  clearProductAuditLogs,
   clearModuleLogs,
-  createScopedListingLog,
+  createScopedProductAuditLog,
   createScopedModuleLog,
   createScopedViolationLog,
-  getListingLogs,
+  getProductAuditLogs,
   getModuleLogs,
   onModuleLog,
 } from './store/log-repository';
 
 export {
-  getTaskConfig,
-  setTaskConfig,
-} from './store/task-config-repository';
+  getProductAuditConfig,
+  setProductAuditConfig,
+} from './store/product-audit-config-repository';
 
 export {
   getProductSources,
@@ -50,14 +50,12 @@ export {
 } from './store/product-source-repository';
 
 export {
-  getBlacklistRules,
-  getDefaultBlacklistCodes,
+  getDefaultProductAuditFailureRules,
   getDefaultStatusRules,
-  getSkipKeywords,
+  getProductAuditFailureRules,
   getStatusRules,
   getViolationWords,
-  setBlacklistRules,
-  setSkipKeywords,
+  setProductAuditFailureRules,
   setStatusRules,
   setViolationWords,
 } from './store/rule-repository';

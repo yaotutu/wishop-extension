@@ -2,7 +2,7 @@ import type { DraftProduct, WxShopListingClient } from '../wxshop/listing/types'
 import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 
 export async function* streamDraftProducts(api: WxShopListingClient, signal?: AbortSignal, accountId: string = ''): AsyncGenerator<DraftProduct> {
-  const logger = createDiagnosticLogger({ domain: 'listing', component: 'StreamDrafts', accountId });
+  const logger = createDiagnosticLogger({ domain: 'productAudit', component: 'StreamDrafts', accountId });
   let nextKey = '';
   let hasMore = true;
 

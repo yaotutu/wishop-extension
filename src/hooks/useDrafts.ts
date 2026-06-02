@@ -11,8 +11,8 @@ export function useDrafts(accountId: string) {
     queryFn: ({ pageParam }) => extensionApi.drafts.fetch(accountId, pageParam),
     getNextPageParam: (lastPage) => lastPage.hasMore ? false : undefined,
   });
-  const listMutation = useMutation({
-    mutationFn: (productId: string) => extensionApi.drafts.list(accountId, productId),
+  const submitAuditMutation = useMutation({
+    mutationFn: (productId: string) => extensionApi.drafts.submitAudit(accountId, productId),
   });
   const drafts = useMemo(
     () => query.data?.pages.flatMap(page => page.products) ?? [],
@@ -28,9 +28,9 @@ export function useDrafts(accountId: string) {
     }
   }, [accountId, query]);
 
-  const listProduct = useCallback(async (productId: string) => {
-    return listMutation.mutateAsync(productId);
-  }, [listMutation]);
+  const submitProductAudit = useCallback(async (productId: string) => {
+    return submitAuditMutation.mutateAsync(productId);
+  }, [submitAuditMutation]);
 
-  return { drafts, hasMore: query.hasNextPage, loading: query.isLoading || query.isFetchingNextPage, fetchDrafts, listProduct };
+  return { drafts, hasMore: query.hasNextPage, loading: query.isLoading || query.isFetchingNextPage, fetchDrafts, submitProductAudit };
 }

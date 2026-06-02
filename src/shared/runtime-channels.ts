@@ -3,7 +3,6 @@ import type { NotificationEntry, NotificationPreference } from './notification';
 import type { AppSettings, AppSettingsPatch } from './settings';
 import type {
   Account,
-  BlacklistRule,
   CollectedProductListing,
   Config,
   CreateProductListingCollectionSessionInput,
@@ -37,6 +36,9 @@ import type {
   ProductSourceItem,
   ProductQrcodeResult,
   ProductListingCollectionSession,
+  ProductAuditFailureRule,
+  ProductAuditTaskConfig,
+  ProductAuditTaskResult,
   PurchaseLookupSession,
   QuotaResult,
   ScheduledJob,
@@ -51,8 +53,6 @@ import type {
   TaobaoSecurityChallengeSnapshot,
   TaobaoPurchaseOrderSnapshot,
   TaobaoProductSnapshot,
-  TaskConfig,
-  TaskCycleResult,
   ViolationMatch,
   ViolationScanResult,
   SubmitPreparedWxProductDraftInput,
@@ -72,7 +72,7 @@ export interface RuntimeChannels {
   'config:set': { args: [accountId: string, config: Config]; result: { success: boolean; error?: string } };
 
   'drafts:fetch': { args: [accountId: string, reset?: boolean]; result: { products: DraftProduct[]; hasMore: boolean } };
-  'drafts:list': { args: [accountId: string, productId: string]; result: { success: boolean; error?: string } };
+  'drafts:submitAudit': { args: [accountId: string, productId: string]; result: { success: boolean; error?: string } };
   'drafts:delete': { args: [accountId: string, input: DraftProductDeleteInput]; result: DraftProductDeleteResult };
 
   'orders:list': {
@@ -146,8 +146,8 @@ export interface RuntimeChannels {
 
   'quota:get': { args: [accountId: string, force?: boolean]; result: QuotaResult };
 
-  'listingLogs:get': { args: [accountId: string]; result: LogEntry[] };
-  'listingLogs:clear': { args: [accountId: string]; result: void };
+  'productAudit:logsGet': { args: [accountId: string]; result: LogEntry[] };
+  'productAudit:logsClear': { args: [accountId: string]; result: void };
   'activityLogs:list': { args: []; result: ActivityLogEntry[] };
   'activityLogs:clear': { args: []; result: void };
   'notifications:list': { args: []; result: NotificationEntry[] };
@@ -165,10 +165,10 @@ export interface RuntimeChannels {
   'scheduledJobs:remove': { args: [jobId: string]; result: void };
   'scheduledJobs:runNow': { args: [jobId: string]; result: ScheduledJobRunNowResult };
 
-  'taskConfig:get': { args: [accountId: string]; result: TaskConfig };
-  'taskConfig:set': { args: [accountId: string, config: TaskConfig]; result: void };
-  'task:run': { args: [accountId: string, config: TaskConfig]; result: TaskCycleResult };
-  'task:stop': { args: [accountId: string]; result: void };
+  'productAudit:configGet': { args: [accountId: string]; result: ProductAuditTaskConfig };
+  'productAudit:configSet': { args: [accountId: string, config: ProductAuditTaskConfig]; result: void };
+  'productAudit:run': { args: [accountId: string, config: ProductAuditTaskConfig]; result: ProductAuditTaskResult };
+  'productAudit:stop': { args: [accountId: string]; result: void };
 
   'violation:getWords': { args: [accountId: string]; result: string[] };
   'violation:setWords': { args: [accountId: string, words: string[]]; result: void };
@@ -183,11 +183,9 @@ export interface RuntimeChannels {
   'violation:batchDelete': { args: [accountId: string, violations: ViolationMatch[]]; result: { deleted: number; errors: number; stopped: boolean } };
   'violation:stop': { args: [accountId: string]; result: void };
 
-  'blacklistRules:get': { args: []; result: BlacklistRule[] };
-  'blacklistRules:getDefaultCodes': { args: []; result: number[] };
-  'blacklistRules:set': { args: [rules: BlacklistRule[]]; result: void };
-  'skipKeywords:get': { args: []; result: string[] };
-  'skipKeywords:set': { args: [keywords: string[]]; result: void };
+  'productAudit:failureRulesGet': { args: []; result: ProductAuditFailureRule[] };
+  'productAudit:failureRulesGetDefaults': { args: []; result: ProductAuditFailureRule[] };
+  'productAudit:failureRulesSet': { args: [rules: ProductAuditFailureRule[]]; result: void };
   'statusRules:get': { args: []; result: StatusRule[] };
   'statusRules:set': { args: [rules: StatusRule[]]; result: void };
   'statusRules:reset': { args: []; result: StatusRule[] };

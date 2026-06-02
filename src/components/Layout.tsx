@@ -21,7 +21,7 @@ const StoreManagement = lazy(() => import('../pages/store-management/StoreManage
 const SettingsPage = lazy(() => import('../pages/settings/SettingsPage'));
 const OrdersPage = lazy(() => import('../pages/orders/OrdersPage'));
 const ProductListingPage = lazy(() => import('../pages/product-listing/ProductListingPage'));
-const ListingPage = lazy(() => import('../pages/common-functions/ListingPage'));
+const ProductAuditPage = lazy(() => import('../pages/common-functions/ProductAuditPage'));
 const ScheduledJobsPage = lazy(() => import('../pages/scheduled-jobs/ScheduledJobsPage'));
 const ViolationPage = lazy(() => import('../pages/violation/ViolationPage'));
 
@@ -124,7 +124,7 @@ const AccountModuleContent: React.FC<{
     );
   }
   if (activeModule === 'commonFunctions' && productReviewScope === 'global') {
-    return <ListingPage accountId={activeAccountId} accounts={accounts} scope="global" />;
+    return <ProductAuditPage accountId={activeAccountId} accounts={accounts} scope="global" />;
   }
   const activeAccount = accounts.find(account => account.id === activeAccountId) || accounts[0];
   const orderScope: OrderScope = orderScopeType === 'all'
@@ -133,7 +133,7 @@ const AccountModuleContent: React.FC<{
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {activeModule === 'orders' && <OrdersPage scope={orderScope} accounts={accounts} />}
-      {activeModule === 'commonFunctions' && <ListingPage accountId={activeAccount.id} accounts={accounts} scope="account" />}
+      {activeModule === 'commonFunctions' && <ProductAuditPage accountId={activeAccount.id} accounts={accounts} scope="account" />}
       {activeModule === 'violation' && <ViolationPage accountId={activeAccount.id} />}
     </div>
   );

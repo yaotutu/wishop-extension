@@ -8,84 +8,84 @@ import type {
   GlobalScheduledJobInput,
   ScheduledJob,
   ScheduledJobView,
-  TaskConfig,
+  ProductAuditTaskConfig,
 } from '../shared/types';
 import { queryKeys } from '../query/query-keys';
 
-export type ListingScheduledJob =
-  | (AccountScheduledJob<TaskConfig> & { nextRunAt: number | null })
-  | (GlobalScheduledJob<TaskConfig> & { nextRunAt: number | null });
-type AccountListingScheduledJob = Extract<ListingScheduledJob, { scope: 'account' }>;
-type GlobalListingScheduledJob = Extract<ListingScheduledJob, { scope: 'global' }>;
-type AccountListingJobInput = AccountScheduledJobInput<TaskConfig>;
-type GlobalListingJobInput = GlobalScheduledJobInput<TaskConfig>;
+export type ProductAuditScheduledJob =
+  | (AccountScheduledJob<ProductAuditTaskConfig> & { nextRunAt: number | null })
+  | (GlobalScheduledJob<ProductAuditTaskConfig> & { nextRunAt: number | null });
+type AccountProductAuditScheduledJob = Extract<ProductAuditScheduledJob, { scope: 'account' }>;
+type GlobalProductAuditScheduledJob = Extract<ProductAuditScheduledJob, { scope: 'global' }>;
+type AccountProductAuditJobInput = AccountScheduledJobInput<ProductAuditTaskConfig>;
+type GlobalProductAuditJobInput = GlobalScheduledJobInput<ProductAuditTaskConfig>;
 
-const defaultTaskConfig: TaskConfig = {
-  listUnreviewed: true,
-  listUnreviewedQuantity: 0,
-  autoDeleteFailed: true,
+const defaultProductAuditConfig: ProductAuditTaskConfig = {
+  submitUnauditedDrafts: true,
+  submitLimit: 0,
+  defaultFailureAction: 'keepDraft',
 };
 
-function isListingJob(job: ScheduledJobView): job is ListingScheduledJob {
-  return job.jobType === 'listing.submitDrafts';
+function isProductAuditJob(job: ScheduledJobView): job is ProductAuditScheduledJob {
+  return job.jobType === 'productAudit.submitDrafts';
 }
 
-function isAccountListingJob(job: ListingScheduledJob, accountId: string): job is AccountListingScheduledJob {
+function isAccountProductAuditJob(job: ProductAuditScheduledJob, accountId: string): job is AccountProductAuditScheduledJob {
   return job.scope === 'account' && job.accountId === accountId;
 }
 
-function isGlobalListingJob(job: ListingScheduledJob): job is GlobalListingScheduledJob {
+function isGlobalProductAuditJob(job: ProductAuditScheduledJob): job is GlobalProductAuditScheduledJob {
   return job.scope === 'global';
 }
 
 export function useSchedulers(accountId: string) {
   const queryClient = useQueryClient();
   const query = useQuery({
-    queryKey: queryKeys.scheduledJobs.accountListing(accountId),
+    queryKey: queryKeys.scheduledJobs.accountProductAudit(accountId),
     enabled: !!accountId,
     queryFn: async () => (await extensionApi.scheduledJobs.list())
-      .filter(isListingJob)
-      .filter(job => isAccountListingJob(job, accountId)),
+      .filter(isProductAuditJob)
+      .filter(job => isAccountProductAuditJob(job, accountId)),
   });
 
   const fetchTasks = useCallback(async () => {
     if (!accountId) return [];
     return queryClient.fetchQuery({
-      queryKey: queryKeys.scheduledJobs.accountListing(accountId),
+      queryKey: queryKeys.scheduledJobs.accountProductAudit(accountId),
       queryFn: async () => (await extensionApi.scheduledJobs.list())
-        .filter(isListingJob)
-        .filter(job => isAccountListingJob(job, accountId)),
+        .filter(isProductAuditJob)
+        .filter(job => isAccountProductAuditJob(job, accountId)),
     });
   }, [accountId, queryClient]);
 
   const addMutation = useMutation({
-    mutationFn: (job: AccountListingJobInput) => extensionApi.scheduledJobs.add(job),
+    mutationFn: (job: AccountProductAuditJobInput) => extensionApi.scheduledJobs.add(job),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.list });
-      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.accountListing(accountId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.accountProductAudit(accountId) });
     },
   });
   const updateMutation = useMutation({
-    mutationFn: ({ jobId, patch }: { jobId: string; patch: Partial<ListingScheduledJob> }) =>
+    mutationFn: ({ jobId, patch }: { jobId: string; patch: Partial<ProductAuditScheduledJob> }) =>
       extensionApi.scheduledJobs.update(jobId, patch as Partial<ScheduledJob>),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.list });
-      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.accountListing(accountId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.accountProductAudit(accountId) });
     },
   });
   const removeMutation = useMutation({
     mutationFn: (jobId: string) => extensionApi.scheduledJobs.remove(jobId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.list });
-      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.accountListing(accountId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.accountProductAudit(accountId) });
     },
   });
 
-  const addTask = useCallback(async (job: AccountListingJobInput): Promise<ScheduledJob> => {
+  const addTask = useCallback(async (job: AccountProductAuditJobInput): Promise<ScheduledJob> => {
     return addMutation.mutateAsync(job);
   }, [addMutation]);
 
-  const updateTask = useCallback(async (jobId: string, patch: Partial<ListingScheduledJob>) => {
+  const updateTask = useCallback(async (jobId: string, patch: Partial<ProductAuditScheduledJob>) => {
     await updateMutation.mutateAsync({ jobId, patch });
   }, [updateMutation]);
 
@@ -93,53 +93,53 @@ export function useSchedulers(accountId: string) {
     await removeMutation.mutateAsync(jobId);
   }, [removeMutation]);
 
-  return { tasks: query.data ?? [], loading: query.isLoading, fetchTasks, addTask, updateTask, removeTask, defaultTaskConfig };
+  return { tasks: query.data ?? [], loading: query.isLoading, fetchTasks, addTask, updateTask, removeTask, defaultProductAuditConfig };
 }
 
 export function useGlobalSchedulers() {
   const queryClient = useQueryClient();
   const query = useQuery({
-    queryKey: queryKeys.scheduledJobs.globalListing,
+    queryKey: queryKeys.scheduledJobs.globalProductAudit,
     queryFn: async () => (await extensionApi.scheduledJobs.list())
-      .filter(isListingJob)
-      .filter(isGlobalListingJob),
+      .filter(isProductAuditJob)
+      .filter(isGlobalProductAuditJob),
   });
 
   const fetchTasks = useCallback(async () => queryClient.fetchQuery({
-    queryKey: queryKeys.scheduledJobs.globalListing,
+    queryKey: queryKeys.scheduledJobs.globalProductAudit,
     queryFn: async () => (await extensionApi.scheduledJobs.list())
-      .filter(isListingJob)
-      .filter(isGlobalListingJob),
+      .filter(isProductAuditJob)
+      .filter(isGlobalProductAuditJob),
   }), [queryClient]);
 
   const addMutation = useMutation({
-    mutationFn: (job: GlobalListingJobInput) => extensionApi.scheduledJobs.add(job),
+    mutationFn: (job: GlobalProductAuditJobInput) => extensionApi.scheduledJobs.add(job),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.list });
-      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.globalListing });
+      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.globalProductAudit });
     },
   });
   const updateMutation = useMutation({
-    mutationFn: ({ jobId, patch }: { jobId: string; patch: Partial<ListingScheduledJob> }) =>
+    mutationFn: ({ jobId, patch }: { jobId: string; patch: Partial<ProductAuditScheduledJob> }) =>
       extensionApi.scheduledJobs.update(jobId, patch as Partial<ScheduledJob>),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.list });
-      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.globalListing });
+      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.globalProductAudit });
     },
   });
   const removeMutation = useMutation({
     mutationFn: (jobId: string) => extensionApi.scheduledJobs.remove(jobId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.list });
-      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.globalListing });
+      queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.globalProductAudit });
     },
   });
 
-  const addTask = useCallback(async (job: GlobalListingJobInput): Promise<ScheduledJob> => {
+  const addTask = useCallback(async (job: GlobalProductAuditJobInput): Promise<ScheduledJob> => {
     return addMutation.mutateAsync(job);
   }, [addMutation]);
 
-  const updateTask = useCallback(async (jobId: string, patch: Partial<ListingScheduledJob>) => {
+  const updateTask = useCallback(async (jobId: string, patch: Partial<ProductAuditScheduledJob>) => {
     await updateMutation.mutateAsync({ jobId, patch });
   }, [updateMutation]);
 

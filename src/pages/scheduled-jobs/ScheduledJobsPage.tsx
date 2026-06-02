@@ -13,7 +13,8 @@ interface ScheduledJobsPageProps {
 }
 
 const moduleLabels: Record<ScheduledJob['module'], string> = {
-  listing: '商品提审',
+  listing: '商品上货',
+  productAudit: '商品提审',
   orders: '订单管理',
   violation: '违规检测',
   store: '店铺管理',
@@ -21,7 +22,7 @@ const moduleLabels: Record<ScheduledJob['module'], string> = {
 };
 
 const jobTypeLabels: Record<ScheduledJob['jobType'], string> = {
-  'listing.submitDrafts': '提交待审核商品',
+  'productAudit.submitDrafts': '提交待审核草稿',
   'orders.checkShipmentStatus': '检测发货状态',
   'orders.syncRecent': '同步近期订单',
   'orders.backfillHistory': '补拉历史订单',

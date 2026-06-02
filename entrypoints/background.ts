@@ -1,7 +1,7 @@
 import { installRuntimeHandlers } from '../src/background/handlers';
 import { installPurchaseLookupTabCleanup } from '../src/background/purchase-lookup/purchase-lookup-session-service';
 import { installProductListingCollectionTabCleanup } from '../src/background/services/product-listing-collection-service';
-import { registerListingScheduledJobs } from '../src/background/scheduler/listing-job-executor';
+import { registerProductAuditScheduledJobs } from '../src/background/scheduler/product-audit-job-executor';
 import {
   ensureOrderShipmentCheckScheduledJob,
   installOrderShipmentCheckDispatchListener,
@@ -11,11 +11,12 @@ import { ensureOrderHistoryBackfillScheduledJob, ensureOrderSyncScheduledJob, re
 import { installScheduledJobAlarmListener, startAllScheduledJobs } from '../src/background/scheduler/scheduler-center';
 import { installShippingPaymentSuccessWatcher, installShippingTabCleanup } from '../src/background/shipping/shipping-session-service';
 import { migrateStore } from '../src/background/store';
+import { cleanupProductAuditLegacyData } from '../src/background/store/product-audit-legacy-cleanup';
 import { installTaobaoRefundTabCleanup } from '../src/background/taobao-refund/taobao-refund-session-service';
 import { installTaobaoWorkTabCleanup } from '../src/background/taobao-workspace/work-tab-service';
 
 export default defineBackground(() => {
-  registerListingScheduledJobs();
+  registerProductAuditScheduledJobs();
   registerOrderShipmentScheduledJobs();
   registerOrderSyncScheduledJobs();
   installRuntimeHandlers();
@@ -28,6 +29,7 @@ export default defineBackground(() => {
   installOrderShipmentCheckDispatchListener();
   installScheduledJobAlarmListener();
   void migrateStore().then(async () => {
+    await cleanupProductAuditLegacyData();
     await ensureOrderSyncScheduledJob();
     await ensureOrderHistoryBackfillScheduledJob();
     await ensureOrderShipmentCheckScheduledJob();

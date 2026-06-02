@@ -1,8 +1,7 @@
-import type { BlacklistRule, StatusRule } from '../../shared/types';
-import { DEFAULT_BLACKLIST, DEFAULT_STATUS_RULES } from './core.ts';
+import type { ProductAuditFailureRule, StatusRule } from '../../shared/types';
+import { DEFAULT_PRODUCT_AUDIT_FAILURE_RULES, DEFAULT_STATUS_RULES } from './core.ts';
 import {
   ensureAccountWorkspace,
-  mergeBlacklistRules,
   mergeStatusRules,
   updateAccountWorkspace,
 } from './workspace-repository.ts';
@@ -19,29 +18,17 @@ export async function setViolationWords(accountId: string, words: string[]): Pro
   });
 }
 
-export function getDefaultBlacklistCodes(): number[] {
-  return DEFAULT_BLACKLIST.map(rule => rule.code);
+export function getDefaultProductAuditFailureRules(): ProductAuditFailureRule[] {
+  return DEFAULT_PRODUCT_AUDIT_FAILURE_RULES;
 }
 
-export async function getBlacklistRules(): Promise<BlacklistRule[]> {
-  const stored = (await ensureAccountWorkspace(GLOBAL_RULE_WORKSPACE_ID)).rules.blacklistRules;
-  return stored.length > 0 ? mergeBlacklistRules(stored) : DEFAULT_BLACKLIST;
+export async function getProductAuditFailureRules(): Promise<ProductAuditFailureRule[]> {
+  return (await ensureAccountWorkspace(GLOBAL_RULE_WORKSPACE_ID)).rules.productAuditRules;
 }
 
-export async function setBlacklistRules(rules: BlacklistRule[]): Promise<void> {
-  const defaultCodes = new Set(DEFAULT_BLACKLIST.map(rule => rule.code));
+export async function setProductAuditFailureRules(rules: ProductAuditFailureRule[]): Promise<void> {
   await updateAccountWorkspace(GLOBAL_RULE_WORKSPACE_ID, workspace => {
-    workspace.rules.blacklistRules = rules.filter(rule => !defaultCodes.has(rule.code));
-  });
-}
-
-export async function getSkipKeywords(): Promise<string[]> {
-  return (await ensureAccountWorkspace(GLOBAL_RULE_WORKSPACE_ID)).rules.skipKeywords;
-}
-
-export async function setSkipKeywords(keywords: string[]): Promise<void> {
-  await updateAccountWorkspace(GLOBAL_RULE_WORKSPACE_ID, workspace => {
-    workspace.rules.skipKeywords = keywords;
+    workspace.rules.productAuditRules = rules;
   });
 }
 

@@ -12,7 +12,7 @@ export async function deleteOne(
   runId: string,
   accountId: string = '',
 ): Promise<'success' | 'failed' | 'stopped'> {
-  const logger = createDiagnosticLogger({ domain: 'listing', component: 'DeleteFailed', accountId });
+  const logger = createDiagnosticLogger({ domain: 'productAudit', component: 'DeleteFailed', accountId });
   try {
     const cacheKey = accountId;
     const lastDeleteTime = lastDeleteTimeMap.get(cacheKey) || 0;

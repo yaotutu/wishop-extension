@@ -5,10 +5,10 @@ export interface Config {
   appSecret: string;
 }
 
-export type ScheduledJobModule = 'listing' | 'orders' | 'violation' | 'store' | 'system';
+export type ScheduledJobModule = 'listing' | 'productAudit' | 'orders' | 'violation' | 'store' | 'system';
 export type ScheduledJobScope = 'account' | 'global' | 'system';
 export type ScheduledJobType =
-  | 'listing.submitDrafts'
+  | 'productAudit.submitDrafts'
   | 'orders.checkShipmentStatus'
   | 'orders.syncRecent'
   | 'orders.backfillHistory'
@@ -97,16 +97,60 @@ export interface LogEntry {
   runId: string;
   productId: string;
   productTitle: string;
-  action: 'list' | 'delete' | 'check' | 'skip';
+  action: 'list' | 'submitAudit' | 'delete' | 'check' | 'skip' | 'keepDraft' | 'stopTask';
   status: 'success' | 'failed';
   errorCode?: number;
   errorMsg?: string;
+  decisionAction?: ProductAuditFailureAction;
+  decisionReason?: string;
+  matchedRuleId?: string;
 }
 
-export interface TaskConfig {
-  listUnreviewed: boolean;
-  listUnreviewedQuantity: number;
-  autoDeleteFailed: boolean;
+export type ProductAuditFailureAction = 'stopTask' | 'keepDraft' | 'deleteDraft';
+export type ProductAuditFailureDefaultAction = 'keepDraft' | 'deleteDraft';
+export type ProductAuditFailureRuleMatch =
+  | { type: 'outerErrorCode'; code: number }
+  | { type: 'embeddedErrorCode'; code: number }
+  | { type: 'keyword'; keyword: string };
+
+/**
+ * 商品提审失败处理规则只在微信提审接口返回失败后生效。
+ * 提审成功时不会进入这套规则管道，也不会触发停止、保留或删除动作。
+ */
+export interface ProductAuditFailureRule {
+  id: string;
+  enabled: boolean;
+  action: ProductAuditFailureAction;
+  match: ProductAuditFailureRuleMatch;
+  description?: string;
+  priority?: number;
+}
+
+export interface ProductAuditFailureDecision {
+  action: ProductAuditFailureAction;
+  reason: string;
+  matchedRule?: ProductAuditFailureRule;
+  outerErrorCode: number;
+  embeddedErrorCodes: number[];
+}
+
+export interface ProductAuditTaskConfig {
+  submitUnauditedDrafts: boolean;
+  submitLimit: number;
+  defaultFailureAction: ProductAuditFailureDefaultAction;
+}
+
+export interface ProductAuditTaskResult {
+  scanned: number;
+  submitted: number;
+  kept: number;
+  deleted: number;
+  errors: number;
+  skipped: number;
+  stopped: boolean;
+  reason?: string;
+  errorCodes?: ErrorCodeSummary[];
+  pendingCount?: number;
 }
 
 export interface DraftProduct {
@@ -148,18 +192,6 @@ export interface ErrorCodeSummary {
   code: number;
   count: number;
   msg: string;
-}
-
-export interface TaskCycleResult {
-  scanned: number;
-  deleted: number;
-  listed: number;
-  errors: number;
-  skipped: number;
-  stopped: boolean;
-  reason?: string;
-  errorCodes?: ErrorCodeSummary[];
-  pendingCount?: number;
 }
 
 export interface Account {
@@ -624,7 +656,7 @@ export interface CreateShippingSessionInput {
   paymentWorkflow?: ShippingPaymentWorkflow;
 }
 
-export type LicensedFeature = 'orders' | 'listing' | 'violation' | 'shipping';
+export type LicensedFeature = 'orders' | 'listing' | 'productAudit' | 'violation' | 'shipping';
 
 export interface LicenseActivationInput {
   licenseKey: string;
@@ -949,12 +981,6 @@ export interface ViolationScanResult {
   reason?: string;
 }
 
-// Blacklist rule — error codes that should stop the task immediately
-export interface BlacklistRule {
-  code: number;
-  description?: string;
-}
-
 // Status rule — maps editStatus codes to actions during task cycle
 export type StatusAction = 'submit' | 'delete' | 'skip';
 
@@ -969,8 +995,8 @@ export interface FullAccount {
   id: string;
   name: string;
   config: Config;
-  taskConfig: TaskConfig;
-  listingLogs: LogEntry[];
+  productAuditConfig: ProductAuditTaskConfig;
+  productAuditLogs: LogEntry[];
   violationLogs: LogEntry[];
   violationWords: string[];
   productSources: ProductSourceBinding[];

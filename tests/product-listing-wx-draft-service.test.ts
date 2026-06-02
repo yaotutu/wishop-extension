@@ -74,7 +74,7 @@ function fakeListingClient(uploaded: string[], addRequests: WxShopAddProductRequ
       addRequests.push(input);
       return { productId: '987654321', createTime: '2026-06-01 12:00:00' };
     },
-    async listProduct() {
+    async submitProductAudit() {
       return { errcode: 0, errmsg: 'ok' };
     },
     async getAuditQuota() {

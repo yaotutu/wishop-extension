@@ -13,7 +13,7 @@ const migrations: Record<number, Migration> = {
       accounts: Array.isArray(store.accounts) ? store.accounts : [],
       activeAccountId: typeof store.activeAccountId === 'string' ? store.activeAccountId : '',
       scheduledJobs: Array.isArray(store.scheduledJobs) ? store.scheduledJobs : [],
-      skipKeywords: Array.isArray(store.skipKeywords) ? store.skipKeywords : [],
+      productAuditRules: [],
       storageVersion: 1,
     };
   },
@@ -44,7 +44,6 @@ const migrations: Record<number, Migration> = {
         if (!account || typeof account !== 'object') return account;
         const next = {
           ...account,
-          listingLogs: [],
           violationLogs: [],
         } as Record<string, unknown>;
         delete next.logs;
@@ -94,6 +93,7 @@ const LEGACY_BUSINESS_KEYS = [
   'scheduledJobs',
   'skipKeywords',
   'blacklistRules',
+  'productAuditRules',
   'statusRules',
   'notificationPreference',
   'appSettings',

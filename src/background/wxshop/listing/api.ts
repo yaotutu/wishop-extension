@@ -141,7 +141,7 @@ export function createWxShopListingClient(accountId: string): WxShopListingClien
     };
   }
 
-  async function listProduct(productId: string): Promise<ListingResult> {
+  async function submitProductAudit(productId: string): Promise<ListingResult> {
     return wxshop.request<ListingResult>('/channels/ec/product/listing', { product_id: productId }, '提交商品提审');
   }
 
@@ -175,7 +175,7 @@ export function createWxShopListingClient(accountId: string): WxShopListingClien
     getAllCategoryPaths,
     uploadImageByUrl,
     addProduct,
-    listProduct,
+    submitProductAudit,
     getAuditQuota,
     deleteProduct,
   };

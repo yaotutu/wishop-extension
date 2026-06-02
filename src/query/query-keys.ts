@@ -55,8 +55,8 @@ export const queryKeys = {
   quota: {
     item: (accountId: string) => ['quota', accountId] as const,
   },
-  listingLogs: {
-    list: (accountId: string) => ['listingLogs', accountId] as const,
+  productAuditLogs: {
+    list: (accountId: string) => ['productAuditLogs', accountId] as const,
   },
   activityLogs: {
     list: ['activityLogs'] as const,
@@ -71,16 +71,17 @@ export const queryKeys = {
   scheduledJobs: {
     list: ['scheduledJobs'] as const,
     orderSyncRecent: ['scheduledJobs', 'orders', 'syncRecent'] as const,
-    accountListing: (accountId: string) => ['scheduledJobs', 'listing', 'account', accountId] as const,
-    globalListing: ['scheduledJobs', 'listing', 'global'] as const,
+    accountProductAudit: (accountId: string) => ['scheduledJobs', 'productAudit', 'account', accountId] as const,
+    globalProductAudit: ['scheduledJobs', 'productAudit', 'global'] as const,
   },
-  taskConfig: {
-    item: (accountId: string) => ['taskConfig', accountId] as const,
+  productAuditConfig: {
+    item: (accountId: string) => ['productAuditConfig', accountId] as const,
+  },
+  productAuditRules: {
+    failure: ['productAuditRules', 'failure'] as const,
+    failureDefaults: ['productAuditRules', 'failure', 'defaults'] as const,
   },
   rules: {
-    blacklist: ['rules', 'blacklist'] as const,
-    blacklistDefaultCodes: ['rules', 'blacklist', 'defaultCodes'] as const,
-    skipKeywords: ['rules', 'skipKeywords'] as const,
     status: ['rules', 'status'] as const,
   },
 };

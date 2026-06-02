@@ -2,18 +2,18 @@ import Dexie, { type Table } from 'dexie';
 import type { NotificationPreference } from '../../shared/notification';
 import type { AppSettings } from '../../shared/settings';
 import type {
-  BlacklistRule,
   Config,
   CollectedProductListing,
   Order,
   OrderAssociation,
   OrderRealAddressCache,
   OrderSyncAccountState,
+  ProductAuditFailureRule,
+  ProductAuditTaskConfig,
   ProductSourceBinding,
   ScheduledJob,
   StatusRule,
   StoredOrderSource,
-  TaskConfig,
 } from '../../shared/types';
 
 export interface AccountRecord {
@@ -41,14 +41,13 @@ export interface OrderRecord {
 
 export interface AccountWorkspaceRecord {
   accountId: string;
-  taskConfig: TaskConfig;
+  productAuditConfig: ProductAuditTaskConfig;
   scheduledJobs: ScheduledJob[];
   productSources: ProductSourceBinding[];
   orderAssociations: OrderAssociation[];
   realAddressCaches: OrderRealAddressCache[];
   rules: {
-    skipKeywords: string[];
-    blacklistRules: BlacklistRule[];
+    productAuditRules: ProductAuditFailureRule[];
     statusRules: StatusRule[];
     violationWords: string[];
   };
@@ -58,7 +57,7 @@ export interface AccountWorkspaceRecord {
   updatedAt: number;
 }
 
-export type AccountLogKind = 'listing' | 'violation' | 'activity' | 'notification';
+export type AccountLogKind = 'productAudit' | 'violation' | 'activity' | 'notification';
 
 export interface AccountLogRecord<TEntry = unknown> {
   id: string;

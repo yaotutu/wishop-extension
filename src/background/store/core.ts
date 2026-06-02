@@ -1,9 +1,9 @@
 import type {
-  BlacklistRule,
   FullAccount,
+  ProductAuditFailureRule,
+  ProductAuditTaskConfig,
   ScheduledJob,
   StatusRule,
-  TaskConfig,
 } from '../../shared/types';
 import type { NotificationPreference } from '../../shared/notification';
 import type { AppSettings } from '../../shared/settings';
@@ -15,8 +15,7 @@ export interface StoreSchema {
   activeAccountId: string;
   wxAccessTokens?: Record<string, StoredWxAccessToken>;
   scheduledJobs?: ScheduledJob[];
-  skipKeywords?: string[];
-  blacklistRules?: BlacklistRule[];
+  productAuditRules?: ProductAuditFailureRule[];
   statusRules?: StatusRule[];
   notificationPreference?: NotificationPreference;
   appSettings?: AppSettings;
@@ -32,21 +31,21 @@ export interface StoredWxAccessToken {
 
 export const CURRENT_STORAGE_VERSION = 9;
 
-export const DEFAULT_TASK_CONFIG: TaskConfig = {
-  listUnreviewed: true,
-  listUnreviewedQuantity: 0,
-  autoDeleteFailed: true,
+export const DEFAULT_PRODUCT_AUDIT_CONFIG: ProductAuditTaskConfig = {
+  submitUnauditedDrafts: true,
+  submitLimit: 0,
+  defaultFailureAction: 'keepDraft',
 };
 
-export const DEFAULT_BLACKLIST: BlacklistRule[] = [
-  { code: 1002002, description: '本店铺近1天内提审次数超过限制，请1天后再试' },
-  { code: 10020066, description: '本店铺近1小时内提审次数超过限制，请1小时后再试' },
-  { code: 10020111, description: '本店铺近1天内提审次数超过限制，请1天后再试' },
-  { code: 6600148, description: '今日提审次数已用尽，请明日再试' },
-  { code: 10020208, description: '本店铺的上架功能被封禁，请登录微信小店后台管理页查看详情' },
-  { code: 10020246, description: '0元保证金试运营商品数超出限制，上架中与审核中商品总数不得超过100个' },
-  { code: 10020247, description: '由于未在限定时间内完成升级，该店铺已被限制商品新增能力' },
-  { code: 6600144, description: '商家店铺体验分为差，需要开通运费险后才能继续提审' },
+export const DEFAULT_PRODUCT_AUDIT_FAILURE_RULES: ProductAuditFailureRule[] = [
+  { id: 'stop-1002002', enabled: true, action: 'stopTask', match: { type: 'outerErrorCode', code: 1002002 }, description: '本店铺近1天内提审次数超过限制，请1天后再试' },
+  { id: 'stop-10020066', enabled: true, action: 'stopTask', match: { type: 'outerErrorCode', code: 10020066 }, description: '本店铺近1小时内提审次数超过限制，请1小时后再试' },
+  { id: 'stop-10020111', enabled: true, action: 'stopTask', match: { type: 'outerErrorCode', code: 10020111 }, description: '本店铺近1天内提审次数超过限制，请1天后再试' },
+  { id: 'stop-6600148', enabled: true, action: 'stopTask', match: { type: 'outerErrorCode', code: 6600148 }, description: '今日提审次数已用尽，请明日再试' },
+  { id: 'stop-10020208', enabled: true, action: 'stopTask', match: { type: 'outerErrorCode', code: 10020208 }, description: '本店铺的商品提审能力被封禁，请登录微信小店后台管理页查看详情' },
+  { id: 'stop-10020246', enabled: true, action: 'stopTask', match: { type: 'outerErrorCode', code: 10020246 }, description: '0元保证金试运营商品数超出限制，上架中与审核中商品总数不得超过100个' },
+  { id: 'stop-10020247', enabled: true, action: 'stopTask', match: { type: 'outerErrorCode', code: 10020247 }, description: '由于未在限定时间内完成升级，该店铺已被限制商品新增能力' },
+  { id: 'keep-6600144', enabled: true, action: 'keepDraft', match: { type: 'embeddedErrorCode', code: 6600144 }, description: '需要开通运费险或处理店铺体验问题，保留草稿待人工处理' },
 ];
 
 export const DEFAULT_STATUS_RULES: StatusRule[] = [
@@ -66,8 +65,7 @@ export async function readStore(): Promise<StoreSchema> {
     'activeAccountId',
     'wxAccessTokens',
     'scheduledJobs',
-    'skipKeywords',
-    'blacklistRules',
+    'productAuditRules',
     'statusRules',
     'notificationPreference',
     'appSettings',
@@ -80,8 +78,7 @@ export async function readStore(): Promise<StoreSchema> {
       ? data.wxAccessTokens as Record<string, StoredWxAccessToken>
       : {},
     scheduledJobs: Array.isArray(data.scheduledJobs) ? data.scheduledJobs : [],
-    skipKeywords: Array.isArray(data.skipKeywords) ? data.skipKeywords : [],
-    blacklistRules: Array.isArray(data.blacklistRules) ? data.blacklistRules : undefined,
+    productAuditRules: Array.isArray(data.productAuditRules) ? data.productAuditRules : undefined,
     statusRules: Array.isArray(data.statusRules) ? data.statusRules : undefined,
     notificationPreference: typeof data.notificationPreference === 'object' && data.notificationPreference !== null
       ? data.notificationPreference as NotificationPreference
@@ -99,9 +96,9 @@ export async function writeStore(patch: Partial<StoreSchema>): Promise<void> {
 export function normalizeAccount(account: FullAccount): FullAccount {
   return {
     ...account,
-    taskConfig: account.taskConfig || DEFAULT_TASK_CONFIG,
+    productAuditConfig: account.productAuditConfig || DEFAULT_PRODUCT_AUDIT_CONFIG,
     violationWords: account.violationWords || [],
-    listingLogs: account.listingLogs || [],
+    productAuditLogs: account.productAuditLogs || [],
     violationLogs: account.violationLogs || [],
     productSources: account.productSources || [],
     orderAssociations: account.orderAssociations || [],

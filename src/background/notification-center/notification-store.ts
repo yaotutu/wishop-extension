@@ -1,5 +1,5 @@
 import type { NotificationEntry, NotificationPreference } from '../../shared/notification';
-import { DEFAULT_NOTIFICATION_PREFERENCE } from '../../shared/notification';
+import { normalizeNotificationPreference } from '../../shared/notification';
 import { extensionDb } from '../db/extension-db.ts';
 import { markAccountDirty } from '../store/account-sync-state-repository.ts';
 import { ensureAccountWorkspace, updateAccountWorkspace } from '../store/workspace-repository.ts';
@@ -16,18 +16,7 @@ function pruneNotifications(notifications: NotificationEntry[]): NotificationEnt
 }
 
 function normalizePreference(value: unknown): NotificationPreference {
-  const input = value as Partial<NotificationPreference> | undefined;
-  return {
-    inAppEnabled: input?.inAppEnabled ?? DEFAULT_NOTIFICATION_PREFERENCE.inAppEnabled,
-    topicEnabled: {
-      ...DEFAULT_NOTIFICATION_PREFERENCE.topicEnabled,
-      ...(input?.topicEnabled || {}),
-    },
-    domainEnabled: {
-      ...DEFAULT_NOTIFICATION_PREFERENCE.domainEnabled,
-      ...(input?.domainEnabled || {}),
-    },
-  };
+  return normalizeNotificationPreference(value);
 }
 
 export async function getNotifications(): Promise<NotificationEntry[]> {

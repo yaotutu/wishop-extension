@@ -43,7 +43,7 @@ export interface WxShopListingClient {
   getAllCategoryPaths(): Promise<WxProductCategoryPath[]>;
   uploadImageByUrl(imgUrl: string): Promise<WxShopProductImageUploadResult>;
   addProduct(input: WxShopAddProductRequest): Promise<WxShopAddProductResult>;
-  listProduct(productId: string): Promise<ListingResult>;
+  submitProductAudit(productId: string): Promise<ListingResult>;
   getAuditQuota(): Promise<QuotaResult>;
   deleteProduct(productId: string): Promise<ListingResult>;
 }

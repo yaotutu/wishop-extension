@@ -9,6 +9,7 @@ import { createPurchaseLookupRuntimeHandlers } from '../runtime-handlers/purchas
 import { createRealAddressRuntimeHandlers } from '../runtime-handlers/real-address-handlers';
 import { createProductRuntimeHandlers } from '../runtime-handlers/product-handlers';
 import { createProductListingCollectionRuntimeHandlers } from '../runtime-handlers/product-listing-collection-handlers';
+import { createProductAuditRuntimeHandlers } from '../runtime-handlers/product-audit-handlers';
 import { createProductSourceRuntimeHandlers } from '../runtime-handlers/product-source-handlers';
 import { createQuotaRuntimeHandlers } from '../runtime-handlers/quota-handlers';
 import { createRuleRuntimeHandlers } from '../runtime-handlers/rule-handlers';
@@ -17,12 +18,11 @@ import { createSettingsRuntimeHandlers } from '../runtime-handlers/settings-hand
 import { createShippingRuntimeHandlers } from '../runtime-handlers/shipping-handlers';
 import { createTaobaoWorkspaceRuntimeHandlers } from '../runtime-handlers/taobao-workspace-handlers';
 import { createTaobaoRefundRuntimeHandlers } from '../runtime-handlers/taobao-refund-handlers';
-import { createTaskRuntimeHandlers } from '../runtime-handlers/task-handlers';
 import { createViolationRuntimeHandlers } from '../runtime-handlers/violation-handlers';
 import { createLicenseRuntimeHandlers } from '../runtime-handlers/license-handlers';
 import { assertFeatureAccess } from '../licensing/licensing-service';
-import { clearDraftPagination, deleteDraft, fetchDrafts, listDraft } from '../services/draft-service';
-import { runTask } from '../services/task-runner-service';
+import { clearDraftPagination, deleteDraft, fetchDrafts, submitDraftAudit } from '../services/draft-service';
+import { runProductAuditTask } from '../services/product-audit-task-service';
 import { runViolationBatchScan, runViolationStep, type ScanSessionState } from '../services/violation-service';
 import type { SessionManager } from '../utils/session-manager';
 import { createRuntimeRouter, type RuntimeFeatureMap, type RuntimeRouter } from './runtime-router';
@@ -82,12 +82,12 @@ const FEATURE_CHANNELS = {
   'productListingCollection:prepareWxDraft': 'listing',
   'productListingCollection:submitPreparedWxDraft': 'listing',
   'productListingCollection:createWxDraft': 'listing',
-  'drafts:fetch': 'listing',
-  'drafts:list': 'listing',
-  'drafts:delete': 'listing',
-  'quota:get': 'listing',
-  'listingLogs:get': null,
-  'listingLogs:clear': null,
+  'drafts:fetch': 'productAudit',
+  'drafts:submitAudit': 'productAudit',
+  'drafts:delete': 'productAudit',
+  'quota:get': 'productAudit',
+  'productAudit:logsGet': null,
+  'productAudit:logsClear': null,
   'activityLogs:list': null,
   'activityLogs:clear': null,
   'notifications:list': null,
@@ -98,29 +98,27 @@ const FEATURE_CHANNELS = {
   'notifications:updatePreference': null,
   'settings:get': null,
   'settings:update': null,
-  'scheduledJobs:list': 'listing',
-  'scheduledJobs:add': 'listing',
-  'scheduledJobs:update': 'listing',
-  'scheduledJobs:remove': 'listing',
-  'scheduledJobs:runNow': 'listing',
-  'task:run': 'listing',
-  'task:stop': 'listing',
-  'taskConfig:get': 'listing',
-  'taskConfig:set': 'listing',
+  'scheduledJobs:list': null,
+  'scheduledJobs:add': null,
+  'scheduledJobs:update': null,
+  'scheduledJobs:remove': null,
+  'scheduledJobs:runNow': null,
+  'productAudit:run': 'productAudit',
+  'productAudit:stop': 'productAudit',
+  'productAudit:configGet': 'productAudit',
+  'productAudit:configSet': 'productAudit',
   'violation:getWords': 'violation',
   'violation:setWords': 'violation',
   'violation:batchScan': 'violation',
   'violation:scanStep': 'violation',
   'violation:batchDelete': 'violation',
   'violation:stop': 'violation',
-  'blacklistRules:get': 'listing',
-  'blacklistRules:getDefaultCodes': 'listing',
-  'blacklistRules:set': 'listing',
-  'skipKeywords:get': 'listing',
-  'skipKeywords:set': 'listing',
-  'statusRules:get': 'listing',
-  'statusRules:set': 'listing',
-  'statusRules:reset': 'listing',
+  'productAudit:failureRulesGet': 'productAudit',
+  'productAudit:failureRulesGetDefaults': 'productAudit',
+  'productAudit:failureRulesSet': 'productAudit',
+  'statusRules:get': 'productAudit',
+  'statusRules:set': 'productAudit',
+  'statusRules:reset': 'productAudit',
   'shipping:open': 'shipping',
   'shipping:getCurrentTabSession': 'shipping',
   'shipping:markPageReady': 'shipping',
@@ -163,7 +161,7 @@ export function createBackgroundRouter(options: CreateBackgroundRouterOptions): 
     ...createProductListingCollectionRuntimeHandlers(options.getCurrentTabProductListingCollectionSession),
     ...createDraftRuntimeHandlers({
       fetchDrafts,
-      listDraft,
+      submitDraftAudit,
       deleteDraft,
     }),
     ...createProductRuntimeHandlers(),
@@ -171,9 +169,9 @@ export function createBackgroundRouter(options: CreateBackgroundRouterOptions): 
     ...createShippingRuntimeHandlers(options.getCurrentTabShippingSession),
     ...createTaobaoWorkspaceRuntimeHandlers(),
     ...createSchedulerRuntimeHandlers(),
-    ...createTaskRuntimeHandlers({
-      runTask: (accountId, config) => runTask(accountId, config, options.taskSessions),
-      stopTask(accountId) {
+    ...createProductAuditRuntimeHandlers({
+      run: (accountId, config) => runProductAuditTask(accountId, config, options.taskSessions),
+      stop(accountId) {
         options.taskSessions.stop(accountId);
       },
     }),

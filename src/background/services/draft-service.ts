@@ -1,5 +1,5 @@
 import type { AddLogFn, DraftProduct, DraftProductDeleteInput, DraftProductDeleteResult } from '../../shared/types';
-import { createScopedListingLog } from '../store/log-repository';
+import { createScopedProductAuditLog } from '../store/log-repository';
 import { getListingClient } from '../wxshop/client-registry';
 import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 import type { WxShopListingClient } from '../wxshop/listing/types';
@@ -16,7 +16,7 @@ export function clearDraftPagination(accountId: string): void {
 }
 
 export async function fetchDrafts(accountId: string, reset?: boolean): Promise<{ products: DraftProduct[]; hasMore: boolean }> {
-  const logger = createDiagnosticLogger({ domain: 'listing', component: 'Drafts', accountId });
+  const logger = createDiagnosticLogger({ domain: 'productAudit', component: 'Drafts', accountId });
   let pagination = draftPaginationMap.get(accountId);
   if (!pagination || reset) {
     pagination = { nextKey: '', hasMore: true };
@@ -50,20 +50,20 @@ export async function fetchDrafts(accountId: string, reset?: boolean): Promise<{
   return { products, hasMore: pagination.hasMore };
 }
 
-export async function listDraft(accountId: string, productId: string): Promise<{ success: boolean; error?: string }> {
-  const logger = createDiagnosticLogger({ domain: 'listing', component: 'Drafts', accountId });
-  const addLog = createScopedListingLog(accountId);
+export async function submitDraftAudit(accountId: string, productId: string): Promise<{ success: boolean; error?: string }> {
+  const logger = createDiagnosticLogger({ domain: 'productAudit', component: 'Drafts', accountId });
+  const addLog = createScopedProductAuditLog(accountId);
   try {
-    const result = await (await getListingClient(accountId)).listProduct(productId);
+    const result = await (await getListingClient(accountId)).submitProductAudit(productId);
     if (result.errcode === 0) {
-      addLog({ runId: '', productId, productTitle: '', action: 'list', status: 'success' });
+      addLog({ runId: '', productId, productTitle: '', action: 'submitAudit', status: 'success' });
       return { success: true };
     }
-    addLog({ runId: '', productId, productTitle: '', action: 'list', status: 'failed', errorCode: result.errcode, errorMsg: result.errmsg });
+    addLog({ runId: '', productId, productTitle: '', action: 'submitAudit', status: 'failed', errorCode: result.errcode, errorMsg: result.errmsg });
     return { success: false, error: result.errmsg };
   } catch (error: any) {
-    logger.error(`上架商品 ${productId} 失败:`, error);
-    addLog({ runId: '', productId, productTitle: '', action: 'list', status: 'failed', errorMsg: error.message });
+    logger.error(`提交草稿 ${productId} 提审失败:`, error);
+    addLog({ runId: '', productId, productTitle: '', action: 'submitAudit', status: 'failed', errorMsg: error.message });
     return { success: false, error: error.message };
   }
 }
@@ -115,7 +115,7 @@ export async function deleteDraftWithClient(options: DeleteDraftWithClientOption
  * 账号凭证和 access token 仍由统一的微信小店 client 管理，页面只传商品 ID 和用于回写执行记录的标题/runId。
  */
 export async function deleteDraft(accountId: string, input: DraftProductDeleteInput): Promise<DraftProductDeleteResult> {
-  const logger = createDiagnosticLogger({ domain: 'listing', component: 'Drafts', accountId });
+  const logger = createDiagnosticLogger({ domain: 'productAudit', component: 'Drafts', accountId });
   const productId = input.productId.trim();
   if (!productId) {
     throw new Error('缺少要删除的草稿商品 ID');
@@ -124,7 +124,7 @@ export async function deleteDraft(accountId: string, input: DraftProductDeleteIn
   try {
     const result = await deleteDraftWithClient({
       api: await getListingClient(accountId),
-      addLog: createScopedListingLog(accountId),
+      addLog: createScopedProductAuditLog(accountId),
       productId,
       productTitle: input.productTitle?.trim() || '',
       runId: input.runId?.trim() || '',
@@ -135,7 +135,7 @@ export async function deleteDraft(accountId: string, input: DraftProductDeleteIn
     return result;
   } catch (error: any) {
     const message = error?.message || String(error);
-    createScopedListingLog(accountId)({
+    createScopedProductAuditLog(accountId)({
       runId: input.runId?.trim() || '',
       productId,
       productTitle: input.productTitle?.trim() || '',

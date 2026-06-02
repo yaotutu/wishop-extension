@@ -1,6 +1,5 @@
 import type {
   Account,
-  BlacklistRule,
   CollectedProductListing,
   Config,
   CreateProductListingCollectionSessionInput,
@@ -34,6 +33,9 @@ import type {
   ProductSourceItem,
   ProductQrcodeResult,
   ProductListingCollectionSession,
+  ProductAuditFailureRule,
+  ProductAuditTaskConfig,
+  ProductAuditTaskResult,
   PurchaseLookupSession,
   QuotaResult,
   ScheduledJob,
@@ -48,8 +50,6 @@ import type {
   TaobaoSecurityChallengeSnapshot,
   TaobaoPurchaseOrderSnapshot,
   TaobaoProductSnapshot,
-  TaskConfig,
-  TaskCycleResult,
   ViolationMatch,
   ViolationScanResult,
   SubmitPreparedWxProductDraftInput,
@@ -120,7 +120,7 @@ export const extensionApi = {
   },
   drafts: {
     fetch: (accountId: string, reset?: boolean): Promise<{ products: DraftProduct[]; hasMore: boolean }> => invoke('drafts:fetch', accountId, reset),
-    list: (accountId: string, productId: string): Promise<{ success: boolean; error?: string }> => invoke('drafts:list', accountId, productId),
+    submitAudit: (accountId: string, productId: string): Promise<{ success: boolean; error?: string }> => invoke('drafts:submitAudit', accountId, productId),
     delete: (accountId: string, input: DraftProductDeleteInput): Promise<DraftProductDeleteResult> => invoke('drafts:delete', accountId, input),
   },
   orders: {
@@ -250,10 +250,17 @@ export const extensionApi = {
   quota: {
     get: (accountId: string, force = false): Promise<QuotaResult> => invoke('quota:get', accountId, force),
   },
-  listingLogs: {
-    get: (accountId: string): Promise<LogEntry[]> => invoke('listingLogs:get', accountId),
-    clear: (accountId: string): Promise<void> => invoke('listingLogs:clear', accountId),
-    onAdded: (accountId: string, callback: (log: LogEntry) => void) => onRuntimeEvent(`listingLog:added:${accountId}`, callback),
+  productAudit: {
+    getConfig: (accountId: string): Promise<ProductAuditTaskConfig> => invoke('productAudit:configGet', accountId),
+    setConfig: (accountId: string, config: ProductAuditTaskConfig): Promise<void> => invoke('productAudit:configSet', accountId, config),
+    run: (accountId: string, config: ProductAuditTaskConfig): Promise<ProductAuditTaskResult> => invoke('productAudit:run', accountId, config),
+    stop: (accountId: string): Promise<void> => invoke('productAudit:stop', accountId),
+    getLogs: (accountId: string): Promise<LogEntry[]> => invoke('productAudit:logsGet', accountId),
+    clearLogs: (accountId: string): Promise<void> => invoke('productAudit:logsClear', accountId),
+    onLogAdded: (accountId: string, callback: (log: LogEntry) => void) => onRuntimeEvent(`productAuditLog:added:${accountId}`, callback),
+    getFailureRules: (): Promise<ProductAuditFailureRule[]> => invoke('productAudit:failureRulesGet'),
+    getDefaultFailureRules: (): Promise<ProductAuditFailureRule[]> => invoke('productAudit:failureRulesGetDefaults'),
+    setFailureRules: (rules: ProductAuditFailureRule[]): Promise<void> => invoke('productAudit:failureRulesSet', rules),
   },
   activityLogs: {
     list: (): Promise<ActivityLogEntry[]> => invoke('activityLogs:list'),
@@ -285,14 +292,6 @@ export const extensionApi = {
     remove: (jobId: string): Promise<void> => invoke('scheduledJobs:remove', jobId),
     runNow: (jobId: string): Promise<ScheduledJobRunNowResult> => invoke('scheduledJobs:runNow', jobId),
   },
-  taskConfig: {
-    get: (accountId: string): Promise<TaskConfig> => invoke('taskConfig:get', accountId),
-    set: (accountId: string, config: TaskConfig): Promise<void> => invoke('taskConfig:set', accountId, config),
-  },
-  task: {
-    run: (accountId: string, config: TaskConfig): Promise<TaskCycleResult> => invoke('task:run', accountId, config),
-    stop: (accountId: string): Promise<void> => invoke('task:stop', accountId),
-  },
   violation: {
     getWords: (accountId: string): Promise<string[]> => invoke('violation:getWords', accountId),
     setWords: (accountId: string, words: string[]): Promise<void> => invoke('violation:setWords', accountId, words),
@@ -305,15 +304,6 @@ export const extensionApi = {
     batchDelete: (accountId: string, violations: ViolationMatch[]): Promise<{ deleted: number; errors: number; stopped: boolean }> => invoke('violation:batchDelete', accountId, violations),
     stop: (accountId: string): Promise<void> => invoke('violation:stop', accountId),
     onLog: (accountId: string, callback: (log: LogEntry) => void) => onRuntimeEvent(`violationLog:added:${accountId}`, callback),
-  },
-  blacklistRules: {
-    get: (): Promise<BlacklistRule[]> => invoke('blacklistRules:get'),
-    getDefaultCodes: (): Promise<number[]> => invoke('blacklistRules:getDefaultCodes'),
-    set: (rules: BlacklistRule[]): Promise<void> => invoke('blacklistRules:set', rules),
-  },
-  skipKeywords: {
-    get: (): Promise<string[]> => invoke('skipKeywords:get'),
-    set: (keywords: string[]): Promise<void> => invoke('skipKeywords:set', keywords),
   },
   statusRules: {
     get: (): Promise<StatusRule[]> => invoke('statusRules:get'),

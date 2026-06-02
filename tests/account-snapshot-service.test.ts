@@ -12,10 +12,10 @@ import type { Order, OrderStatus } from '../src/shared/types.ts';
 
 const PENDING_SHIPMENT = 20 as OrderStatus;
 const COMPLETED = 100 as OrderStatus;
-const DEFAULT_TASK_CONFIG = {
-  listUnreviewed: true,
-  listUnreviewedQuantity: 0,
-  autoDeleteFailed: true,
+const DEFAULT_PRODUCT_AUDIT_CONFIG = {
+  submitUnauditedDrafts: true,
+  submitLimit: 0,
+  defaultFailureAction: 'keepDraft' as const,
 };
 
 function makeOrder(orderId: string, status: OrderStatus = PENDING_SHIPMENT): Order {
@@ -111,14 +111,13 @@ test('account snapshots replace only the target account data', async () => {
   await extensionDb.accountWorkspaces.bulkPut([
     {
       accountId: 'account-1',
-      taskConfig: DEFAULT_TASK_CONFIG,
+      productAuditConfig: DEFAULT_PRODUCT_AUDIT_CONFIG,
       scheduledJobs: [],
       productSources: [{ productId: 'product-1', sources: [] }],
       orderAssociations: [],
       realAddressCaches: [],
       rules: {
-        skipKeywords: [],
-        blacklistRules: [],
+        productAuditRules: [],
         statusRules: [],
         violationWords: ['违规词'],
       },
@@ -129,14 +128,13 @@ test('account snapshots replace only the target account data', async () => {
     },
     {
       accountId: 'account-2',
-      taskConfig: DEFAULT_TASK_CONFIG,
+      productAuditConfig: DEFAULT_PRODUCT_AUDIT_CONFIG,
       scheduledJobs: [],
       productSources: [{ productId: 'product-2', sources: [] }],
       orderAssociations: [],
       realAddressCaches: [],
       rules: {
-        skipKeywords: [],
-        blacklistRules: [],
+        productAuditRules: [],
         statusRules: [],
         violationWords: [],
       },
@@ -150,14 +148,14 @@ test('account snapshots replace only the target account data', async () => {
     {
       id: 'log-1',
       accountId: 'account-1',
-      kind: 'listing',
+      kind: 'productAudit',
       timestamp: 1700000000000,
       entry: { id: 'log-1', timestamp: 1700000000000 },
     },
     {
       id: 'log-2',
       accountId: 'account-2',
-      kind: 'listing',
+      kind: 'productAudit',
       timestamp: 1700000000000,
       entry: { id: 'log-2', timestamp: 1700000000000 },
     },
@@ -202,7 +200,7 @@ test('account snapshots replace only the target account data', async () => {
   await extensionDb.accountLogs.put({
     id: 'local-log',
     accountId: 'account-1',
-    kind: 'listing',
+    kind: 'productAudit',
     timestamp: 1700000001000,
     entry: { id: 'local-log', timestamp: 1700000001000 },
   });

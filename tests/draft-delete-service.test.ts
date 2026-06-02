@@ -13,7 +13,7 @@ function makeClient(result: { errcode: number; errmsg: string }): WxShopListingC
   } as Partial<WxShopListingClient> as WxShopListingClient;
 }
 
-test('manual draft deletion records a successful listing log entry', async () => {
+test('manual draft deletion records a successful product audit log entry', async () => {
   const logs: Parameters<AddLogFn>[0][] = [];
 
   const result = await deleteDraftWithClient({

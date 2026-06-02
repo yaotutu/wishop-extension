@@ -24,7 +24,7 @@ test('product listing has an independent dashboard module boundary', () => {
   assert.match(layout, /\{ key: 'productListing', label: '上货管理' \}/);
   assert.match(layout, /activeModule === 'productListing'/);
   assert.match(preferences, /'productListing'/);
-  assert.match(layout, /activeModule === 'commonFunctions' && <ListingPage/);
+  assert.match(layout, /activeModule === 'commonFunctions' && <ProductAuditPage/);
 });
 
 test('product listing preview renders collected detail images', () => {

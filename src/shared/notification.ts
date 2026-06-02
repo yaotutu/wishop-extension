@@ -11,8 +11,8 @@ export type NotificationTopic =
   | 'orders.shipment_failed'
   | 'orders.purchase_lookup_failed'
   | 'orders.refund_failed'
-  | 'listing.audit_failed'
-  | 'listing.audit_warning'
+  | 'productAudit.audit_failed'
+  | 'productAudit.audit_warning'
   | 'scheduled_job.failed'
   | 'system.credential_invalid';
 
@@ -59,13 +59,14 @@ export const DEFAULT_NOTIFICATION_PREFERENCE: NotificationPreference = {
     'orders.shipment_failed': true,
     'orders.purchase_lookup_failed': true,
     'orders.refund_failed': true,
-    'listing.audit_failed': true,
-    'listing.audit_warning': true,
+    'productAudit.audit_failed': true,
+    'productAudit.audit_warning': true,
     'scheduled_job.failed': true,
     'system.credential_invalid': true,
   },
   domainEnabled: {
     listing: true,
+    productAudit: true,
     violation: true,
     orders: true,
     store: true,
@@ -126,15 +127,15 @@ export const NOTIFICATION_TOPIC_DEFINITIONS: NotificationTopicDefinition[] = [
     defaultUrgency: 'important',
   },
   {
-    topic: 'listing.audit_failed',
-    domain: 'listing',
+    topic: 'productAudit.audit_failed',
+    domain: 'productAudit',
     label: '商品提审失败',
     description: '手动或定时商品提审任务失败。',
     defaultUrgency: 'important',
   },
   {
-    topic: 'listing.audit_warning',
-    domain: 'listing',
+    topic: 'productAudit.audit_warning',
+    domain: 'productAudit',
     label: '商品提审异常摘要',
     description: '商品提审完成但存在跳过、错误、停止或配额异常。',
     defaultUrgency: 'normal',
@@ -154,3 +155,27 @@ export const NOTIFICATION_TOPIC_DEFINITIONS: NotificationTopicDefinition[] = [
     defaultUrgency: 'important',
   },
 ];
+
+export function normalizeNotificationPreference(value: unknown): NotificationPreference {
+  const input = value as Partial<NotificationPreference> | undefined;
+  const topicEnabled = Object.fromEntries(
+    NOTIFICATION_TOPIC_DEFINITIONS.map(definition => [
+      definition.topic,
+      input?.topicEnabled?.[definition.topic] ?? DEFAULT_NOTIFICATION_PREFERENCE.topicEnabled[definition.topic],
+    ]),
+  ) as Record<NotificationTopic, boolean>;
+
+  const domains = Object.keys(DEFAULT_NOTIFICATION_PREFERENCE.domainEnabled) as ActivityLogDomain[];
+  const domainEnabled = Object.fromEntries(
+    domains.map(domain => [
+      domain,
+      input?.domainEnabled?.[domain] ?? DEFAULT_NOTIFICATION_PREFERENCE.domainEnabled[domain],
+    ]),
+  ) as Record<ActivityLogDomain, boolean>;
+
+  return {
+    inAppEnabled: input?.inAppEnabled ?? DEFAULT_NOTIFICATION_PREFERENCE.inAppEnabled,
+    topicEnabled,
+    domainEnabled,
+  };
+}

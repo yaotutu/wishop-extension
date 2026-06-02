@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { Account, Config, FullAccount } from '../../shared/types';
 import { extensionDb, type AccountRecord } from '../db/extension-db.ts';
-import { DEFAULT_TASK_CONFIG } from './core.ts';
+import { DEFAULT_PRODUCT_AUDIT_CONFIG } from './core.ts';
 import { ensureAccountWorkspace } from './workspace-repository.ts';
 
 const ACTIVE_ACCOUNT_ID_KEY = 'activeAccountId';
@@ -37,9 +37,9 @@ export async function getAccount(accountId: string): Promise<FullAccount | undef
   const workspace = await ensureAccountWorkspace(accountId);
   return {
     ...toAccount(account),
-    taskConfig: workspace.taskConfig,
+    productAuditConfig: workspace.productAuditConfig,
     violationWords: workspace.rules.violationWords,
-    listingLogs: [],
+    productAuditLogs: [],
     violationLogs: [],
     productSources: workspace.productSources,
     orderAssociations: workspace.orderAssociations,
@@ -53,9 +53,9 @@ export async function addAccount(name: string, config: Config): Promise<FullAcco
     id: uuidv4(),
     name,
     config,
-    taskConfig: DEFAULT_TASK_CONFIG,
+    productAuditConfig: DEFAULT_PRODUCT_AUDIT_CONFIG,
     violationWords: [],
-    listingLogs: [],
+    productAuditLogs: [],
     violationLogs: [],
     productSources: [],
     orderAssociations: [],
