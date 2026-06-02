@@ -117,6 +117,25 @@ export interface DraftProduct {
   editStatus: number;
 }
 
+/**
+ * 从执行记录发起草稿删除时，页面只传商品定位信息。
+ * 后台会用 accountId 找到统一微信小店 client，不允许页面接触 token 或 appSecret。
+ */
+export interface DraftProductDeleteInput {
+  productId: string;
+  productTitle?: string;
+  runId?: string;
+}
+
+/**
+ * 草稿删除结果需要保留微信错误码，方便用户把不可删除原因回看成执行记录。
+ */
+export interface DraftProductDeleteResult {
+  success: boolean;
+  errorCode?: number;
+  error?: string;
+}
+
 export interface QuotaResult {
   quota: number;
   total: number;

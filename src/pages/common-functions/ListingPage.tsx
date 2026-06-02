@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { extensionApi } from '../../shared/extension-api';
 import { Checkbox, InputNumber, Button, Space, Alert, Tag, Divider, Modal, Table, Switch, Input, message, Empty, Popconfirm, Select, Tooltip } from 'antd';
 import { PlayCircleOutlined, CloseCircleOutlined, WarningOutlined, DeleteOutlined, ReloadOutlined, ExclamationCircleOutlined, ClockCircleOutlined, PlusOutlined, EditOutlined, StopOutlined, QuestionCircleOutlined } from '@ant-design/icons';
@@ -102,6 +102,7 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
   const [newRuleLabel, setNewRuleLabel] = useState('');
   const [newRuleAction, setNewRuleAction] = useState<'submit' | 'delete' | 'skip'>('skip');
   const [rulesLocked, setRulesLocked] = useState(true);
+  const [deletingDraftProductIds, setDeletingDraftProductIds] = useState<Set<string>>(() => new Set());
 
   const currentAccountIdRef = useRef(accountId);
   const taskUnsubscribersRef = useRef(new Map<string, () => void>());
@@ -544,6 +545,38 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
     message.success(`已将「${keyword}」加入跳过列表`);
   };
 
+  const handleDeleteDraftFromLog = async (log: LogEntry) => {
+    const productId = log.productId.trim();
+    if (!productId) {
+      message.error('缺少商品 ID，无法删除草稿');
+      return;
+    }
+
+    setDeletingDraftProductIds(prev => new Set(prev).add(productId));
+    try {
+      const result = await extensionApi.drafts.delete(accountId, {
+        productId,
+        productTitle: log.productTitle || productId,
+        runId: log.runId,
+      });
+      if (result.success) {
+        message.success('已从草稿箱删除商品');
+      } else {
+        const error = result.errorCode ? `errcode:${result.errorCode} ${result.error || ''}` : result.error || '删除失败';
+        message.error(error);
+      }
+      await fetchLogs();
+    } catch (error: any) {
+      message.error(error?.message || '删除草稿失败');
+    } finally {
+      setDeletingDraftProductIds(prev => {
+        const next = new Set(prev);
+        next.delete(productId);
+        return next;
+      });
+    }
+  };
+
   // --- 解锁运行规则 ---
   const handleUnlockRules = () => {
     Modal.confirm({
@@ -620,6 +653,12 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
     : quota.fetchedAt
       ? `来源：${quota.source === 'cache' ? '缓存' : '微信接口'}；更新时间：${quotaFetchedAtText}${typeof quota.elapsedMs === 'number' ? `；耗时：${quota.elapsedMs}ms` : ''}`
       : '尚未获取提审配额';
+  const deletedProductIds = useMemo(() => {
+    // 执行记录里同一商品可能同时存在提审失败和删除成功两条日志；以删除成功记录作为“已处理”的事实。
+    return new Set(logs
+      .filter(log => log.action === 'delete' && log.status === 'success' && log.productId)
+      .map(log => log.productId));
+  }, [logs]);
   const renderRulesSection = () => (
     <div style={{ border: '1px solid #f0f0f0', borderRadius: 8, background: '#fff', opacity: rulesLocked ? 0.75 : 1 }}>
       <div style={{ padding: '14px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1000,6 +1039,7 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
               const showDivider = index > 0 && log.runId !== nextLog?.runId;
               const isSuccess = log.status === 'success';
               const isSkipAction = log.action === 'skip';
+              const canDeleteDraft = Boolean(log.productId) && log.action !== 'delete' && !deletedProductIds.has(log.productId);
               const actionLabel = log.action === 'delete' ? '删除' : log.action === 'check' ? '检查' : log.action === 'skip' ? '待处理' : '上架';
               const actionColor = log.action === 'delete' ? '#fa8c16' : log.action === 'check' ? '#52c41a' : isSkipAction ? '#fa8c16' : '#1677ff';
               const inBlacklist = log.errorCode != null && blacklistRules.some(r =>
@@ -1022,9 +1062,32 @@ const Listing: React.FC<ListingProps> = ({ accountId, accounts, scope = 'account
                       <span style={{ color: '#bbb', fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }}>
                         {new Date(log.timestamp).toLocaleTimeString('zh-CN')}
                       </span>
+                      {canDeleteDraft && (
+                        <Popconfirm
+                          title="从草稿箱删除商品？"
+                          description="将调用微信小店草稿删除接口，删除后无法撤销。"
+                          okText="删除"
+                          cancelText="取消"
+                          okButtonProps={{ danger: true, loading: deletingDraftProductIds.has(log.productId) }}
+                          disabled={running || deletingDraftProductIds.has(log.productId)}
+                          onConfirm={() => handleDeleteDraftFromLog(log)}
+                        >
+                          <Button
+                            type="link"
+                            size="small"
+                            danger
+                            icon={<DeleteOutlined />}
+                            loading={deletingDraftProductIds.has(log.productId)}
+                            disabled={running}
+                            style={{ padding: '0 4px', height: 20, fontSize: 11, flexShrink: 0 }}
+                          >
+                            删除草稿
+                          </Button>
+                        </Popconfirm>
+                      )}
                     </div>
                     {log.errorMsg && (
-                      <div style={{ color: '#cf1322', fontSize: 12, marginTop: 4, lineHeight: 1.6, wordBreak: 'break-all' }}>
+                      <div style={{ color: isSuccess ? '#389e0d' : '#cf1322', fontSize: 12, marginTop: 4, lineHeight: 1.6, wordBreak: 'break-all' }}>
                         {log.errorCode != null && (
                           <Tag color="error" style={{ fontSize: 11, marginRight: 4, lineHeight: '18px', padding: '0 4px' }}>errcode:{log.errorCode}</Tag>
                         )}

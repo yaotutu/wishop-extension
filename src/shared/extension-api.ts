@@ -10,6 +10,8 @@ import type {
   CreateShippingSessionInput,
   DeliveryCompanyOption,
   DraftProduct,
+  DraftProductDeleteInput,
+  DraftProductDeleteResult,
   LicenseActivationInput,
   LicenseState,
   LogEntry,
@@ -119,6 +121,7 @@ export const extensionApi = {
   drafts: {
     fetch: (accountId: string, reset?: boolean): Promise<{ products: DraftProduct[]; hasMore: boolean }> => invoke('drafts:fetch', accountId, reset),
     list: (accountId: string, productId: string): Promise<{ success: boolean; error?: string }> => invoke('drafts:list', accountId, productId),
+    delete: (accountId: string, input: DraftProductDeleteInput): Promise<DraftProductDeleteResult> => invoke('drafts:delete', accountId, input),
   },
   orders: {
     list: (

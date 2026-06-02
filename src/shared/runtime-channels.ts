@@ -13,6 +13,8 @@ import type {
   CreateShippingSessionInput,
   DeliveryCompanyOption,
   DraftProduct,
+  DraftProductDeleteInput,
+  DraftProductDeleteResult,
   LicenseActivationInput,
   LicenseState,
   LogEntry,
@@ -71,6 +73,7 @@ export interface RuntimeChannels {
 
   'drafts:fetch': { args: [accountId: string, reset?: boolean]; result: { products: DraftProduct[]; hasMore: boolean } };
   'drafts:list': { args: [accountId: string, productId: string]; result: { success: boolean; error?: string } };
+  'drafts:delete': { args: [accountId: string, input: DraftProductDeleteInput]; result: DraftProductDeleteResult };
 
   'orders:list': {
     args: [scope: OrderScope, filters?: OrderListFilters];

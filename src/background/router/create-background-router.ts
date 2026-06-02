@@ -21,7 +21,7 @@ import { createTaskRuntimeHandlers } from '../runtime-handlers/task-handlers';
 import { createViolationRuntimeHandlers } from '../runtime-handlers/violation-handlers';
 import { createLicenseRuntimeHandlers } from '../runtime-handlers/license-handlers';
 import { assertFeatureAccess } from '../licensing/licensing-service';
-import { clearDraftPagination, fetchDrafts, listDraft } from '../services/draft-service';
+import { clearDraftPagination, deleteDraft, fetchDrafts, listDraft } from '../services/draft-service';
 import { runTask } from '../services/task-runner-service';
 import { runViolationBatchScan, runViolationStep, type ScanSessionState } from '../services/violation-service';
 import type { SessionManager } from '../utils/session-manager';
@@ -84,6 +84,7 @@ const FEATURE_CHANNELS = {
   'productListingCollection:createWxDraft': 'listing',
   'drafts:fetch': 'listing',
   'drafts:list': 'listing',
+  'drafts:delete': 'listing',
   'quota:get': 'listing',
   'listingLogs:get': null,
   'listingLogs:clear': null,
@@ -163,6 +164,7 @@ export function createBackgroundRouter(options: CreateBackgroundRouterOptions): 
     ...createDraftRuntimeHandlers({
       fetchDrafts,
       listDraft,
+      deleteDraft,
     }),
     ...createProductRuntimeHandlers(),
     ...createProductSourceRuntimeHandlers(),
