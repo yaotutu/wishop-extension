@@ -55,3 +55,42 @@ node scripts/fetch-taobao-itemcats.ts --out=data/category-snapshots/taobao-itemc
   ]
 }
 ```
+
+## build-taobao-itemcat-wxshop-category-map.mjs
+
+用本地淘宝 itemcat 字典和微信小店全量叶子类目生成“淘宝类目 ID -> 微信小店类目候选”对照表。
+
+输入：
+
+```bash
+public/data/taobao-itemcats/taobao-itemcats-runtime.json
+data/wxshop-categories/wxshop-category-paths.json
+```
+
+运行：
+
+```bash
+node scripts/build-taobao-itemcat-wxshop-category-map.mjs
+```
+
+输出：
+
+```bash
+data/category-mapping/taobao-itemcat-to-wxshop-category-map.json
+data/category-mapping/taobao-itemcat-to-wxshop-category-map.csv
+data/category-mapping/taobao-itemcat-wxshop-category-map.runtime.json
+```
+
+默认只映射淘宝叶子类目。需要把父类目也纳入审计时：
+
+```bash
+node scripts/build-taobao-itemcat-wxshop-category-map.mjs --include-parent
+```
+
+默认 JSON 是精简结果，CSV 是全量人工审计表。需要输出每个淘宝类目的完整候选列表时：
+
+```bash
+node scripts/build-taobao-itemcat-wxshop-category-map.mjs --full-json
+```
+
+注意：当前运行时淘宝 itemcat 字典来自 2020 年公开快照，可能缺少淘宝商品详情页上的新版类目 ID。若采集到的 `sourceCategory.id` 不能反查中文类目，应先用 `fetch-taobao-itemcats.ts` 拉取新的淘宝类目快照，再更新运行时字典。

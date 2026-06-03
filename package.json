@@ -12,6 +12,7 @@
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
     "compile": "tsc --noEmit",
+    "data:category-map:itemcats": "node scripts/build-taobao-itemcat-wxshop-category-map.mjs",
     "push": "npm run compile && npm run build && npm version patch -m 'chore: v%s' && git push --follow-tags",
     "postinstall": "wxt prepare"
   },
