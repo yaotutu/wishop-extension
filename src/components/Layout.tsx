@@ -11,6 +11,7 @@ import { CredentialErrorProvider } from '../contexts/CredentialErrorContext';
 import {
   useDashboardUiPreferencesStore,
   type DashboardModuleType,
+  type ProductReviewGlobalView,
   type ProductReviewScope,
   type SettingsTab,
 } from '../stores/dashboard-ui-preferences-store';
@@ -51,9 +52,11 @@ const AccountSider: React.FC<{
   orderScopeType: OrderScope['type'];
   setOrderScopeType: (scope: OrderScope['type']) => void;
   productReviewScope: ProductReviewScope;
+  productReviewGlobalView: ProductReviewGlobalView;
   setProductReviewScope: (scope: ProductReviewScope) => void;
+  setProductReviewGlobalView: (view: ProductReviewGlobalView) => void;
   switchAccount: (id: string) => void;
-}> = ({ accounts, activeAccountId, activeModule, orderScopeType, setOrderScopeType, productReviewScope, setProductReviewScope, switchAccount }) => (
+}> = ({ accounts, activeAccountId, activeModule, orderScopeType, setOrderScopeType, productReviewScope, productReviewGlobalView, setProductReviewScope, setProductReviewGlobalView, switchAccount }) => (
   <Sider width={180} theme="light" style={{ borderRight: '1px solid #f0f0f0' }}>
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {(activeModule === 'commonFunctions' || activeModule === 'orders') && (
@@ -61,21 +64,53 @@ const AccountSider: React.FC<{
           <div
             onClick={() => {
               if (activeModule === 'orders') setOrderScopeType('all');
-              else setProductReviewScope('global');
+              else {
+                setProductReviewScope('global');
+                setProductReviewGlobalView('tasks');
+              }
             }}
             style={{
               padding: '8px 10px',
               cursor: 'pointer',
-              background: (activeModule === 'orders' ? orderScopeType === 'all' : productReviewScope === 'global') ? '#e6f4ff' : '#fafafa',
-              border: (activeModule === 'orders' ? orderScopeType === 'all' : productReviewScope === 'global') ? '1px solid #91caff' : '1px solid #f0f0f0',
+              background: activeModule === 'orders' && orderScopeType === 'all' ? '#e6f4ff' : '#fafafa',
+              border: activeModule === 'orders' && orderScopeType === 'all' ? '1px solid #91caff' : '1px solid #f0f0f0',
               borderRadius: 6,
               fontSize: 13,
-              fontWeight: 500,
+              fontWeight: activeModule === 'commonFunctions' && productReviewScope === 'global' ? 600 : 500,
+              color: activeModule === 'commonFunctions' && productReviewScope === 'global' ? '#222' : undefined,
               userSelect: 'none',
             }}
           >
             全部账号
           </div>
+          {activeModule === 'commonFunctions' && productReviewScope === 'global' && (
+            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {([
+                { key: 'tasks', label: '每日自动提审' },
+                { key: 'rules', label: '失败处理规则' },
+              ] satisfies Array<{ key: ProductReviewGlobalView; label: string }>).map(item => (
+                <div
+                  key={item.key}
+                  onClick={() => {
+                    setProductReviewScope('global');
+                    setProductReviewGlobalView(item.key);
+                  }}
+                  style={{
+                    padding: '7px 10px 7px 18px',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    color: productReviewGlobalView === item.key ? '#1677ff' : '#666',
+                    background: productReviewGlobalView === item.key ? '#f0f7ff' : 'transparent',
+                    fontSize: 12,
+                    fontWeight: productReviewGlobalView === item.key ? 600 : 400,
+                    userSelect: 'none',
+                  }}
+                >
+                  {item.label}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
       <div style={{ padding: '12px 16px 8px', fontWeight: 500, fontSize: 13, color: '#999' }}>
@@ -115,7 +150,8 @@ const AccountModuleContent: React.FC<{
   activeModule: DashboardModuleType;
   orderScopeType: OrderScope['type'];
   productReviewScope: ProductReviewScope;
-}> = ({ accounts, activeAccountId, activeModule, orderScopeType, productReviewScope }) => {
+  productReviewGlobalView: ProductReviewGlobalView;
+}> = ({ accounts, activeAccountId, activeModule, orderScopeType, productReviewScope, productReviewGlobalView }) => {
   if (accounts.length === 0) {
     return (
       <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -124,7 +160,7 @@ const AccountModuleContent: React.FC<{
     );
   }
   if (activeModule === 'commonFunctions' && productReviewScope === 'global') {
-    return <ProductAuditPage accountId={activeAccountId} accounts={accounts} scope="global" />;
+    return <ProductAuditPage accountId={activeAccountId} accounts={accounts} scope="global" globalView={productReviewGlobalView} />;
   }
   const activeAccount = accounts.find(account => account.id === activeAccountId) || accounts[0];
   const orderScope: OrderScope = orderScopeType === 'all'
@@ -146,10 +182,12 @@ const Layout: React.FC = () => {
   const {
     activeModule,
     productReviewScope,
+    productReviewGlobalView,
     settingsTab,
     hydrate,
     setActiveModule,
     setProductReviewScope,
+    setProductReviewGlobalView,
     setSettingsTab,
   } = useDashboardUiPreferencesStore();
 
@@ -198,7 +236,9 @@ const Layout: React.FC = () => {
               orderScopeType={orderScopeType}
               setOrderScopeType={setOrderScopeType}
               productReviewScope={productReviewScope}
+              productReviewGlobalView={productReviewGlobalView}
               setProductReviewScope={setProductReviewScope}
+              setProductReviewGlobalView={setProductReviewGlobalView}
               switchAccount={switchAccount}
             />
           )}
@@ -211,6 +251,7 @@ const Layout: React.FC = () => {
                   activeModule={activeModule}
                   orderScopeType={orderScopeType}
                   productReviewScope={productReviewScope}
+                  productReviewGlobalView={productReviewGlobalView}
                 />
               </div>
               {activeModule === 'storeManagement' && (

@@ -37,7 +37,7 @@ export const DEFAULT_PRODUCT_AUDIT_CONFIG: ProductAuditTaskConfig = {
   submitLimit: 0,
 };
 
-export const DEFAULT_PRODUCT_AUDIT_FAILURE_DEFAULT_ACTION: ProductAuditFailureDefaultAction = 'keepDraft';
+export const DEFAULT_PRODUCT_AUDIT_FAILURE_DEFAULT_ACTION: ProductAuditFailureDefaultAction = 'deleteDraft';
 
 export const DEFAULT_PRODUCT_AUDIT_FAILURE_RULES: ProductAuditFailureRule[] = [
   { id: 'stop-1002002', enabled: true, action: 'stopTask', match: { type: 'outerErrorCode', code: 1002002 }, description: '本店铺近1天内提审次数超过限制，请1天后再试' },

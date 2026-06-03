@@ -1,10 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Button, Checkbox, Divider, Empty, Input, InputNumber, message, Modal, Popconfirm, Select, Space, Switch, Tag, Tooltip } from 'antd';
+import { Alert, Button, Checkbox, Collapse, Divider, Empty, Input, InputNumber, message, Modal, Popconfirm, Select, Space, Switch, Tag, Tooltip } from 'antd';
 import {
+  ArrowRightOutlined,
+  CheckCircleOutlined,
   ClockCircleOutlined,
   DeleteOutlined,
   EditOutlined,
   ExclamationCircleOutlined,
+  FileProtectOutlined,
+  InfoCircleOutlined,
   PlayCircleOutlined,
   PlusOutlined,
   ReloadOutlined,
@@ -19,12 +23,10 @@ import type {
   Account,
   LogEntry,
   ProductAuditFailureAction,
-  ProductAuditFailureDefaultAction,
   ProductAuditFailureRule,
   ProductAuditFailureRuleMatch,
   ProductAuditTaskConfig,
   ProductAuditTaskResult,
-  StatusRule,
 } from '../../shared/types';
 import {
   cronPresets,
@@ -38,11 +40,19 @@ interface ProductAuditPageProps {
   accountId: string;
   accounts: Account[];
   scope?: 'global' | 'account';
+  globalView?: 'tasks' | 'rules';
 }
 
 type AccountProductAuditScheduledJob = Extract<ProductAuditScheduledJob, { scope: 'account' }>;
 type GlobalProductAuditScheduledJob = Extract<ProductAuditScheduledJob, { scope: 'global' }>;
 type ProductAuditRuleMatchType = ProductAuditFailureRuleMatch['type'];
+type ConfigurableFailureAction = Extract<ProductAuditFailureAction, 'stopTask' | 'keepDraft'>;
+
+interface FailureRuleModalState {
+  mode: 'add' | 'edit';
+  action: ConfigurableFailureAction;
+  ruleId?: string;
+}
 
 interface ProductAuditJobFormData {
   name: string;
@@ -81,6 +91,8 @@ const matchTypeLabels: Record<ProductAuditRuleMatchType, string> = {
   embeddedErrorCode: '内层错误码',
   keyword: '错误关键词',
 };
+
+const configurableFailureActions: ConfigurableFailureAction[] = ['stopTask', 'keepDraft'];
 
 function formatQuotaFetchedAt(timestamp?: number): string {
   if (!timestamp) return '';
@@ -130,7 +142,7 @@ function sameFailureRuleMatch(a: ProductAuditFailureRuleMatch, b: ProductAuditFa
   return false;
 }
 
-const ProductAuditPage: React.FC<ProductAuditPageProps> = ({ accountId, accounts, scope = 'account' }) => {
+const ProductAuditPage: React.FC<ProductAuditPageProps> = ({ accountId, accounts, scope = 'account', globalView = 'tasks' }) => {
   const { productAuditConfig, fetchProductAuditConfig, saveProductAuditConfig } = useProductAuditConfig(accountId);
   const { logs, fetchLogs, clearLogs } = useProductAuditLogs(accountId);
   const { quota, loading: quotaLoading, error: quotaError, fetchQuota } = useQuota(accountId);
@@ -138,7 +150,7 @@ const ProductAuditPage: React.FC<ProductAuditPageProps> = ({ accountId, accounts
   const { tasks: globalTasks, fetchTasks: fetchGlobalTasks, addTask: addGlobalTask, updateTask: updateGlobalTask, removeTask: removeGlobalTask } = useGlobalSchedulers();
   const globalRulesEnabled = scope === 'global';
   const { policy: failurePolicy, defaultPolicy, fetchPolicy: fetchFailurePolicy, savePolicy: saveFailurePolicy } = useProductAuditFailurePolicy(globalRulesEnabled);
-  const { rules: statusRules, fetchRules: fetchStatusRules, saveRules: saveStatusRules, resetRules: resetStatusRules } = useStatusRules(globalRulesEnabled);
+  const { rules: statusRules, fetchRules: fetchStatusRules } = useStatusRules(globalRulesEnabled);
 
   const [runningAccountIds, setRunningAccountIds] = useState<Set<string>>(() => new Set());
   const [resultsByAccountId, setResultsByAccountId] = useState<Record<string, ProductAuditTaskResult | null>>({});
@@ -166,14 +178,10 @@ const ProductAuditPage: React.FC<ProductAuditPageProps> = ({ accountId, accounts
     productAuditConfig: { ...defaultGlobalProductAuditConfig },
   });
   const [globalTimeInput, setGlobalTimeInput] = useState('09:00');
-  const [newFailureRuleAction, setNewFailureRuleAction] = useState<ProductAuditFailureAction>('keepDraft');
+  const [failureRuleModal, setFailureRuleModal] = useState<FailureRuleModalState | null>(null);
   const [newFailureRuleMatchType, setNewFailureRuleMatchType] = useState<ProductAuditRuleMatchType>('embeddedErrorCode');
   const [newFailureRuleValue, setNewFailureRuleValue] = useState('');
   const [newFailureRuleDesc, setNewFailureRuleDesc] = useState('');
-  const [newRuleStatus, setNewRuleStatus] = useState<number | undefined>(undefined);
-  const [newRuleLabel, setNewRuleLabel] = useState('');
-  const [newRuleAction, setNewRuleAction] = useState<'submit' | 'delete' | 'skip'>('skip');
-  const [rulesLocked, setRulesLocked] = useState(true);
   const [deletingDraftProductIds, setDeletingDraftProductIds] = useState<Set<string>>(() => new Set());
 
   const currentAccountIdRef = useRef(accountId);
@@ -436,61 +444,86 @@ const ProductAuditPage: React.FC<ProductAuditPageProps> = ({ accountId, accounts
     setGlobalEditModalOpen(false);
   }
 
-  async function handleAddFailureRule(): Promise<void> {
-    const nextRule = createFailureRule(newFailureRuleAction, newFailureRuleMatchType, newFailureRuleValue, newFailureRuleDesc);
+  function openAddFailureRuleModal(action: ConfigurableFailureAction): void {
+    setFailureRuleModal({ mode: 'add', action });
+    setNewFailureRuleMatchType(action === 'stopTask' ? 'outerErrorCode' : 'embeddedErrorCode');
+    setNewFailureRuleValue('');
+    setNewFailureRuleDesc('');
+  }
+
+  function openEditFailureRuleModal(rule: ProductAuditFailureRule): void {
+    if (rule.action === 'deleteDraft') return;
+    setFailureRuleModal({ mode: 'edit', action: rule.action, ruleId: rule.id });
+    setNewFailureRuleMatchType(rule.match.type);
+    setNewFailureRuleValue(rule.match.type === 'keyword' ? rule.match.keyword : String(rule.match.code));
+    setNewFailureRuleDesc(rule.description || '');
+  }
+
+  function closeFailureRuleModal(): void {
+    setFailureRuleModal(null);
+    setNewFailureRuleValue('');
+    setNewFailureRuleDesc('');
+  }
+
+  async function handleSaveFailureRule(): Promise<void> {
+    if (!failureRuleModal) return;
+    const nextRule = createFailureRule(failureRuleModal.action, newFailureRuleMatchType, newFailureRuleValue, newFailureRuleDesc);
     if (!nextRule) {
       message.error(newFailureRuleMatchType === 'keyword' ? '请输入关键词' : '请输入有效错误码');
       return;
     }
-    if (failureRules.some(rule => rule.action === nextRule.action && sameFailureRuleMatch(rule.match, nextRule.match))) {
+    if (failureRules.some(rule => rule.id !== failureRuleModal.ruleId && rule.action === nextRule.action && sameFailureRuleMatch(rule.match, nextRule.match))) {
       message.info('相同失败处理规则已存在');
       return;
     }
-    await saveFailurePolicy({ ...failurePolicy, rules: [...failureRules, nextRule] });
-    setNewFailureRuleValue('');
-    setNewFailureRuleDesc('');
-    message.success('失败处理规则已添加');
+
+    const nextRules = failureRuleModal.mode === 'edit'
+      ? failureRules.map(rule => {
+        if (rule.id !== failureRuleModal.ruleId) return rule;
+        return {
+          ...nextRule,
+          id: rule.id,
+          enabled: rule.enabled,
+          priority: rule.priority,
+        };
+      })
+      : [...failureRules, nextRule];
+
+    await saveFailurePolicy({
+      ...failurePolicy,
+      rules: nextRules.filter(rule => rule.action !== 'deleteDraft'),
+      defaultAction: 'deleteDraft',
+    });
+    closeFailureRuleModal();
+    message.success(failureRuleModal.mode === 'edit' ? '失败处理规则已更新' : '失败处理规则已添加');
   }
 
   async function handleRemoveFailureRule(ruleId: string): Promise<void> {
-    await saveFailurePolicy({ ...failurePolicy, rules: failureRules.filter(rule => rule.id !== ruleId) });
+    await saveFailurePolicy({
+      ...failurePolicy,
+      rules: failureRules.filter(rule => rule.id !== ruleId && rule.action !== 'deleteDraft'),
+      defaultAction: 'deleteDraft',
+    });
     message.success('失败处理规则已删除');
   }
 
+  async function handleToggleFailureRule(ruleId: string, enabled: boolean): Promise<void> {
+    await saveFailurePolicy({
+      ...failurePolicy,
+      rules: failureRules
+        .filter(rule => rule.action !== 'deleteDraft')
+        .map(rule => (rule.id === ruleId ? { ...rule, enabled } : rule)),
+      defaultAction: 'deleteDraft',
+    });
+  }
+
   async function handleResetFailureRules(): Promise<void> {
-    await saveFailurePolicy(defaultPolicy);
+    await saveFailurePolicy({
+      ...defaultPolicy,
+      rules: defaultPolicy.rules.filter(rule => rule.action !== 'deleteDraft'),
+      defaultAction: 'deleteDraft',
+    });
     message.success('已恢复默认失败处理规则');
-  }
-
-  async function handleChangeDefaultFailureAction(defaultAction: ProductAuditFailureDefaultAction): Promise<void> {
-    await saveFailurePolicy({ ...failurePolicy, defaultAction });
-    message.success('默认失败处理动作已更新');
-  }
-
-  async function handleAddStatusRule(): Promise<void> {
-    if (newRuleStatus === undefined || !newRuleLabel.trim()) {
-      message.error('请输入状态码和标签');
-      return;
-    }
-    if (statusRules.some(rule => rule.editStatus === newRuleStatus)) {
-      message.error('该状态码已存在');
-      return;
-    }
-    await saveStatusRules([...statusRules, { editStatus: newRuleStatus, label: newRuleLabel.trim(), action: newRuleAction }]);
-    setNewRuleStatus(undefined);
-    setNewRuleLabel('');
-    setNewRuleAction('skip');
-    message.success('状态规则已添加');
-  }
-
-  async function handleDeleteStatusRule(editStatus: number): Promise<void> {
-    await saveStatusRules(statusRules.filter(rule => rule.editStatus !== editStatus));
-    message.success('状态规则已删除');
-  }
-
-  async function handleResetStatusRules(): Promise<void> {
-    await resetStatusRules();
-    message.success('状态规则已恢复默认');
   }
 
   async function handleDeleteDraftFromLog(log: LogEntry): Promise<void> {
@@ -519,142 +552,193 @@ const ProductAuditPage: React.FC<ProductAuditPageProps> = ({ accountId, accounts
     }
   }
 
-  const renderFailureRuleGroup = (action: ProductAuditFailureAction) => (
-    <div style={{ minWidth: 220, flex: 1 }}>
-      <div style={{ fontWeight: 600, marginBottom: 8 }}>{actionLabels[action]}</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {failureRulesByAction[action].length === 0 ? (
-          <span style={{ color: '#999', fontSize: 12 }}>暂无规则</span>
-        ) : failureRulesByAction[action].map(rule => (
-          <div key={rule.id} style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 24 }}>
-            <Tag color={actionColors[action]} style={{ margin: 0 }}>{failureRuleMatchLabel(rule.match)}</Tag>
-            {rule.description && <span style={{ flex: 1, minWidth: 0, color: '#666', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rule.description}</span>}
-            {!rulesLocked && (
-              <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => handleRemoveFailureRule(rule.id)} />
-            )}
-          </div>
-        ))}
+  const renderWorkflowNode = (title: string, description: string, icon: React.ReactNode, color: string) => (
+    <div style={{
+      flex: '1 1 180px',
+      minWidth: 180,
+      border: '1px solid #f0f0f0',
+      borderRadius: 6,
+      padding: 12,
+      background: '#fff',
+    }}>
+      <Space size={8} align="start">
+        <span style={{ color, fontSize: 18, lineHeight: '22px' }}>{icon}</span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 600, color: '#222' }}>{title}</div>
+          <div style={{ marginTop: 4, color: '#666', fontSize: 12, lineHeight: 1.6 }}>{description}</div>
+        </div>
+      </Space>
+    </div>
+  );
+
+  const renderWorkflowArrow = () => (
+    <div style={{ display: 'flex', alignItems: 'center', color: '#bfbfbf', paddingTop: 22, flex: '0 0 auto' }}>
+      <ArrowRightOutlined />
+    </div>
+  );
+
+  const renderFailureWorkflow = () => (
+    <div style={{
+      border: '1px solid #f0f0f0',
+      borderRadius: 6,
+      padding: 16,
+      background: '#fafafa',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
+        <Space size={8}>
+          <InfoCircleOutlined style={{ color: '#1677ff' }} />
+          <span style={{ fontWeight: 600 }}>提审失败后的处理顺序</span>
+        </Space>
+        <Popconfirm title="恢复默认失败处理规则？" onConfirm={handleResetFailureRules} okText="恢复" cancelText="取消">
+          <Button type="text" size="small" icon={<ReloadOutlined />} aria-label="恢复默认规则" title="恢复默认规则" />
+        </Popconfirm>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'stretch', gap: 10, flexWrap: 'wrap' }}>
+        {renderWorkflowNode('商品提审失败', '接口返回失败后才进入这套规则管道，成功提审不会触发。', <ExclamationCircleOutlined />, '#fa8c16')}
+        {renderWorkflowArrow()}
+        {renderWorkflowNode('停止任务规则', '先判断是否需要停止整个任务；命中后不再处理后续草稿。', <StopOutlined />, '#cf1322')}
+        {renderWorkflowArrow()}
+        {renderWorkflowNode('保留草稿规则', '未停止时继续判断保留规则；命中后保留当前草稿并继续下一个。', <FileProtectOutlined />, '#d48806')}
+        {renderWorkflowArrow()}
+        {renderWorkflowNode('删除草稿', '前两类都未命中时进入默认兜底，直接删除失败草稿。', <DeleteOutlined />, '#1677ff')}
       </div>
     </div>
   );
 
-  const renderRulesSection = () => (
-    <div style={{ marginTop: 16, borderTop: '1px solid #f0f0f0', paddingTop: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div>
-          <div style={{ fontWeight: 600 }}>失败处理规则</div>
-          <div style={{ color: '#999', fontSize: 12, marginTop: 2 }}>只在提审失败后执行，优先级固定为：停止任务、保留草稿、删除草稿、默认动作</div>
-        </div>
-        <Space>
-          <span>未命中规则时</span>
-          <Select<ProductAuditFailureDefaultAction>
-            size="small"
-            style={{ width: 140 }}
-            value={failurePolicy.defaultAction}
-            onChange={handleChangeDefaultFailureAction}
-            disabled={rulesLocked}
-            options={[
-              { label: '保留草稿', value: 'keepDraft' },
-              { label: '删除草稿', value: 'deleteDraft' },
-            ]}
-          />
-          <Button size="small" onClick={() => setRulesLocked(!rulesLocked)}>{rulesLocked ? '编辑规则' : '锁定规则'}</Button>
-          {!rulesLocked && (
-            <Popconfirm title="恢复默认失败处理规则？" onConfirm={handleResetFailureRules} okText="恢复" cancelText="取消">
-              <Button size="small">恢复默认</Button>
-            </Popconfirm>
-          )}
-        </Space>
-      </div>
-
-      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        {renderFailureRuleGroup('stopTask')}
-        {renderFailureRuleGroup('keepDraft')}
-        {renderFailureRuleGroup('deleteDraft')}
-      </div>
-
-      {!rulesLocked && (
-        <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <Select
-            size="small"
-            style={{ width: 120 }}
-            value={newFailureRuleAction}
-            onChange={setNewFailureRuleAction}
-            options={[
-              { label: '停止任务', value: 'stopTask' },
-              { label: '保留草稿', value: 'keepDraft' },
-              { label: '删除草稿', value: 'deleteDraft' },
-            ]}
-          />
-          <Select
-            size="small"
-            style={{ width: 130 }}
-            value={newFailureRuleMatchType}
-            onChange={setNewFailureRuleMatchType}
-            options={[
-              { label: '外层错误码', value: 'outerErrorCode' },
-              { label: '内层错误码', value: 'embeddedErrorCode' },
-              { label: '错误关键词', value: 'keyword' },
-            ]}
-          />
-          <Input
-            size="small"
-            style={{ width: 180 }}
-            value={newFailureRuleValue}
-            onChange={event => setNewFailureRuleValue(event.target.value)}
-            placeholder={newFailureRuleMatchType === 'keyword' ? '如：品牌授权' : '如：6600144'}
-          />
-          <Input
-            size="small"
-            style={{ width: 260 }}
-            value={newFailureRuleDesc}
-            onChange={event => setNewFailureRuleDesc(event.target.value)}
-            placeholder="规则说明"
-          />
-          <Button size="small" type="primary" icon={<PlusOutlined />} onClick={handleAddFailureRule}>添加</Button>
-        </div>
-      )}
-
-      <Divider style={{ margin: '16px 0 12px' }} />
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <div>
-          <div style={{ fontWeight: 600 }}>草稿状态规则</div>
-          <div style={{ color: '#999', fontSize: 12, marginTop: 2 }}>决定不同 edit_status 的草稿是提交提审、直接删除还是跳过</div>
-        </div>
-        {!rulesLocked && <Button size="small" onClick={handleResetStatusRules}>恢复默认状态规则</Button>}
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {statusRules.map(rule => (
-          <div key={rule.editStatus} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Tag style={{ margin: 0 }}>edit_status:{rule.editStatus}</Tag>
-            <span style={{ minWidth: 80 }}>{rule.label}</span>
-            <Tag color={rule.action === 'submit' ? 'blue' : rule.action === 'delete' ? 'red' : 'default'}>
-              {rule.action === 'submit' ? '提交提审' : rule.action === 'delete' ? '删除草稿' : '跳过'}
-            </Tag>
-            {!rulesLocked && (
-              <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => handleDeleteStatusRule(rule.editStatus)} />
-            )}
+  const renderFailureRuleRows = (action: ConfigurableFailureAction) => {
+    const rules = failureRulesByAction[action];
+    return (
+      <div style={{ border: '1px solid #f0f0f0', borderRadius: 6, overflow: 'hidden', background: '#fff' }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <div style={{ fontWeight: 600 }}>{actionLabels[action]}</div>
+            <div style={{ color: '#999', fontSize: 12, marginTop: 2 }}>
+              {action === 'stopTask'
+                ? '命中后停止当前全账号提审任务，适合配额、封禁、能力受限这类不可继续的失败。'
+                : '命中后保留当前失败草稿，适合需要人工补资料、开通服务或复核资质的失败。'}
+            </div>
           </div>
-        ))}
-      </div>
-      {!rulesLocked && (
-        <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <InputNumber size="small" controls={false} style={{ width: 120 }} value={newRuleStatus} onChange={value => setNewRuleStatus(value ?? undefined)} placeholder="状态码" />
-          <Input size="small" style={{ width: 140 }} value={newRuleLabel} onChange={event => setNewRuleLabel(event.target.value)} placeholder="状态标签" />
-          <Select
-            size="small"
-            style={{ width: 120 }}
-            value={newRuleAction}
-            onChange={setNewRuleAction}
-            options={[
-              { label: '提交提审', value: 'submit' },
-              { label: '删除草稿', value: 'delete' },
-              { label: '跳过', value: 'skip' },
-            ]}
-          />
-          <Button size="small" icon={<PlusOutlined />} onClick={handleAddStatusRule}>添加状态规则</Button>
+          <Button size="small" type="primary" icon={<PlusOutlined />} onClick={() => openAddFailureRuleModal(action)}>
+            {action === 'stopTask' ? '添加停止规则' : '添加保留规则'}
+          </Button>
         </div>
-      )}
+
+        {rules.length === 0 ? (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={`暂无${actionLabels[action]}规则`} style={{ padding: '28px 0' }} />
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {rules.map(rule => (
+              <div key={rule.id} style={{ minHeight: 56, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid #f5f5f5' }}>
+                <Switch size="small" checked={rule.enabled} onChange={enabled => handleToggleFailureRule(rule.id, enabled)} />
+                <Tag color={actionColors[action]} style={{ margin: 0, flexShrink: 0 }}>{failureRuleMatchLabel(rule.match)}</Tag>
+                <div style={{ flex: 1, minWidth: 0, color: rule.enabled ? '#333' : '#999', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {rule.description || '未填写规则说明'}
+                </div>
+                <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEditFailureRuleModal(rule)}>编辑</Button>
+                <Popconfirm title="确认删除此失败处理规则？" onConfirm={() => handleRemoveFailureRule(rule.id)} okText="删除" cancelText="取消">
+                  <Button type="text" size="small" danger icon={<DeleteOutlined />}>删除</Button>
+                </Popconfirm>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderDefaultDeleteRule = () => (
+    <div style={{ border: '1px solid #f0f0f0', borderRadius: 6, padding: 16, background: '#fff' }}>
+      <Space align="start" size={10}>
+        <CheckCircleOutlined style={{ color: '#1677ff', fontSize: 18, marginTop: 2 }} />
+        <div>
+          <div style={{ fontWeight: 600 }}>删除草稿</div>
+          <div style={{ color: '#666', fontSize: 13, lineHeight: 1.7, marginTop: 4 }}>
+            这是固定的默认兜底动作，不需要配置规则。失败草稿没有命中停止任务规则，也没有命中保留草稿规则时，会自动删除并继续后续草稿。
+          </div>
+        </div>
+      </Space>
+    </div>
+  );
+
+  const renderStatusRuleDocs = () => (
+    <Collapse
+      size="small"
+      ghost
+      items={[{
+        key: 'statusRules',
+        label: '草稿状态说明',
+        children: (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 4 }}>
+            {statusRules.map(rule => (
+              <div key={rule.editStatus} style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 26 }}>
+                <Tag style={{ margin: 0 }}>edit_status:{rule.editStatus}</Tag>
+                <span style={{ minWidth: 80 }}>{rule.label}</span>
+                <Tag color={rule.action === 'submit' ? 'blue' : rule.action === 'delete' ? 'red' : 'default'}>
+                  {rule.action === 'submit' ? '提交提审' : rule.action === 'delete' ? '删除草稿' : '跳过'}
+                </Tag>
+              </div>
+            ))}
+          </div>
+        ),
+      }]}
+    />
+  );
+
+  const renderFailureRuleModal = () => (
+    <Modal
+      title={failureRuleModal?.mode === 'edit' ? `编辑${actionLabels[failureRuleModal.action]}规则` : `添加${failureRuleModal ? actionLabels[failureRuleModal.action] : ''}规则`}
+      open={Boolean(failureRuleModal)}
+      onCancel={closeFailureRuleModal}
+      onOk={handleSaveFailureRule}
+      okText="保存"
+      cancelText="取消"
+      width={560}
+    >
+      <Space vertical style={{ width: '100%' }} size={12}>
+        <Alert
+          type={failureRuleModal?.action === 'stopTask' ? 'warning' : 'info'}
+          showIcon
+          title={failureRuleModal?.action === 'stopTask'
+            ? '停止任务规则命中后会结束当前任务，不再继续处理后续草稿。'
+            : '保留草稿规则命中后只保留当前失败草稿，任务会继续处理后续草稿。'}
+        />
+        <Select
+          value={newFailureRuleMatchType}
+          onChange={setNewFailureRuleMatchType}
+          options={[
+            { label: '外层错误码', value: 'outerErrorCode' },
+            { label: '内层错误码', value: 'embeddedErrorCode' },
+            { label: '错误关键词', value: 'keyword' },
+          ]}
+          style={{ width: '100%' }}
+        />
+        <Input
+          value={newFailureRuleValue}
+          onChange={event => setNewFailureRuleValue(event.target.value)}
+          placeholder={newFailureRuleMatchType === 'keyword' ? '例如：品牌授权' : '例如：6600144'}
+        />
+        <Input
+          value={newFailureRuleDesc}
+          onChange={event => setNewFailureRuleDesc(event.target.value)}
+          placeholder="给用户看的规则说明"
+        />
+      </Space>
+    </Modal>
+  );
+
+  const renderRulesSection = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {renderFailureWorkflow()}
+      {configurableFailureActions.map(action => (
+        <React.Fragment key={action}>
+          {renderFailureRuleRows(action)}
+        </React.Fragment>
+      ))}
+      {renderDefaultDeleteRule()}
+      <div style={{ alignSelf: 'flex-start', minWidth: 260 }}>
+        {renderStatusRuleDocs()}
+      </div>
+      {renderFailureRuleModal()}
     </div>
   );
 
@@ -817,49 +901,56 @@ const ProductAuditPage: React.FC<ProductAuditPageProps> = ({ accountId, accounts
     </div>
   );
 
+  const renderGlobalTasksSection = () => (
+    <div style={{ border: '1px solid #f0f0f0', borderRadius: 6 }}>
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontWeight: 600 }}>任务列表</span>
+        <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openAddGlobalModal}>新建任务</Button>
+      </div>
+      {globalTasks.length === 0 ? (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无全账号提审任务" style={{ padding: '48px 0' }} />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {globalTasks.map(task => {
+            const includedCount = accounts.filter(account => !task.excludedAccountIds.includes(account.id)).length;
+            return (
+              <div key={task.id} style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 16, borderBottom: '1px solid #f5f5f5' }}>
+                <Switch checked={task.enabled} onChange={checked => updateGlobalTask(task.id, { enabled: checked })} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Space wrap size={8}>
+                    <span style={{ fontWeight: 600 }}>{task.name}</span>
+                    <Tag color={task.enabled ? 'green' : 'default'}>{task.enabled ? '已启用' : '已停用'}</Tag>
+                    <Tag color="blue">{cronToLabel(task.cronExpression)}</Tag>
+                    <Tag>错峰 {task.staggerMinutes} 分钟/账号</Tag>
+                  </Space>
+                  <div style={{ marginTop: 8, color: '#666', fontSize: 13 }}>
+                    覆盖 {includedCount}/{accounts.length} 个账号，预计 {getGlobalTaskWindowLabel(task, includedCount)} 依次启动
+                  </div>
+                </div>
+                <Button type="text" icon={<EditOutlined />} onClick={() => openEditGlobalModal(task)}>编辑</Button>
+                <Popconfirm title="确认删除此全账号任务？" onConfirm={() => removeGlobalTask(task.id)} okText="删除" cancelText="取消">
+                  <Button type="text" danger icon={<DeleteOutlined />}>删除</Button>
+                </Popconfirm>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
   if (scope === 'global') {
+    const globalTitle = globalView === 'rules' ? '失败处理规则' : '每日自动提审';
+    const globalDescription = globalView === 'tasks'
+      ? '为全部账号配置每天自动提审任务，系统会按账号错峰执行。'
+      : '';
     return (
       <div style={{ padding: 24, height: '100%', overflow: 'auto' }}>
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 18, fontWeight: 600 }}>全部账号提审</div>
-          <div style={{ marginTop: 4, color: '#666', fontSize: 13 }}>全账号商品提审任务会按账号错峰执行，并使用下方统一失败处理规则</div>
+          <div style={{ fontSize: 18, fontWeight: 600 }}>{globalTitle}</div>
+          {globalDescription && <div style={{ marginTop: 4, color: '#666', fontSize: 13 }}>{globalDescription}</div>}
         </div>
-        <div style={{ border: '1px solid #f0f0f0', borderRadius: 6 }}>
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontWeight: 600 }}>每日自动提审</span>
-            <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openAddGlobalModal}>新建任务</Button>
-          </div>
-          {globalTasks.length === 0 ? (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无全账号提审任务" style={{ padding: '48px 0' }} />
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {globalTasks.map(task => {
-                const includedCount = accounts.filter(account => !task.excludedAccountIds.includes(account.id)).length;
-                return (
-                  <div key={task.id} style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 16, borderBottom: '1px solid #f5f5f5' }}>
-                    <Switch checked={task.enabled} onChange={checked => updateGlobalTask(task.id, { enabled: checked })} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <Space wrap size={8}>
-                        <span style={{ fontWeight: 600 }}>{task.name}</span>
-                        <Tag color={task.enabled ? 'green' : 'default'}>{task.enabled ? '已启用' : '已停用'}</Tag>
-                        <Tag color="blue">{cronToLabel(task.cronExpression)}</Tag>
-                        <Tag>错峰 {task.staggerMinutes} 分钟/账号</Tag>
-                      </Space>
-                      <div style={{ marginTop: 8, color: '#666', fontSize: 13 }}>
-                        覆盖 {includedCount}/{accounts.length} 个账号，预计 {getGlobalTaskWindowLabel(task, includedCount)} 依次启动
-                      </div>
-                    </div>
-                    <Button type="text" icon={<EditOutlined />} onClick={() => openEditGlobalModal(task)}>编辑</Button>
-                    <Popconfirm title="确认删除此全账号任务？" onConfirm={() => removeGlobalTask(task.id)} okText="删除" cancelText="取消">
-                      <Button type="text" danger icon={<DeleteOutlined />}>删除</Button>
-                    </Popconfirm>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-        {renderRulesSection()}
+        {globalView === 'tasks' ? renderGlobalTasksSection() : renderRulesSection()}
         {renderGlobalTaskModal()}
       </div>
     );

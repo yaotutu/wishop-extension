@@ -6,8 +6,15 @@ import { queryKeys } from '../query/query-keys';
 
 const fallbackPolicy: ProductAuditFailurePolicy = {
   rules: [],
-  defaultAction: 'keepDraft',
+  defaultAction: 'deleteDraft',
 };
+
+function normalizeProductAuditFailurePolicy(policy: ProductAuditFailurePolicy): ProductAuditFailurePolicy {
+  return {
+    rules: policy.rules.filter(rule => rule.action !== 'deleteDraft'),
+    defaultAction: 'deleteDraft',
+  };
+}
 
 export function useProductAuditFailurePolicy(enabled = true) {
   const queryClient = useQueryClient();
@@ -24,7 +31,7 @@ export function useProductAuditFailurePolicy(enabled = true) {
   const saveMutation = useMutation({
     mutationFn: (policy: ProductAuditFailurePolicy) => extensionApi.productAudit.setFailurePolicy(policy),
     onSuccess: (_result, policy) => {
-      queryClient.setQueryData(queryKeys.productAuditFailurePolicy.item, policy);
+      queryClient.setQueryData(queryKeys.productAuditFailurePolicy.item, normalizeProductAuditFailurePolicy(policy));
     },
   });
 
@@ -35,11 +42,11 @@ export function useProductAuditFailurePolicy(enabled = true) {
 
   const savePolicy = useCallback(async (policy: ProductAuditFailurePolicy): Promise<void> => {
     await saveMutation.mutateAsync(policy);
-  }, [saveMutation]);
+  }, [saveMutation.mutateAsync]);
 
   return {
-    policy: policyQuery.data ?? fallbackPolicy,
-    defaultPolicy: defaultsQuery.data ?? fallbackPolicy,
+    policy: policyQuery.data ? normalizeProductAuditFailurePolicy(policyQuery.data) : fallbackPolicy,
+    defaultPolicy: defaultsQuery.data ? normalizeProductAuditFailurePolicy(defaultsQuery.data) : fallbackPolicy,
     loading: policyQuery.isLoading || defaultsQuery.isLoading,
     fetchPolicy,
     savePolicy,
