@@ -133,6 +133,7 @@ export interface RuntimeChannels {
   'productListingCollection:complete': { args: [sessionId: string, snapshot: TaobaoProductSnapshot]; result: CollectedProductListing };
   'productListingCollection:fail': { args: [sessionId: string, error: string]; result: ProductListingCollectionSession };
   'productListingCollection:suggestWxDraft': { args: [input: CreateWxProductDraftSuggestionInput]; result: WxProductDraftSuggestionResult };
+  'productListingCollection:suggestWxCategoryFromFullList': { args: [input: CreateWxProductDraftSuggestionInput]; result: WxProductDraftSuggestionResult };
   'productListingCollection:prepareWxDraft': { args: [input: CreateWxProductDraftPrepareInput]; result: WxProductDraftPrepareResult };
   'productListingCollection:submitPreparedWxDraft': { args: [input: SubmitPreparedWxProductDraftInput]; result: WxProductDraftCreationResult };
   'productListingCollection:createWxDraft': { args: [input: CreateWxProductDraftInput]; result: WxProductDraftCreationResult };

@@ -79,6 +79,7 @@ const FEATURE_CHANNELS = {
   'productListingCollection:complete': 'listing',
   'productListingCollection:fail': 'listing',
   'productListingCollection:suggestWxDraft': 'listing',
+  'productListingCollection:suggestWxCategoryFromFullList': 'listing',
   'productListingCollection:prepareWxDraft': 'listing',
   'productListingCollection:submitPreparedWxDraft': 'listing',
   'productListingCollection:createWxDraft': 'listing',

@@ -400,7 +400,7 @@ export interface WxProductCategoryPath {
   qualificationTips?: string[];
 }
 
-export type WxProductCategoryCandidateSource = 'taobaoWxLookup' | 'wxApi';
+export type WxProductCategoryCandidateSource = 'taobaoWxLookup' | 'wxApi' | 'wxStaticSnapshot';
 
 export type WxProductCategoryMatchStatus = 'high' | 'review' | 'low';
 
@@ -409,7 +409,8 @@ export type WxProductCategoryCandidateScope =
   | 'level3Children'
   | 'level2Children'
   | 'level1Children'
-  | 'wxApiFallback';
+  | 'wxApiFallback'
+  | 'wxStaticAll';
 
 export interface WxProductCategoryCandidate extends WxProductCategoryPath {
   source: WxProductCategoryCandidateSource;

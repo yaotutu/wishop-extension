@@ -119,6 +119,7 @@ function isValidCategoryPathIds(catIds: string[]): boolean {
 function categoryCandidateSourceText(source?: WxProductDraftSuggestionResult['categoryCandidateSource']): string {
   if (source === 'taobaoWxLookup') return '本地类目 lookup';
   if (source === 'wxApi') return '微信全量类目筛选';
+  if (source === 'wxStaticSnapshot') return '静态全量类目';
   return '未记录来源';
 }
 
@@ -130,6 +131,7 @@ function categoryCandidateScopeText(
   if (scope === 'level2Children') return '二级父类候选';
   if (scope === 'level1Children') return '一级父类候选';
   if (scope === 'wxApiFallback') return '微信全量回退';
+  if (scope === 'wxStaticAll') return '静态全量类目';
   return '未记录范围';
 }
 
@@ -145,6 +147,7 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
   const [draftPrepared, setDraftPrepared] = useState<WxProductDraftPrepareResult | null>(null);
   const [draftSuggestion, setDraftSuggestion] = useState<WxProductDraftSuggestionResult | null>(null);
   const [draftSubmittedResult, setDraftSubmittedResult] = useState<WxProductDraftCreationResult | null>(null);
+  const [fullCategoryStatus, setFullCategoryStatus] = useState<string>('');
 
   const listingsQuery = useQuery({
     queryKey: queryKeys.productListingCollection.list,
@@ -247,6 +250,37 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
     },
   });
 
+  const suggestFullCategoryMutation = useMutation({
+    onMutate: () => {
+      setFullCategoryStatus('正在读取静态微信类目并调用 LLM，最多等待 90 秒。');
+    },
+    mutationFn: async () => {
+      if (!draftModalListing) throw new Error('请选择要处理的采集商品');
+      const values = await draftForm.validateFields(['accountId']);
+      return extensionApi.productListingCollection.suggestWxCategoryFromFullList({
+        accountId: values.accountId,
+        listingId: draftModalListing.id,
+      });
+    },
+    onSuccess: suggestion => {
+      setDraftSuggestion(suggestion);
+      setDraftAiAttrs(suggestion.attrs);
+      setDraftPrepared(null);
+      setDraftSubmittedResult(null);
+      draftForm.setFieldsValue({
+        catIdsText: suggestion.catIds.join(','),
+        expressTemplateId: suggestion.expressTemplateId || draftForm.getFieldValue('expressTemplateId'),
+      });
+      setFullCategoryStatus(`已完成：${suggestion.categoryPath?.join(' / ') || suggestion.catIds.join(' / ')}`);
+      message.success('AI 已从静态全量类目中选择微信类目');
+    },
+    onError: error => {
+      const detail = error instanceof Error ? error.message : 'AI 全量类目处理失败';
+      setFullCategoryStatus(`失败：${detail}`);
+      message.error(detail);
+    },
+  });
+
   useEffect(() => {
     const cleanupCompleted = extensionApi.productListingCollection.onCompleted(listing => {
       setActiveSession(null);
@@ -279,6 +313,7 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
     setDraftPrepared(null);
     setDraftSuggestion(null);
     setDraftSubmittedResult(null);
+    setFullCategoryStatus('');
     draftForm.setFieldsValue({
       accountId: defaultAccountId,
       catIdsText: '',
@@ -295,6 +330,7 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
     setDraftPrepared(null);
     setDraftSuggestion(null);
     setDraftSubmittedResult(null);
+    setFullCategoryStatus('');
     draftForm.resetFields();
   };
 
@@ -312,7 +348,7 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
     {
       title: 'AI 测试',
       description: draftSuggestion ? '已生成建议' : '可选',
-      status: suggestDraftMutation.isPending ? 'process' : draftSuggestion ? 'finish' : 'wait',
+      status: suggestDraftMutation.isPending || suggestFullCategoryMutation.isPending ? 'process' : draftSuggestion ? 'finish' : 'wait',
     },
     {
       title: '商品准备',
@@ -615,9 +651,19 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
             key="ai"
             icon={<RobotOutlined />}
             loading={suggestDraftMutation.isPending}
+            disabled={suggestFullCategoryMutation.isPending}
             onClick={() => suggestDraftMutation.mutate()}
           >
             AI 测试
+          </Button>,
+          <Button
+            key="ai-full"
+            icon={<RobotOutlined />}
+            loading={suggestFullCategoryMutation.isPending}
+            disabled={suggestDraftMutation.isPending}
+            onClick={() => suggestFullCategoryMutation.mutate()}
+          >
+            AI 全量类目
           </Button>,
           <Button
             key="prepare"
@@ -673,10 +719,19 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
               },
             ]}
           />
+          {fullCategoryStatus && (
+            <Alert
+              type={suggestFullCategoryMutation.isError ? 'error' : suggestFullCategoryMutation.isSuccess ? 'success' : 'info'}
+              showIcon
+              style={{ marginBottom: 16 }}
+              title="AI 全量类目状态"
+              description={fullCategoryStatus}
+            />
+          )}
           <Form.Item
             name="catIdsText"
             label="微信小店类目路径 ID（AI 回填）"
-            extra="正常流程不用填写；AI 测试会先用淘宝原类目查本地 lookup，再从候选中选择。手动兜底时按完整路径填写 3 到 4 个 ID。"
+            extra="AI 测试保留旧 lookup 逻辑；AI 全量类目会读取静态微信叶子类目缓存，让模型直接从全部候选中选择。手动兜底时按完整路径填写 3 到 4 个 ID。"
             rules={[
               {
                 validator: async (_, value: string) => {
@@ -705,7 +760,7 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
                     {draftSuggestion.categoryPath && (
                       <Tag color="cyan">类目 {draftSuggestion.categoryPath.join(' / ')}</Tag>
                     )}
-                    <Tag color={draftSuggestion.categoryCandidateSource === 'taobaoWxLookup' ? 'green' : 'default'}>
+                    <Tag color={draftSuggestion.categoryCandidateSource === 'taobaoWxLookup' ? 'green' : draftSuggestion.categoryCandidateSource === 'wxStaticSnapshot' ? 'purple' : 'default'}>
                       来源 {categoryCandidateSourceText(draftSuggestion.categoryCandidateSource)}
                     </Tag>
                   </Space>

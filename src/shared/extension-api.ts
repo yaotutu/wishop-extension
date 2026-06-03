@@ -219,6 +219,8 @@ export const extensionApi = {
       invoke('productListingCollection:fail', sessionId, error),
     suggestWxDraft: (input: CreateWxProductDraftSuggestionInput): Promise<WxProductDraftSuggestionResult> =>
       invoke('productListingCollection:suggestWxDraft', input),
+    suggestWxCategoryFromFullList: (input: CreateWxProductDraftSuggestionInput): Promise<WxProductDraftSuggestionResult> =>
+      invoke('productListingCollection:suggestWxCategoryFromFullList', input),
     prepareWxDraft: (input: CreateWxProductDraftPrepareInput): Promise<WxProductDraftPrepareResult> =>
       invoke('productListingCollection:prepareWxDraft', input),
     submitPreparedWxDraft: (input: SubmitPreparedWxProductDraftInput): Promise<WxProductDraftCreationResult> =>

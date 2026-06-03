@@ -94,3 +94,51 @@ node scripts/build-taobao-itemcat-wxshop-category-map.mjs --full-json
 ```
 
 注意：当前运行时淘宝 itemcat 字典来自 2020 年公开快照，可能缺少淘宝商品详情页上的新版类目 ID。若采集到的 `sourceCategory.id` 不能反查中文类目，应先用 `fetch-taobao-itemcats.ts` 拉取新的淘宝类目快照，再更新运行时字典。
+
+## fetch-wxshop-categories.mjs
+
+生成微信小店全量叶子类目的运行时缓存，供 AI 从固定候选列表里选择类目。
+
+默认优先读取已有快照：
+
+```bash
+data/wxshop-categories/wxshop-category-paths.json
+```
+
+运行：
+
+```bash
+npm run data:wxshop-categories
+```
+
+输出：
+
+```bash
+public/data/wxshop-categories/wxshop-category-paths.runtime.json
+public/data/wxshop-categories/wxshop-category-paths.runtime.csv
+```
+
+输出 JSON 中的每条 `paths[]` 都是一个最终可选择的叶子类目：
+
+```json
+{
+  "catIds": ["10000155", "10000157", "547456"],
+  "names": ["生鲜", "水果", "同城配送-释迦果"],
+  "path": "生鲜 / 水果 / 同城配送-释迦果",
+  "leaf": true
+}
+```
+
+需要重新请求微信官方接口时：
+
+```bash
+WXSHOP_APP_ID=xxx WXSHOP_APP_SECRET=xxx npm run data:wxshop-categories -- --refresh
+```
+
+也可以使用已有 access_token：
+
+```bash
+WXSHOP_ACCESS_TOKEN=xxx npm run data:wxshop-categories -- --refresh
+```
+
+注意：脚本只用于一次性数据快照，不会把 access_token、AppSecret 或店铺凭证写入输出文件。

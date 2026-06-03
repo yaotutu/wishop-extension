@@ -17,6 +17,7 @@ import {
   resolveProductListingCollectionChallenge,
   updateProductListingCollectionSessionStatus,
 } from '../services/product-listing-collection-service.ts';
+import { createWxProductFullCategorySuggestion } from '../services/product-listing-full-category-ai-service.ts';
 import { createWxProductDraftSuggestion } from '../services/product-listing-ai-draft-service.ts';
 import {
   createWxProductDraftFromCollectedListing,
@@ -59,6 +60,9 @@ export function createProductListingCollectionRuntimeHandlers(
     },
     async 'productListingCollection:suggestWxDraft'(args) {
       return createWxProductDraftSuggestion(args[0] as CreateWxProductDraftSuggestionInput);
+    },
+    async 'productListingCollection:suggestWxCategoryFromFullList'(args) {
+      return createWxProductFullCategorySuggestion(args[0] as CreateWxProductDraftSuggestionInput);
     },
     async 'productListingCollection:prepareWxDraft'(args) {
       return prepareWxProductDraftFromCollectedListing(args[0] as CreateWxProductDraftPrepareInput);
