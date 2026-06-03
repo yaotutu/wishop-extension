@@ -106,6 +106,16 @@ export class ExtensionDb extends Dexie {
       accountSyncStates: 'accountId, appId, revision, updatedAt',
       collectedProductListings: 'id, [platform+itemId], updatedAt, collectedAt',
     });
+    this.version(3).stores({
+      accounts: 'id, appId, updatedAt',
+      orders: '[accountId+orderId], accountId, [accountId+status+updateTime], [accountId+createTime], [accountId+lastFetchedAt]',
+      accountWorkspaces: 'accountId, updatedAt',
+      accountLogs: 'id, accountId, kind, [accountId+kind+timestamp], timestamp',
+      accountSyncStates: 'accountId, appId, revision, updatedAt',
+      collectedProductListings: 'id, updatedAt, collectedAt',
+    }).upgrade(async tx => {
+      await tx.table('collectedProductListings').clear();
+    });
   }
 }
 

@@ -6,44 +6,10 @@ import {
   createWxProductDraftSuggestion,
   normalizeWxProductDraftSuggestionPayload,
 } from '../src/background/services/product-listing-ai-draft-service.ts';
+import { sampleCollectedProductListing } from './product-listing-fixtures.ts';
 
 function sampleListing(): CollectedProductListing {
-  return {
-    id: 'taobao:1010211244888',
-    platform: 'taobao',
-    sourceUrl: 'https://item.taobao.com/item.htm?id=1010211244888',
-    itemId: '1010211244888',
-    title: '适用kindle充电传输数据线paperwhite电子书配件',
-    shopName: '百鸿胜数码电器',
-    sourceCategory: {
-      id: '50024407',
-      name: '电子书配件',
-      path: ['数码', '电子教育', '电子书配件'],
-    },
-    seller: {
-      shopName: '百鸿胜数码电器',
-      sellerId: 'seller-1',
-      shopId: 'shop-1',
-    },
-    priceRangeText: '3.12起',
-    mainImages: [
-      'https://img.alicdn.com/main-1.jpg',
-      'https://img.alicdn.com/main-2.jpg',
-      'https://img.alicdn.com/main-3.jpg',
-    ],
-    detailImages: ['https://img.alicdn.com/detail-1.jpg'],
-    productParams: [
-      { name: '品牌', value: '灿冕', group: 'basic' },
-      { name: '型号', value: 'KPW-1', group: 'basic' },
-    ],
-    skuGroups: [{ name: '颜色分类', values: ['白色', '黑色'] }],
-    skuMatrix: [],
-    salesText: '已售 14',
-    deliveryText: '预计明天发货',
-    missingFields: [],
-    collectedAt: 1700000000000,
-    updatedAt: 1700000000000,
-  };
+  return sampleCollectedProductListing({ sku: { ...sampleCollectedProductListing().sku, matrix: [] } });
 }
 
 function aiSettings(patch: Partial<AiListingSettings> = {}): AiListingSettings {

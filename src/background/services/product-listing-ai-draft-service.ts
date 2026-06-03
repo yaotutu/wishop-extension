@@ -107,14 +107,16 @@ function findCategoryPath<T extends WxProductCategoryPath>(catIds: string[], cat
 }
 
 function buildListingSearchText(listing: CollectedProductListing): string {
+  const sourceCategory = listing.category.source;
   return [
     listing.title,
-    listing.sourceCategory?.name,
-    ...(listing.sourceCategory?.path || []),
-    listing.priceRangeText,
-    listing.deliveryText,
-    ...listing.productParams.flatMap(param => [param.name, param.value, param.group]),
-    ...listing.skuGroups.flatMap(group => [group.name, ...group.values]),
+    sourceCategory?.name,
+    ...(sourceCategory?.path || []),
+    listing.price.rangeText,
+    listing.delivery.text,
+    listing.detail.text,
+    ...listing.params.flatMap(param => [param.name, param.value, param.group]),
+    ...listing.sku.groups.flatMap(group => [group.name, ...group.values]),
   ]
     .map(item => normalizeText(item).toLowerCase())
     .filter(Boolean)
@@ -167,28 +169,30 @@ function productFactsForPrompt(
   categoryCandidates: WxProductCategoryCandidate[],
   categoryLookup?: WxProductCategoryLookupSummary,
 ): Record<string, unknown> {
+  const sourceCategory = listing.category.source;
   return {
-    sourcePlatform: listing.platform,
-    sourceItemId: listing.itemId,
+    sourcePlatform: listing.identity.platform,
+    sourceItemId: listing.identity.itemId,
     sourceUrl: listing.sourceUrl,
-    sourceCategory: listing.sourceCategory ? {
-      id: listing.sourceCategory.id || '',
-      name: listing.sourceCategory.name || '',
-      path: listing.sourceCategory.path || [],
+    sourceCategory: sourceCategory ? {
+      id: sourceCategory.id || '',
+      name: sourceCategory.name || '',
+      path: sourceCategory.path || [],
     } : undefined,
     targetWxCatIds: input.wxCatIds,
     categoryLookup,
     wechatCategoryCandidates: categoryCandidatesForPrompt(categoryCandidates),
     title: listing.title,
-    priceRangeText: listing.priceRangeText,
-    deliveryText: listing.deliveryText,
-    productParams: listing.productParams.slice(0, MAX_PROMPT_PARAMS).map(param => ({
+    priceRangeText: listing.price.rangeText,
+    deliveryText: listing.delivery.text,
+    detailText: listing.detail.text,
+    productParams: listing.params.slice(0, MAX_PROMPT_PARAMS).map(param => ({
       name: param.name,
       value: param.value,
       group: param.group,
     })),
-    skuGroups: listing.skuGroups,
-    sampleSkus: listing.skuMatrix.slice(0, MAX_PROMPT_SKUS).map(sku => ({
+    skuGroups: listing.sku.groups,
+    sampleSkus: listing.sku.matrix.slice(0, MAX_PROMPT_SKUS).map(sku => ({
       specs: sku.specs,
       priceText: sku.priceText,
       stockText: sku.stockText,
@@ -289,7 +293,7 @@ export async function createWxProductDraftSuggestion(
   let categoryLookup: WxProductCategoryLookupSummary | undefined;
   if (input.wxCatIds.length === 0) {
     const loadCategoryLookup = dependencies.getCategoryLookup || loadTaobaoWxCategoryLookupData;
-    const lookupResult = resolveTaobaoWxCategoryLookup(listing.sourceCategory, await loadCategoryLookup());
+    const lookupResult = resolveTaobaoWxCategoryLookup(listing.category.source, await loadCategoryLookup());
     categoryCandidates = lookupResult.candidates;
     categoryLookup = lookupResult;
     if (categoryCandidates.length === 0) {

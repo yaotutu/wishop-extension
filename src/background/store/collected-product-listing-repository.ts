@@ -1,8 +1,8 @@
 import type { CollectedProductListing } from '../../shared/types.ts';
 import { extensionDb } from '../db/extension-db.ts';
 
-function collectionId(listing: Pick<CollectedProductListing, 'platform' | 'itemId'>): string {
-  return `${listing.platform}:${listing.itemId}`;
+function collectionId(listing: Pick<CollectedProductListing, 'identity'>): string {
+  return `${listing.identity.platform}:${listing.identity.itemId}`;
 }
 
 /**

@@ -7,49 +7,26 @@ import {
   submitPreparedWxProductDraft,
 } from '../src/background/services/product-listing-wx-draft-service.ts';
 import type { WxShopAddProductRequest, WxShopListingClient } from '../src/background/wxshop/listing/types.ts';
+import { sampleCollectedProductListing } from './product-listing-fixtures.ts';
 
 function sampleListing(): CollectedProductListing {
-  return {
-    id: 'taobao:1010211244888',
-    platform: 'taobao',
-    sourceUrl: 'https://item.taobao.com/item.htm?id=1010211244888',
-    itemId: '1010211244888',
-    title: '适用kindle充电传输数据线paperwhite电子书配件',
-    shopName: '百鸿胜数码电器',
-    seller: {
-      shopName: '百鸿胜数码电器',
-      sellerId: 'seller-1',
-      shopId: 'shop-1',
+  return sampleCollectedProductListing({
+    images: {
+      ...sampleCollectedProductListing().images,
+      detail: ['https://img.alicdn.com/main-1.jpg', 'https://img.alicdn.com/detail-1.jpg'],
     },
-    priceRangeText: '3.12起',
-    mainImages: [
-      'https://img.alicdn.com/main-1.jpg',
-      'https://img.alicdn.com/main-2.jpg',
-      'https://img.alicdn.com/main-3.jpg',
-    ],
-    detailImages: [
-      'https://img.alicdn.com/main-1.jpg',
-      'https://img.alicdn.com/detail-1.jpg',
-    ],
-    productParams: [{ name: '品牌', value: '灿冕', group: 'basic' }],
-    skuGroups: [],
-    skuMatrix: [{
-      id: 'sku-white',
-      skuId: 'sku-white',
-      propPath: '1627207:28341',
-      specs: [{ name: '颜色分类', value: '白色' }],
-      priceText: '3.12',
-      priceMoney: 312,
-      stockText: '有货',
-      quantity: 100,
-      imageUrl: 'https://img.alicdn.com/white.jpg',
-    }],
-    salesText: '已售 14',
-    deliveryText: '预计明天发货',
-    missingFields: [],
-    collectedAt: 1700000000000,
-    updatedAt: 1700000000000,
-  };
+    detail: {
+      text: '',
+      source: 'detailDom',
+      images: ['https://img.alicdn.com/main-1.jpg', 'https://img.alicdn.com/detail-1.jpg'],
+    },
+    params: [{ name: '品牌', value: '灿冕', group: 'basic' }],
+    sku: {
+      ...sampleCollectedProductListing().sku,
+      groups: [],
+      matrix: [sampleCollectedProductListing().sku.matrix[0]],
+    },
+  });
 }
 
 function fakeListingClient(uploaded: string[], addRequests: WxShopAddProductRequest[]): WxShopListingClient {

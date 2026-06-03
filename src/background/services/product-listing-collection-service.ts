@@ -46,7 +46,11 @@ function normalizeTaobaoProductUrl(rawUrl: string): string {
   if ((!isTaobao && !isTmall) || !url.searchParams.get('id')) {
     throw new Error('请输入淘宝或天猫商品详情页链接');
   }
-  return url.toString();
+  const normalized = new URL(`${url.protocol}//${url.hostname}${url.pathname}`);
+  normalized.searchParams.set('id', url.searchParams.get('id')!.trim());
+  const skuId = url.searchParams.get('skuId')?.trim();
+  if (skuId) normalized.searchParams.set('skuId', skuId);
+  return normalized.toString();
 }
 
 function emitProductListingCollectionEvent(event: string, payload: unknown): void {
@@ -99,10 +103,10 @@ function collectionLogBase(session: ProductListingCollectionSession) {
 function missingFields(snapshot: TaobaoProductSnapshot): string[] {
   const missing: string[] = [];
   if (!snapshot.title) missing.push('title');
-  if (snapshot.mainImages.length === 0) missing.push('mainImages');
-  if (snapshot.detailImages.length === 0) missing.push('detailImages');
-  if (snapshot.skuMatrix.length === 0) missing.push('skuMatrix');
-  if (snapshot.productParams.length === 0) missing.push('productParams');
+  if (snapshot.images.main.length === 0) missing.push('mainImages');
+  if (snapshot.images.detail.length === 0) missing.push('detailImages');
+  if (snapshot.sku.matrix.length === 0) missing.push('skuMatrix');
+  if (snapshot.params.length === 0) missing.push('productParams');
   return missing;
 }
 
@@ -110,8 +114,8 @@ function toCollectedListing(snapshot: TaobaoProductSnapshot, existing?: Collecte
   const timestamp = now();
   return {
     ...snapshot,
-    id: `${snapshot.platform}:${snapshot.itemId}`,
-    sourceUrl: snapshot.url,
+    id: `${snapshot.identity.platform}:${snapshot.identity.itemId}`,
+    sourceUrl: snapshot.identity.url,
     missingFields: missingFields(snapshot),
     updatedAt: timestamp,
     collectedAt: snapshot.collectedAt || existing?.collectedAt || timestamp,
@@ -287,7 +291,7 @@ export async function completeProductListingCollectionSession(
   void recordActivityCompleted({
     ...collectionLogBase(next),
     title: '淘宝商品采集完成',
-    detail: `${listing.title || listing.itemId}，SKU ${listing.skuMatrix.length} 个，参数 ${listing.productParams.length} 项`,
+    detail: `${listing.title || listing.identity.itemId}，SKU ${listing.sku.matrix.length} 个，参数 ${listing.params.length} 项`,
   });
   emitProductListingCollectionEvent('productListingCollection:completed', listing);
   void startNextQueuedSession().catch(() => {});

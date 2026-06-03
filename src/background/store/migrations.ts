@@ -2,6 +2,7 @@ import type { StoreSchema } from './core';
 import { CURRENT_STORAGE_VERSION } from './core';
 import { DEFAULT_NOTIFICATION_PREFERENCE } from '../../shared/notification';
 import { DEFAULT_APP_SETTINGS } from '../../shared/settings';
+import { extensionDb } from '../db/extension-db.ts';
 
 type RawStore = Partial<StoreSchema> & Record<string, unknown>;
 type Migration = (store: RawStore) => RawStore;
@@ -86,6 +87,18 @@ const migrations: Record<number, Migration> = {
       storageVersion: 9,
     };
   },
+  10(store) {
+    return {
+      ...store,
+      storageVersion: 10,
+    };
+  },
+  11(store) {
+    return {
+      ...store,
+      storageVersion: 11,
+    };
+  },
 };
 
 const LEGACY_BUSINESS_KEYS = [
@@ -126,5 +139,8 @@ export async function migrateStore(): Promise<void> {
     remove(keys: string | string[]): Promise<void>;
   };
   await localStorage.remove([...LEGACY_BUSINESS_KEYS, ...legacyCacheKeys(store)]);
+  if ((typeof store.storageVersion === 'number' ? store.storageVersion : 0) < 11) {
+    await extensionDb.collectedProductListings.clear();
+  }
   await chrome.storage.local.set({ storageVersion: CURRENT_STORAGE_VERSION });
 }

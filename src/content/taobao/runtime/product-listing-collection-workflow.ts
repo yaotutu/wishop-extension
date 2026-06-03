@@ -7,32 +7,73 @@ import {
   readTaobaoProductSnapshotFromDocument,
 } from '../adapters/product-detail-collection-adapter.ts';
 import { detectTaobaoSecurityChallenge } from '../adapters/security-challenge-adapter.ts';
-import { collectTaobaoProductFromPageWorld } from './page-world-product-collector.ts';
-
-interface PageWorldProductPayload {
-  pageModel: unknown;
-  detailImages: string[];
-}
+import { collectTaobaoProductFromPageWorld, type PageWorldProductPayload } from './page-world-product-collector.ts';
 
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => window.setTimeout(resolve, ms));
 }
 
 function mergeSnapshot(primary: TaobaoProductSnapshot, fallback: TaobaoProductSnapshot): TaobaoProductSnapshot {
+  const usedDocumentFallback = primary.diagnostics.usedDocumentFallback
+    || !primary.title
+    || !primary.shop.name
+    || primary.images.main.length === 0
+    || primary.sku.matrix.length === 0;
   return {
     ...primary,
     title: primary.title || fallback.title,
-    shopName: primary.shopName || fallback.shopName,
-    sourceCategory: primary.sourceCategory || fallback.sourceCategory,
+    shop: { name: primary.shop.name || fallback.shop.name },
+    category: { source: primary.category.source || fallback.category.source },
     seller: primary.seller.shopName ? primary.seller : fallback.seller,
-    priceRangeText: primary.priceRangeText || fallback.priceRangeText,
-    mainImages: primary.mainImages.length > 0 ? primary.mainImages : fallback.mainImages,
-    detailImages: primary.detailImages.length > 0 ? primary.detailImages : fallback.detailImages,
-    skuGroups: primary.skuGroups.length > 0 ? primary.skuGroups : fallback.skuGroups,
-    skuMatrix: primary.skuMatrix.length > 0 ? primary.skuMatrix : fallback.skuMatrix,
-    salesText: primary.salesText || fallback.salesText,
-    deliveryText: primary.deliveryText || fallback.deliveryText,
+    price: { rangeText: primary.price.rangeText || fallback.price.rangeText },
+    images: {
+      main: primary.images.main.length > 0 ? primary.images.main : fallback.images.main,
+      detail: primary.images.detail.length > 0 ? primary.images.detail : fallback.images.detail,
+      assets: shouldUseFallbackImageAssets(primary) ? mergeImageAssets(primary.images.assets, fallback.images.assets) : primary.images.assets,
+    },
+    detail: {
+      text: primary.detail.text || fallback.detail.text,
+      source: primary.detail.source !== 'none' ? primary.detail.source : fallback.detail.source,
+      images: primary.detail.images.length > 0 ? primary.detail.images : fallback.detail.images,
+    },
+    params: primary.params.length > 0 ? primary.params : fallback.params,
+    sku: {
+      groups: primary.sku.groups.length > 0 ? primary.sku.groups : fallback.sku.groups,
+      properties: primary.sku.properties.length > 0 ? primary.sku.properties : fallback.sku.properties,
+      matrix: primary.sku.matrix.length > 0 ? primary.sku.matrix : fallback.sku.matrix,
+    },
+    sales: { text: primary.sales.text || fallback.sales.text },
+    delivery: { text: primary.delivery.text || fallback.delivery.text },
+    diagnostics: {
+      ...primary.diagnostics,
+      usedDocumentFallback,
+      sources: {
+        ...fallback.diagnostics.sources,
+        ...primary.diagnostics.sources,
+      },
+      warnings: Array.from(new Set([...fallback.diagnostics.warnings, ...primary.diagnostics.warnings])),
+    },
   };
+}
+
+function shouldUseFallbackImageAssets(snapshot: TaobaoProductSnapshot): boolean {
+  return snapshot.images.assets.length === 0
+    || snapshot.images.main.length === 0
+    || snapshot.images.detail.length === 0;
+}
+
+function mergeImageAssets(
+  primary: TaobaoProductSnapshot['images']['assets'],
+  fallback: TaobaoProductSnapshot['images']['assets'],
+): TaobaoProductSnapshot['images']['assets'] {
+  const seen = new Set<string>();
+  const merged: TaobaoProductSnapshot['images']['assets'] = [];
+  for (const asset of [...primary, ...fallback]) {
+    if (!asset.normalizedUrl || seen.has(asset.normalizedUrl)) continue;
+    seen.add(asset.normalizedUrl);
+    merged.push(asset);
+  }
+  return merged;
 }
 
 async function collectSnapshot(): Promise<TaobaoProductSnapshot> {
@@ -54,8 +95,8 @@ export async function collectTaobaoProductSnapshotFromSources(
   if (!pageWorldPayload.pageModel) return fallback;
   const snapshot = buildTaobaoProductSnapshotFromPageModel({
     pageModel: pageWorldPayload.pageModel,
-    url: fallback.url,
-    detailImages: pageWorldPayload.detailImages,
+    url: fallback.identity.url,
+    detailContent: pageWorldPayload.detailContent,
   });
   return mergeSnapshot(snapshot, fallback);
 }

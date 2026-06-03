@@ -12,6 +12,7 @@ const pageModel = {
     sellerId: 'seller-1',
     shopId: 'shop-1',
     nick: 'should-not-be-persisted',
+    encryptUid: 'should-not-be-persisted',
   },
   item: {
     itemId: '1010211244888',
@@ -71,6 +72,10 @@ const pageModel = {
         quantity: 100,
         quantityText: '有货',
         logisticsTime: '预计明天发货',
+        asac: 'should-not-be-persisted',
+        buyExParams: {
+          mi_id: 'should-not-be-persisted',
+        },
       },
       'sku-black-05m': {
         price: { priceText: '4.20', priceMoney: 420 },
@@ -82,7 +87,43 @@ const pageModel = {
   },
   componentsVO: {
     titleVO: { salesDesc: '已售 14' },
-    deliveryVO: { agingDesc: '预计明天发货｜承诺48小时内发货' },
+    deliveryVO: {
+      agingDesc: '预计明天发货｜承诺48小时内发货',
+      deliveryFromAddr: '广东深圳',
+      deliveryToAddr: 'should-not-be-persisted',
+      addressId: 'should-not-be-persisted',
+      areaId: 'should-not-be-persisted',
+      deliverToCity: 'should-not-be-persisted',
+      deliverToDistrict: 'should-not-be-persisted',
+    },
+    rateVO: {
+      totalCount: '900+',
+      group: {
+        items: [
+          {
+            content: 'should-not-be-persisted',
+            feedId: 'should-not-be-persisted',
+            headPic: 'should-not-be-persisted',
+          },
+        ],
+      },
+    },
+    itemEndorseVO: {
+      endorseList: [
+        {
+          textList: ['should-not-be-persisted'],
+          type: 'itemRate',
+        },
+      ],
+    },
+    tabVO: {
+      tabList: [
+        {
+          name: 'comments',
+          title: '用户评价',
+        },
+      ],
+    },
   },
   services: {
     unrelated: true,
@@ -97,36 +138,61 @@ test('maps Taobao ICE page model to a complete listing collection snapshot', () 
   const snapshot = buildTaobaoProductSnapshotFromPageModel({
     pageModel,
     url: 'https://item.taobao.com/item.htm?id=1010211244888',
-    detailImages: ['//img.alicdn.com/detail-1.jpg'],
+    detailContent: {
+      text: '适用于 Kindle 充电传输，支持 Paperwhite 与 Oasis。',
+      source: 'detailDom',
+      images: [{
+        url: '//img.alicdn.com/detail-1.jpg',
+        normalizedUrl: 'https://img.alicdn.com/detail-1.jpg',
+        role: 'detail',
+        source: 'detailDom',
+        sourceSelector: '#imageTextInfo-content',
+        width: 750,
+        height: 1000,
+        naturalWidth: 750,
+        naturalHeight: 1000,
+        lazyAttrs: { 'data-src': '//img.alicdn.com/detail-1.jpg' },
+        flags: [],
+      }],
+    },
     collectedAt: 1700000000000,
   });
 
-  assert.equal(snapshot.itemId, '1010211244888');
+  assert.equal(snapshot.identity.itemId, '1010211244888');
   assert.equal(snapshot.title, pageModel.item.title);
-  assert.deepEqual(snapshot.sourceCategory, {
+  assert.deepEqual(snapshot.category.source, {
     id: '50024407',
   });
-  assert.equal(snapshot.shopName, '百鸿胜数码电器');
+  assert.equal(snapshot.shop.name, '百鸿胜数码电器');
   assert.equal(snapshot.seller.sellerId, 'seller-1');
-  assert.deepEqual(snapshot.mainImages, [
+  assert.deepEqual(snapshot.images.main, [
     'https://img.alicdn.com/main-1.jpg',
     'https://img.alicdn.com/main-2.jpg',
   ]);
-  assert.deepEqual(snapshot.detailImages, ['https://img.alicdn.com/detail-1.jpg']);
-  assert.deepEqual(snapshot.productParams, [
+  assert.deepEqual(snapshot.images.detail, ['https://img.alicdn.com/detail-1.jpg']);
+  assert.equal(snapshot.detail.text, '适用于 Kindle 充电传输，支持 Paperwhite 与 Oasis。');
+  assert.deepEqual(snapshot.params, [
     { name: '数据线适用范围', value: '通用', group: 'enhance' },
     { name: '品牌', value: '灿冕', group: 'basic' },
     { name: '型号', value: '1', group: 'basic' },
   ]);
-  assert.deepEqual(snapshot.skuGroups.map(group => group.name), ['颜色分类', '长度']);
-  assert.equal(snapshot.skuMatrix.length, 2);
-  assert.deepEqual(snapshot.skuMatrix[0], {
+  assert.deepEqual(snapshot.sku.groups.map(group => group.name), ['颜色分类', '长度']);
+  assert.deepEqual(snapshot.sku.properties[0], {
+    pid: '1627207',
+    name: '颜色分类',
+    values: [
+      { vid: '28341', name: '白色', imageUrl: 'https://img.alicdn.com/white.jpg' },
+      { vid: '28320', name: '黑色', imageUrl: 'https://img.alicdn.com/black.jpg' },
+    ],
+  });
+  assert.equal(snapshot.sku.matrix.length, 2);
+  assert.deepEqual(snapshot.sku.matrix[0], {
     id: 'sku-white-1m',
     skuId: 'sku-white-1m',
     propPath: '1627207:28341;122216431:32298',
     specs: [
-      { name: '颜色分类', value: '白色' },
-      { name: '长度', value: '1m' },
+      { pid: '1627207', vid: '28341', name: '颜色分类', value: '白色' },
+      { pid: '122216431', vid: '32298', name: '长度', value: '1m' },
     ],
     priceText: '3.12',
     priceMoney: 312,
@@ -135,9 +201,21 @@ test('maps Taobao ICE page model to a complete listing collection snapshot', () 
     imageUrl: 'https://img.alicdn.com/white.jpg',
     logisticsTime: '预计明天发货',
   });
-  assert.equal(snapshot.priceRangeText, '3.12起');
-  assert.equal(snapshot.salesText, '已售 14');
-  assert.equal(snapshot.deliveryText, '预计明天发货｜承诺48小时内发货');
+  assert.equal(snapshot.price.rangeText, '3.12起');
+  assert.equal(snapshot.sales.text, '已售 14');
+  assert.equal(snapshot.delivery.text, '预计明天发货｜承诺48小时内发货');
+  assert.deepEqual(snapshot.images.assets.map(asset => `${asset.role}:${asset.source}:${asset.normalizedUrl}`), [
+    'main:pageModel:https://img.alicdn.com/main-1.jpg',
+    'main:pageModel:https://img.alicdn.com/main-2.jpg',
+    'detail:detailDom:https://img.alicdn.com/detail-1.jpg',
+    'sku:skuModel:https://img.alicdn.com/white.jpg',
+    'sku:skuModel:https://img.alicdn.com/black.jpg',
+  ]);
+  assert.equal(snapshot.diagnostics.usedPageModel, true);
+  assert.equal(snapshot.diagnostics.usedDocumentFallback, false);
+  assert.equal(snapshot.diagnostics.sources.detail, 'detailDom');
+  assert.match(JSON.stringify(snapshot.rawModel), /skuBase/);
+  assert.doesNotMatch(JSON.stringify(snapshot.rawModel), /should-not-be-persisted/);
 });
 
 test('sanitizes Taobao page model before content script sends it to background', () => {
@@ -148,10 +226,33 @@ test('sanitizes Taobao page model before content script sends it to background',
   assert.match(serialized, /skuBase/);
   assert.match(serialized, /skuCore/);
   assert.match(serialized, /plusViewVO/);
+  assert.match(serialized, /广东深圳/);
   assert.doesNotMatch(serialized, /13800000000/);
   assert.doesNotMatch(serialized, /privateAddressList/);
   assert.doesNotMatch(serialized, /should-not-be-persisted/);
+  assert.doesNotMatch(serialized, /deliveryToAddr/);
+  assert.doesNotMatch(serialized, /addressId/);
+  assert.doesNotMatch(serialized, /areaId/);
+  assert.doesNotMatch(serialized, /asac/);
+  assert.doesNotMatch(serialized, /buyExParams/);
+  assert.doesNotMatch(serialized, /mi_id/);
+  assert.doesNotMatch(serialized, /encryptUid/);
+  assert.doesNotMatch(serialized, /rateVO/);
+  assert.doesNotMatch(serialized, /itemEndorseVO/);
+  assert.doesNotMatch(serialized, /tabVO/);
+  assert.doesNotMatch(serialized, /用户评价/);
   assert.equal(Object.prototype.hasOwnProperty.call(sanitized as Record<string, unknown>, 'services'), false);
+});
+
+test('normalizes collected product URLs and removes recommendation tracking params', () => {
+  const snapshot = buildTaobaoProductSnapshotFromPageModel({
+    pageModel,
+    url: 'https://item.taobao.com/item.htm?id=1010211244888&mi_id=sensitive&pvid=abc&skuId=sku-white-1m&spm=a&utparam=%7B%22userId%22%3A1%7D',
+    detailContent: { text: '', images: [], source: 'none' },
+    collectedAt: 1700000000000,
+  });
+
+  assert.equal(snapshot.identity.url, 'https://item.taobao.com/item.htm?id=1010211244888&skuId=sku-white-1m');
 });
 
 test('ignores Taobao category name text and keeps only the category id from page model', () => {
@@ -175,7 +276,7 @@ test('ignores Taobao category name text and keeps only the category id from page
     collectedAt: 1700000000000,
   });
 
-  assert.deepEqual(snapshot.sourceCategory, {
+  assert.deepEqual(snapshot.category.source, {
     id: '50013886',
   });
 });
@@ -196,7 +297,7 @@ test('reads Taobao category aliases from page model when official field names va
     collectedAt: 1700000000000,
   });
 
-  assert.deepEqual(snapshot.sourceCategory, {
+  assert.deepEqual(snapshot.category.source, {
     id: '123456',
   });
 });
@@ -226,7 +327,7 @@ test('reads Taobao 2025 detail category id from log params when category name is
     collectedAt: 1700000000000,
   });
 
-  assert.deepEqual(snapshot.sourceCategory, {
+  assert.deepEqual(snapshot.category.source, {
     id: '50013886',
   });
 });
@@ -247,7 +348,7 @@ test('normalizes Taobao cropped image urls before rendering previews', () => {
     collectedAt: 1700000000000,
   });
 
-  assert.deepEqual(snapshot.mainImages, [
+  assert.deepEqual(snapshot.images.main, [
     'https://gw.alicdn.com/bao/uploaded/i1/221/O1CN.png',
     'https://img.alicdn.com/imgextra/i1/221/O1CN.jpg',
   ]);
@@ -257,7 +358,7 @@ test('falls back to DOM snapshot when page-world collection times out', async ()
   const fallback = buildTaobaoProductSnapshotFromPageModel({
     pageModel,
     url: 'https://item.taobao.com/item.htm?id=1010211244888',
-    detailImages: [],
+    detailContent: { text: '', images: [], source: 'none' },
     collectedAt: 1700000000000,
   });
 
@@ -268,6 +369,43 @@ test('falls back to DOM snapshot when page-world collection times out', async ()
     },
   );
 
-  assert.equal(snapshot.itemId, fallback.itemId);
+  assert.equal(snapshot.identity.itemId, fallback.identity.itemId);
   assert.equal(snapshot.title, fallback.title);
+});
+
+test('does not merge document fallback image assets when page model assets are complete', async () => {
+  const fallback = buildTaobaoProductSnapshotFromPageModel({
+    pageModel,
+    url: 'https://item.taobao.com/item.htm?id=1010211244888',
+    detailContent: { text: '', images: [], source: 'none' },
+    collectedAt: 1700000000000,
+  });
+  fallback.images.assets = [{
+    url: 'https://img.alicdn.com/decorative-icon.png',
+    normalizedUrl: 'https://img.alicdn.com/decorative-icon.png',
+    role: 'fallback',
+    source: 'documentDom',
+    flags: [],
+  }];
+
+  const snapshot = await collectTaobaoProductSnapshotFromSources(
+    fallback,
+    async () => ({
+      pageModel,
+      detailContent: {
+        text: '',
+        source: 'detailDom',
+        images: [{
+          url: '//img.alicdn.com/detail-1.jpg',
+          normalizedUrl: 'https://img.alicdn.com/detail-1.jpg',
+          role: 'detail',
+          source: 'detailDom',
+          flags: [],
+        }],
+      },
+    }),
+  );
+
+  assert.equal(snapshot.images.assets.some(asset => asset.source === 'documentDom'), false);
+  assert.equal(snapshot.images.assets.some(asset => asset.normalizedUrl.includes('decorative-icon')), false);
 });

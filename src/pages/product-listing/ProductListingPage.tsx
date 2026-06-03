@@ -67,7 +67,7 @@ function formatTime(timestamp: number): string {
 }
 
 function skuSummary(listing: CollectedProductListing): string {
-  return listing.skuGroups.map(group => `${group.name} ${group.values.length}`).join(' / ') || '-';
+  return listing.sku.groups.map(group => `${group.name} ${group.values.length}`).join(' / ') || '-';
 }
 
 function statusTags(listing: CollectedProductListing): React.ReactNode {
@@ -83,8 +83,8 @@ function statusTags(listing: CollectedProductListing): React.ReactNode {
   );
 }
 
-function sourceCategoryText(listing?: Pick<CollectedProductListing, 'sourceCategory'> | null): string {
-  const category = listing?.sourceCategory;
+function sourceCategoryText(listing?: Pick<CollectedProductListing, 'category'> | null): string {
+  const category = listing?.category.source;
   if (!category) return '-';
   return category.path?.join(' / ')
     || category.name
@@ -371,7 +371,7 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
       render: (_: string, record) => (
         <Space size={10}>
           <Image
-            src={record.mainImages[0]}
+            src={record.images.main[0]}
             width={48}
             height={48}
             alt={record.title}
@@ -380,10 +380,10 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
           />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 420 }}>
-              {record.title || record.itemId}
+              {record.title || record.identity.itemId}
             </div>
             <div style={{ color: '#6b7280', fontSize: 12 }}>
-              {record.shopName || '-'} · {record.itemId}
+              {record.shop.name || '-'} · {record.identity.itemId}
             </div>
           </div>
         </Space>
@@ -391,10 +391,9 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
     },
     {
       title: '价格',
-      dataIndex: 'priceRangeText',
       key: 'priceRangeText',
       width: 110,
-      render: (value: string) => value || '-',
+      render: (_: unknown, record) => record.price.rangeText || '-',
     },
     {
       title: '图片',
@@ -402,8 +401,8 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
       width: 120,
       render: (_: unknown, record) => (
         <div>
-          <div>主图 {record.mainImages.length}</div>
-          <div style={{ color: '#6b7280', fontSize: 12 }}>详情 {record.detailImages.length}</div>
+          <div>主图 {record.images.main.length}</div>
+          <div style={{ color: '#6b7280', fontSize: 12 }}>详情 {record.images.detail.length}</div>
         </div>
       ),
     },
@@ -413,7 +412,7 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
       width: 180,
       render: (_: unknown, record) => (
         <div>
-          <div>{record.skuMatrix.length} 个 SKU</div>
+          <div>{record.sku.matrix.length} 个 SKU</div>
           <div style={{ color: '#6b7280', fontSize: 12 }}>{skuSummary(record)}</div>
         </div>
       ),
@@ -543,23 +542,25 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
               bordered
               column={2}
               items={[
-                { label: '商品 ID', children: previewListing.itemId },
-                { label: '平台', children: previewListing.platform },
-                { label: '店铺', children: previewListing.shopName || '-' },
+                { label: '商品 ID', children: previewListing.identity.itemId },
+                { label: '平台', children: previewListing.identity.platform },
+                { label: '店铺', children: previewListing.shop.name || '-' },
                 {
                   label: '原类目',
                   children: sourceCategoryText(previewListing),
                 },
-                { label: '价格', children: previewListing.priceRangeText || '-' },
-                { label: '销量', children: previewListing.salesText || '-' },
-                { label: '发货', children: previewListing.deliveryText || '-' },
+                { label: '价格', children: previewListing.price.rangeText || '-' },
+                { label: '销量', children: previewListing.sales.text || '-' },
+                { label: '发货', children: previewListing.delivery.text || '-' },
+                { label: '详情来源', children: previewListing.detail.source },
+                { label: '图片资产', children: `${previewListing.images.assets.length} 个` },
               ]}
             />
             <div>
               <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>主图</h3>
               <Image.PreviewGroup>
                 <div style={imageGridStyle}>
-                  {previewListing.mainImages.map(url => (
+                  {previewListing.images.main.map(url => (
                     <Image key={url} src={url} width="100%" height={72} alt="商品主图" styles={{ root: { objectFit: 'cover' } }} />
                   ))}
                 </div>
@@ -569,13 +570,13 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
               <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>
                 图文详情
                 <span style={{ marginLeft: 8, color: '#6b7280', fontSize: 12, fontWeight: 400 }}>
-                  {previewListing.detailImages.length} 张
+                  {previewListing.images.detail.length} 张
                 </span>
               </h3>
-              {previewListing.detailImages.length > 0 ? (
+              {previewListing.images.detail.length > 0 ? (
                 <Image.PreviewGroup>
                   <div style={detailImageGridStyle}>
-                    {previewListing.detailImages.map((url, index) => (
+                    {previewListing.images.detail.map((url, index) => (
                       <Image
                         key={`${url}:${index}`}
                         src={url}
@@ -599,7 +600,7 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
                 rowKey={record => `${record.group}:${record.name}`}
                 size="small"
                 pagination={false}
-                dataSource={previewListing.productParams}
+                dataSource={previewListing.params}
                 columns={[
                   { title: '分组', dataIndex: 'group', width: 100 },
                   { title: '参数', dataIndex: 'name', width: 220 },
@@ -613,7 +614,7 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
                 rowKey="id"
                 size="small"
                 pagination={{ pageSize: 8, showSizeChanger: false }}
-                dataSource={previewListing.skuMatrix}
+                dataSource={previewListing.sku.matrix}
                 columns={[
                   {
                     title: '规格',

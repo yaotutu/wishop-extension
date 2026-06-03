@@ -318,13 +318,28 @@ export interface TaobaoPurchaseOrderSnapshot {
 }
 
 export interface TaobaoProductSkuSpec {
+  pid?: string;
+  vid?: string;
   name: string;
   value: string;
 }
 
 export interface TaobaoProductSkuGroup {
+  pid?: string;
   name: string;
   values: string[];
+}
+
+export interface TaobaoProductSkuPropertyValue {
+  vid?: string;
+  name: string;
+  imageUrl?: string;
+}
+
+export interface TaobaoProductSkuProperty {
+  pid?: string;
+  name: string;
+  values: TaobaoProductSkuPropertyValue[];
 }
 
 export interface TaobaoProductSkuMatrixItem {
@@ -358,26 +373,81 @@ export interface TaobaoProductSourceCategorySnapshot {
   path?: string[];
 }
 
-export interface TaobaoProductSnapshot {
+export type TaobaoProductImageRole = 'main' | 'detail' | 'sku' | 'fallback' | 'unknown';
+export type TaobaoProductImageSource = 'pageModel' | 'detailDom' | 'documentDom' | 'skuModel' | 'fallback';
+
+export interface TaobaoProductImageAsset {
   url: string;
-  platform: 'taobao' | 'tmall';
-  itemId: string;
+  normalizedUrl: string;
+  role: TaobaoProductImageRole;
+  source: TaobaoProductImageSource;
+  sourceSelector?: string;
+  width?: number;
+  height?: number;
+  naturalWidth?: number;
+  naturalHeight?: number;
+  lazyAttrs?: Record<string, string>;
+  flags: string[];
+}
+
+export interface TaobaoProductDetailContent {
+  text: string;
+  source: 'detailDom' | 'documentDom' | 'pageModel' | 'none';
+  images: TaobaoProductImageAsset[];
+}
+
+export interface TaobaoProductCollectionDiagnostics {
+  usedPageModel: boolean;
+  usedDocumentFallback: boolean;
+  sources: Record<string, string>;
+  warnings: string[];
+}
+
+export interface TaobaoProductSnapshot {
+  identity: {
+    url: string;
+    platform: 'taobao' | 'tmall';
+    itemId: string;
+  };
   title: string;
-  shopName: string;
-  sourceCategory?: TaobaoProductSourceCategorySnapshot;
+  shop: {
+    name: string;
+  };
+  category: {
+    source?: TaobaoProductSourceCategorySnapshot;
+  };
   seller: TaobaoProductSellerSnapshot;
-  priceRangeText: string;
-  mainImages: string[];
-  detailImages: string[];
-  productParams: TaobaoProductParam[];
-  skuGroups: TaobaoProductSkuGroup[];
-  skuMatrix: TaobaoProductSkuMatrixItem[];
-  salesText: string;
-  deliveryText: string;
+  price: {
+    rangeText: string;
+  };
+  images: {
+    main: string[];
+    detail: string[];
+    assets: TaobaoProductImageAsset[];
+  };
+  detail: {
+    text: string;
+    source: TaobaoProductDetailContent['source'];
+    images: string[];
+  };
+  params: TaobaoProductParam[];
+  sku: {
+    groups: TaobaoProductSkuGroup[];
+    properties: TaobaoProductSkuProperty[];
+    matrix: TaobaoProductSkuMatrixItem[];
+  };
+  sales: {
+    text: string;
+  };
+  delivery: {
+    text: string;
+  };
+  rawModel?: unknown;
+  diagnostics: TaobaoProductCollectionDiagnostics;
   collectedAt: number;
 }
 
-export interface CollectedProductListing extends Omit<TaobaoProductSnapshot, 'url'> {
+export interface CollectedProductListing extends TaobaoProductSnapshot {
   id: string;
   sourceUrl: string;
   missingFields: string[];

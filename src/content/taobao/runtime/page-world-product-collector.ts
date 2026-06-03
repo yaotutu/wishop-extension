@@ -1,6 +1,9 @@
+import type { TaobaoProductDetailContent } from '../../../shared/types.ts';
+
 export interface PageWorldProductPayload {
   pageModel: unknown;
-  detailImages: string[];
+  detailContent: TaobaoProductDetailContent;
+  resourceHints?: string[];
 }
 
 export const TAOBAO_PRODUCT_COLLECTION_REQUEST_EVENT = 'wishop:collect-taobao-product';

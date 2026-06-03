@@ -53,13 +53,16 @@ export function enrichTaobaoProductSnapshotWithItemcatLookup(
 ): TaobaoProductSnapshot {
   return {
     ...snapshot,
-    sourceCategory: enrichSourceCategoryWithLookup(snapshot.sourceCategory, lookup),
+    category: {
+      ...snapshot.category,
+      source: enrichSourceCategoryWithLookup(snapshot.category.source, lookup),
+    },
   };
 }
 
 export async function enrichTaobaoProductSnapshotWithItemcat(
   snapshot: TaobaoProductSnapshot,
 ): Promise<TaobaoProductSnapshot> {
-  if (!snapshot.sourceCategory?.id) return snapshot;
+  if (!snapshot.category.source?.id) return snapshot;
   return enrichTaobaoProductSnapshotWithItemcatLookup(snapshot, await loadTaobaoItemcatRuntimeData());
 }

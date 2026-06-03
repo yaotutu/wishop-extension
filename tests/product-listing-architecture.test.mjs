@@ -30,8 +30,8 @@ test('product listing has an independent dashboard module boundary', () => {
 test('product audit rules are only editable from the global product audit page', () => {
   const page = source('src/pages/common-functions/ProductAuditPage.tsx');
 
-  assert.equal((page.match(/\{renderRulesSection\(\)\}/g) || []).length, 1);
   assert.match(page, /if \(scope === 'global'\)/);
+  assert.match(page, /globalView === 'tasks' \? renderGlobalTasksSection\(\) : renderRulesSection\(\)/);
   assert.doesNotMatch(page, /handleAddRuleFromLog/);
   assert.doesNotMatch(page, /handleAddKeywordKeepRule/);
 });
@@ -48,9 +48,9 @@ test('product listing preview renders collected detail images', () => {
   const page = source('src/pages/product-listing/ProductListingPage.tsx');
 
   assert.match(page, /title: '图片'/);
-  assert.match(page, /record\.detailImages\.length/);
+  assert.match(page, /record\.images\.detail\.length/);
   assert.match(page, /图文详情/);
-  assert.match(page, /previewListing\.detailImages\.map/);
+  assert.match(page, /previewListing\.images\.detail\.map/);
 });
 
 test('product detail collection adapter is decomposed behind a small public API', () => {

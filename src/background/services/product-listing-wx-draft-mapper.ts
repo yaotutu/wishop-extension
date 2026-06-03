@@ -76,7 +76,7 @@ function buildShortTitle(title: string): string {
 function buildAttrs(listing: CollectedProductListing): WxShopAddProductAttr[] {
   const seen = new Set<string>();
   const attrs: WxShopAddProductAttr[] = [];
-  for (const param of listing.productParams) {
+  for (const param of listing.params) {
     const key = normalizeText(param.name);
     const value = normalizeText(param.value);
     if (!key || !value) continue;
@@ -121,7 +121,7 @@ function normalizeDefaultStock(defaultStockNum?: number): number {
 }
 
 function resolveMainImages(listing: CollectedProductListing, uploadedImages: ProductListingWxDraftMappingOptions['uploadedImages']): string[] {
-  const sourceImages = uniqueStrings(listing.mainImages).slice(0, WX_HEAD_IMAGE_MAX_COUNT);
+  const sourceImages = uniqueStrings(listing.images.main).slice(0, WX_HEAD_IMAGE_MAX_COUNT);
   if (sourceImages.length < WX_HEAD_IMAGE_MIN_COUNT) {
     throw new Error('微信小店商品主图至少需要 3 张');
   }
@@ -129,15 +129,15 @@ function resolveMainImages(listing: CollectedProductListing, uploadedImages: Pro
 }
 
 function resolveDetailImages(listing: CollectedProductListing, uploadedImages: ProductListingWxDraftMappingOptions['uploadedImages']): string[] {
-  const mainImageSet = new Set(uniqueStrings(listing.mainImages).slice(0, WX_HEAD_IMAGE_MAX_COUNT));
-  return uniqueStrings(listing.detailImages)
+  const mainImageSet = new Set(uniqueStrings(listing.images.main).slice(0, WX_HEAD_IMAGE_MAX_COUNT));
+  return uniqueStrings(listing.images.detail)
     .filter(url => !mainImageSet.has(url))
     .slice(0, WX_DETAIL_IMAGE_MAX_COUNT)
     .map(url => lookupUploadedImage(uploadedImages, url));
 }
 
 function skuPriceInFen(sku: TaobaoProductSkuMatrixItem, listing: CollectedProductListing): number {
-  const price = sku.priceMoney ?? parseMoneyToFen(sku.priceText) ?? parseMoneyToFen(listing.priceRangeText);
+  const price = sku.priceMoney ?? parseMoneyToFen(sku.priceText) ?? parseMoneyToFen(listing.price.rangeText);
   if (!price || price <= 0) {
     throw new Error(`SKU「${sku.id}」缺少有效价格`);
   }
@@ -166,7 +166,7 @@ function buildSku(
   uploadedImages: ProductListingWxDraftMappingOptions['uploadedImages'],
   fallbackThumbImg: string,
 ): WxShopAddProductSku {
-  const skuCode = sanitizeCode(sku.skuId || sku.id, `${listing.platform}-${listing.itemId}-${index + 1}`);
+  const skuCode = sanitizeCode(sku.skuId || sku.id, `${listing.identity.platform}-${listing.identity.itemId}-${index + 1}`);
   return {
     thumb_img: sku.imageUrl ? lookupUploadedImage(uploadedImages, sku.imageUrl) : fallbackThumbImg,
     sale_price: skuPriceInFen(sku, listing),
@@ -182,7 +182,7 @@ function buildDefaultSku(
   defaultStockNum: number,
   fallbackThumbImg: string,
 ): WxShopAddProductSku {
-  const price = parseMoneyToFen(listing.priceRangeText);
+  const price = parseMoneyToFen(listing.price.rangeText);
   if (!price || price <= 0) {
     throw new Error('采集商品缺少有效价格，无法创建微信小店默认 SKU');
   }
@@ -190,7 +190,7 @@ function buildDefaultSku(
     thumb_img: fallbackThumbImg,
     sale_price: price,
     stock_num: defaultStockNum,
-    sku_code: sanitizeCode(`${listing.platform}-${listing.itemId}-default`, `${listing.itemId}-default`),
+    sku_code: sanitizeCode(`${listing.identity.platform}-${listing.identity.itemId}-default`, `${listing.identity.itemId}-default`),
     sku_attrs: [],
     sku_deliver_info: { stock_type: 0 },
   };
@@ -202,16 +202,16 @@ function buildSkus(
   uploadedImages: ProductListingWxDraftMappingOptions['uploadedImages'],
   fallbackThumbImg: string,
 ): WxShopAddProductSku[] {
-  const matrix = listing.skuMatrix.slice(0, WX_SKU_MAX_COUNT);
+  const matrix = listing.sku.matrix.slice(0, WX_SKU_MAX_COUNT);
   if (matrix.length === 0) return [buildDefaultSku(listing, defaultStockNum, fallbackThumbImg)];
   return matrix.map((sku, index) => buildSku(listing, sku, index, defaultStockNum, uploadedImages, fallbackThumbImg));
 }
 
 export function collectWxDraftSourceImages(listing: CollectedProductListing): string[] {
   return uniqueStrings([
-    ...listing.mainImages.slice(0, WX_HEAD_IMAGE_MAX_COUNT),
-    ...listing.detailImages.slice(0, WX_DETAIL_IMAGE_MAX_COUNT),
-    ...listing.skuMatrix.map(sku => sku.imageUrl).filter(Boolean),
+    ...listing.images.main.slice(0, WX_HEAD_IMAGE_MAX_COUNT),
+    ...listing.images.detail.slice(0, WX_DETAIL_IMAGE_MAX_COUNT),
+    ...listing.sku.matrix.map(sku => sku.imageUrl).filter(Boolean),
   ]);
 }
 
@@ -219,7 +219,7 @@ export function mapCollectedListingToWxAddProductRequest(
   listing: CollectedProductListing,
   options: ProductListingWxDraftMappingOptions,
 ): WxShopAddProductRequest {
-  const title = truncateText(listing.title || listing.itemId, WX_TITLE_MAX_LENGTH);
+  const title = truncateText(listing.title || listing.identity.itemId, WX_TITLE_MAX_LENGTH);
   if (Array.from(title).length < 5) {
     throw new Error('微信小店商品标题至少需要 5 个有效字符');
   }
@@ -230,7 +230,7 @@ export function mapCollectedListingToWxAddProductRequest(
   const detailImgs = resolveDetailImages(listing, options.uploadedImages);
   const attrs = buildOverrideAttrs(options.attrs) ?? buildAttrs(listing);
   const request: WxShopAddProductRequest = {
-    out_product_id: sanitizeCode(`wishop-${listing.platform}-${listing.itemId}`, listing.itemId),
+    out_product_id: sanitizeCode(`wishop-${listing.identity.platform}-${listing.identity.itemId}`, listing.identity.itemId),
     title,
     short_title: buildShortTitle(title),
     head_imgs: headImgs,

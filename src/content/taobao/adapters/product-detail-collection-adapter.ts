@@ -1,9 +1,12 @@
 import type {
+  TaobaoProductDetailContent,
+  TaobaoProductImageAsset,
   TaobaoProductParam,
   TaobaoProductSellerSnapshot,
   TaobaoProductSourceCategorySnapshot,
   TaobaoProductSkuGroup,
   TaobaoProductSkuMatrixItem,
+  TaobaoProductSkuProperty,
   TaobaoProductSkuSpec,
   TaobaoProductSnapshot,
 } from '../../../shared/types';
@@ -11,7 +14,19 @@ import { normalizeText } from '../dom/text.ts';
 
 const IMAGE_HOST_HINTS = ['alicdn.com', 'taobaocdn.com', 'tbcdn.cn'];
 const SKU_LABELS = ['颜色', '颜色分类', '尺码', '规格', '套餐', '版本', '容量', '型号', '净含量'];
-const PRIVATE_MODEL_KEY_PATTERN = /(address|phone|mobile|tel|receiver|recipient|passport|token|cookie|nick|buyer|user)/i;
+const PRIVATE_MODEL_KEY_PATTERN = /(address|phone|mobile|tel|receiver|recipient|passport|token|cookie|nick|buyer|user|encryptUid|deliveryTo|deliverTo|areaId|asac|mi_id|buyExParams|sign)/i;
+const PUBLIC_SKU_INFO_KEYS = ['price', 'subPrice', 'quantity', 'quantityText', 'logisticsTime'];
+const PUBLIC_DELIVERY_KEYS = [
+  'agingDesc',
+  'deliveryDesc',
+  'deliveryFromAddr',
+  'deliveryFrom',
+  'freight',
+  'freightText',
+  'postFee',
+  'shippingFee',
+  'logisticsTime',
+];
 const CATEGORY_ID_KEYS = [
   'categoryId',
   'catId',
@@ -27,6 +42,7 @@ interface BuildTaobaoProductSnapshotInput {
   pageModel: unknown;
   url: string;
   detailImages?: string[];
+  detailContent?: TaobaoProductDetailContent;
   collectedAt?: number;
 }
 
@@ -36,6 +52,17 @@ function parseProductUrl(url: string): URL | null {
   } catch {
     return null;
   }
+}
+
+function normalizeProductPageUrl(url: string, itemId?: string): string {
+  const current = parseProductUrl(url);
+  if (!current) return url;
+  const canonical = new URL(`${current.protocol}//${current.hostname}${current.pathname}`);
+  const normalizedItemId = itemId?.trim() || current.searchParams.get('id')?.trim() || '';
+  const skuId = current.searchParams.get('skuId')?.trim() || '';
+  if (normalizedItemId) canonical.searchParams.set('id', normalizedItemId);
+  if (skuId) canonical.searchParams.set('skuId', skuId);
+  return canonical.toString();
 }
 
 export function detectTaobaoProductDetailPage(url = location.href): boolean {
@@ -123,6 +150,25 @@ function getNumber(value: unknown, key: string): number | undefined {
   return undefined;
 }
 
+function pickPublicKeys(value: unknown, keys: string[]): Record<string, unknown> | undefined {
+  if (!isRecord(value)) return undefined;
+  const picked: Record<string, unknown> = {};
+  for (const key of keys) {
+    if (value[key] !== undefined) picked[key] = value[key];
+  }
+  return Object.keys(picked).length > 0 ? picked : undefined;
+}
+
+function pickPublicSku2Info(value: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(value)) return undefined;
+  const picked: Record<string, unknown> = {};
+  for (const [skuKey, skuInfo] of Object.entries(value)) {
+    const publicSkuInfo = pickPublicKeys(skuInfo, PUBLIC_SKU_INFO_KEYS);
+    if (publicSkuInfo) picked[skuKey] = publicSkuInfo;
+  }
+  return Object.keys(picked).length > 0 ? picked : undefined;
+}
+
 function imageLooksLikeProduct(url: string): boolean {
   try {
     const parsed = new URL(url);
@@ -134,6 +180,36 @@ function imageLooksLikeProduct(url: string): boolean {
 
 function uniqueStrings(values: string[], limit: number): string[] {
   return Array.from(new Set(values.filter(Boolean))).slice(0, limit);
+}
+
+function uniqueImageAssets(values: TaobaoProductImageAsset[], limit: number): TaobaoProductImageAsset[] {
+  const seen = new Set<string>();
+  const assets: TaobaoProductImageAsset[] = [];
+  for (const asset of values) {
+    if (!asset.normalizedUrl || seen.has(asset.normalizedUrl)) continue;
+    seen.add(asset.normalizedUrl);
+    assets.push(asset);
+    if (assets.length >= limit) break;
+  }
+  return assets;
+}
+
+function imageAsset(
+  rawUrl: string,
+  role: TaobaoProductImageAsset['role'],
+  source: TaobaoProductImageAsset['source'],
+  patch: Partial<TaobaoProductImageAsset> = {},
+): TaobaoProductImageAsset | null {
+  const normalizedUrl = normalizeImageUrl(rawUrl);
+  if (!normalizedUrl) return null;
+  return {
+    url: rawUrl,
+    normalizedUrl,
+    role,
+    source,
+    flags: [],
+    ...patch,
+  };
 }
 
 function pickFirstString(record: Record<string, unknown>, keys: string[]): string {
@@ -165,6 +241,31 @@ function readSourceCategoryFromPageModel(pageModel: unknown): TaobaoProductSourc
 
 function normalizeImageList(values: unknown[], limit: number): string[] {
   return uniqueStrings(values.map(value => typeof value === 'string' ? normalizeImageUrl(value) : ''), limit);
+}
+
+function normalizeDetailContent(input: BuildTaobaoProductSnapshotInput): TaobaoProductDetailContent {
+  if (input.detailContent) {
+    return {
+      text: normalizeText(input.detailContent.text),
+      source: input.detailContent.source,
+      images: uniqueImageAssets(input.detailContent.images.map(asset => ({
+        ...asset,
+        normalizedUrl: normalizeImageUrl(asset.normalizedUrl || asset.url),
+        url: asset.url || asset.normalizedUrl,
+        role: asset.role || 'detail',
+        source: asset.source || 'detailDom',
+        flags: asset.flags || [],
+      })), 120),
+    };
+  }
+  const images = (input.detailImages || [])
+    .map(url => imageAsset(url, 'detail', 'detailDom'))
+    .filter((asset): asset is TaobaoProductImageAsset => Boolean(asset));
+  return {
+    text: '',
+    source: images.length > 0 ? 'detailDom' : 'none',
+    images,
+  };
 }
 
 function readProductImages(root: ParentNode): { mainImages: string[]; detailImages: string[] } {
@@ -240,14 +341,36 @@ function readSellerFromPageModel(pageModel: unknown): TaobaoProductSellerSnapsho
 function readSkuGroupsFromPageModel(pageModel: unknown): TaobaoProductSkuGroup[] {
   const props = getArray(getRecord(pageModel, 'skuBase'), 'props');
   return props
-    .map(prop => {
+    .map((prop): TaobaoProductSkuGroup | null => {
+      const pid = getString(prop, 'pid');
       const name = getString(prop, 'name');
       const values = getArray(prop, 'values')
         .map(value => getString(value, 'name'))
         .filter(Boolean);
-      return name && values.length > 0 ? { name, values } : null;
+      return name && values.length > 0 ? { pid: pid || undefined, name, values } : null;
     })
     .filter((group): group is TaobaoProductSkuGroup => Boolean(group));
+}
+
+function readSkuPropertiesFromPageModel(pageModel: unknown): TaobaoProductSkuProperty[] {
+  return getArray(getRecord(pageModel, 'skuBase'), 'props')
+    .map((prop): TaobaoProductSkuProperty | null => {
+      const pid = getString(prop, 'pid');
+      const name = getString(prop, 'name');
+      const values = getArray(prop, 'values')
+        .map(value => {
+          const valueName = getString(value, 'name');
+          if (!valueName) return null;
+          return {
+            vid: getString(value, 'vid') || undefined,
+            name: valueName,
+            imageUrl: normalizeImageUrl(getString(value, 'image')) || undefined,
+          };
+        })
+        .filter((value): value is NonNullable<typeof value> => Boolean(value));
+      return name && values.length > 0 ? { pid: pid || undefined, name, values } : null;
+    })
+    .filter((property): property is TaobaoProductSkuProperty => Boolean(property));
 }
 
 function createSkuValueLookup(pageModel: unknown): Map<string, { spec: TaobaoProductSkuSpec; imageUrl: string }> {
@@ -261,7 +384,7 @@ function createSkuValueLookup(pageModel: unknown): Map<string, { spec: TaobaoPro
       const valueName = getString(value, 'name');
       if (!valueId || !valueName) continue;
       lookup.set(`${propId}:${valueId}`, {
-        spec: { name: propName, value: valueName },
+        spec: { pid: propId, vid: valueId, name: propName, value: valueName },
         imageUrl: normalizeImageUrl(getString(value, 'image')),
       });
     }
@@ -330,6 +453,19 @@ function readMainImagesFromPageModel(pageModel: unknown): string[] {
   return normalizeImageList([...itemImages, ...headImages], 20);
 }
 
+function readMainImageAssetsFromPageModel(pageModel: unknown): TaobaoProductImageAsset[] {
+  return readMainImagesFromPageModel(pageModel)
+    .map(url => imageAsset(url, 'main', 'pageModel'))
+    .filter((asset): asset is TaobaoProductImageAsset => Boolean(asset));
+}
+
+function readSkuImageAssetsFromPageModel(pageModel: unknown): TaobaoProductImageAsset[] {
+  return readSkuPropertiesFromPageModel(pageModel)
+    .flatMap(property => property.values)
+    .map(value => value.imageUrl ? imageAsset(value.imageUrl, 'sku', 'skuModel') : null)
+    .filter((asset): asset is TaobaoProductImageAsset => Boolean(asset));
+}
+
 function parsePriceText(text: string): string {
   return text.match(/(?:¥|￥)\s*\d+(?:[.．]\d{1,2})?|\d+(?:[.．]\d{1,2})/u)?.[0]?.replace(/\s+/g, '') || '';
 }
@@ -383,24 +519,49 @@ function readCompactTextAround(root: ParentNode, labels: string[]): string {
 
 export function readTaobaoProductSnapshotFromDocument(root: Document, url: string): TaobaoProductSnapshot {
   const current = parseProductUrl(url);
+  const itemId = current?.searchParams.get('id')?.trim() || '';
   const { mainImages, detailImages } = readProductImages(root);
   const shopName = readShopName(root);
+  const mainAssets = mainImages.map(image => imageAsset(image, 'fallback', 'documentDom')).filter((asset): asset is TaobaoProductImageAsset => Boolean(asset));
+  const detailAssets = detailImages.map(image => imageAsset(image, 'fallback', 'documentDom')).filter((asset): asset is TaobaoProductImageAsset => Boolean(asset));
   return {
-    url,
-    platform: current?.hostname.includes('tmall.com') ? 'tmall' : 'taobao',
-    itemId: current?.searchParams.get('id')?.trim() || '',
+    identity: {
+      url: normalizeProductPageUrl(url, itemId),
+      platform: current?.hostname.includes('tmall.com') ? 'tmall' : 'taobao',
+      itemId,
+    },
     title: readProductTitle(root),
-    shopName,
-    sourceCategory: readSourceCategoryFromDocument(root),
+    shop: { name: shopName },
+    category: { source: readSourceCategoryFromDocument(root) },
     seller: { shopName, sellerId: '', shopId: '' },
-    priceRangeText: readPriceRangeText(root),
-    mainImages,
-    detailImages,
-    productParams: [],
-    skuGroups: readSkuGroups(root),
-    skuMatrix: readSkuMatrix(root),
-    salesText: readCompactTextAround(root, ['销量', '月销', '已售']),
-    deliveryText: readCompactTextAround(root, ['发货', '配送', '运费']),
+    price: { rangeText: readPriceRangeText(root) },
+    images: {
+      main: mainImages,
+      detail: detailImages,
+      assets: uniqueImageAssets([...mainAssets, ...detailAssets], 160),
+    },
+    detail: {
+      text: '',
+      source: detailImages.length > 0 ? 'documentDom' : 'none',
+      images: detailImages,
+    },
+    params: [],
+    sku: {
+      groups: readSkuGroups(root),
+      properties: [],
+      matrix: readSkuMatrix(root),
+    },
+    sales: { text: readCompactTextAround(root, ['销量', '月销', '已售']) },
+    delivery: { text: readCompactTextAround(root, ['发货', '配送', '运费']) },
+    diagnostics: {
+      usedPageModel: false,
+      usedDocumentFallback: true,
+      sources: {
+        snapshot: 'documentDom',
+        detail: detailImages.length > 0 ? 'documentDom' : 'none',
+      },
+      warnings: [],
+    },
     collectedAt: Date.now(),
   };
 }
@@ -410,29 +571,62 @@ export function readTaobaoProductSnapshot(): TaobaoProductSnapshot {
 }
 
 export function isTaobaoProductSnapshotUseful(snapshot: TaobaoProductSnapshot): boolean {
-  return Boolean(snapshot.itemId && (snapshot.title || snapshot.priceRangeText || snapshot.mainImages.length > 0));
+  return Boolean(snapshot.identity.itemId && (snapshot.title || snapshot.price.rangeText || snapshot.images.main.length > 0));
 }
 
 export function buildTaobaoProductSnapshotFromPageModel(input: BuildTaobaoProductSnapshotInput): TaobaoProductSnapshot {
   const current = parseProductUrl(input.url);
   const item = getRecord(input.pageModel, 'item');
+  const itemId = getString(item, 'itemId') || current?.searchParams.get('id')?.trim() || '';
   const seller = readSellerFromPageModel(input.pageModel);
+  const detailContent = normalizeDetailContent(input);
+  const mainAssets = readMainImageAssetsFromPageModel(input.pageModel);
+  const detailAssets = detailContent.images.map(asset => ({ ...asset, role: 'detail' as const }));
+  const skuAssets = readSkuImageAssetsFromPageModel(input.pageModel);
+  const mainImages = mainAssets.map(asset => asset.normalizedUrl);
+  const detailImages = detailAssets.map(asset => asset.normalizedUrl);
+  const hasPageModel = isRecord(input.pageModel) && Object.keys(input.pageModel).length > 0;
   return {
-    url: input.url,
-    platform: current?.hostname.includes('tmall.com') ? 'tmall' : 'taobao',
-    itemId: getString(item, 'itemId') || current?.searchParams.get('id')?.trim() || '',
+    identity: {
+      url: normalizeProductPageUrl(input.url, itemId),
+      platform: current?.hostname.includes('tmall.com') ? 'tmall' : 'taobao',
+      itemId,
+    },
     title: getString(item, 'title'),
-    shopName: seller.shopName,
-    sourceCategory: readSourceCategoryFromPageModel(input.pageModel),
+    shop: { name: seller.shopName },
+    category: { source: readSourceCategoryFromPageModel(input.pageModel) },
     seller,
-    priceRangeText: readPriceRangeFromPageModel(input.pageModel),
-    mainImages: readMainImagesFromPageModel(input.pageModel),
-    detailImages: normalizeImageList(input.detailImages || [], 80),
-    productParams: readProductParamsFromPageModel(input.pageModel),
-    skuGroups: readSkuGroupsFromPageModel(input.pageModel),
-    skuMatrix: readSkuMatrixFromPageModel(input.pageModel),
-    salesText: readDetailTextFromPageModel(input.pageModel, 'sales') || getString(item, 'vagueSellCount'),
-    deliveryText: readDetailTextFromPageModel(input.pageModel, 'delivery'),
+    price: { rangeText: readPriceRangeFromPageModel(input.pageModel) },
+    images: {
+      main: uniqueStrings(mainImages, 20),
+      detail: uniqueStrings(detailImages, 120),
+      assets: uniqueImageAssets([...mainAssets, ...detailAssets, ...skuAssets], 180),
+    },
+    detail: {
+      text: detailContent.text,
+      source: detailContent.source,
+      images: uniqueStrings(detailImages, 120),
+    },
+    params: readProductParamsFromPageModel(input.pageModel),
+    sku: {
+      groups: readSkuGroupsFromPageModel(input.pageModel),
+      properties: readSkuPropertiesFromPageModel(input.pageModel),
+      matrix: readSkuMatrixFromPageModel(input.pageModel),
+    },
+    sales: { text: readDetailTextFromPageModel(input.pageModel, 'sales') || getString(item, 'vagueSellCount') },
+    delivery: { text: readDetailTextFromPageModel(input.pageModel, 'delivery') },
+    rawModel: sanitizeTaobaoProductPageModel(input.pageModel),
+    diagnostics: {
+      usedPageModel: hasPageModel,
+      usedDocumentFallback: false,
+      sources: {
+        snapshot: hasPageModel ? 'pageModel' : 'none',
+        mainImages: mainAssets.length > 0 ? 'pageModel' : 'none',
+        detail: detailContent.source,
+        sku: readSkuMatrixFromPageModel(input.pageModel).length > 0 ? 'pageModel' : 'none',
+      },
+      warnings: [],
+    },
     collectedAt: input.collectedAt || Date.now(),
   };
 }
@@ -454,23 +648,43 @@ function sanitizeModelValue(value: unknown): unknown {
 
 export function sanitizeTaobaoProductPageModel(pageModel: unknown): unknown {
   if (!isRecord(pageModel)) return pageModel;
+  const plusViewVO = getRecord(pageModel, 'plusViewVO');
+  const leftButtonStyleVO = getRecord(plusViewVO, 'leftButtonStyleVO');
+  const logParams = getRecord(leftButtonStyleVO, 'logParams');
+  const pcBuyParams = getRecord(getRecord(pageModel, 'pcTrade'), 'pcBuyParams');
+  const componentsVO = getRecord(pageModel, 'componentsVO');
+  /**
+   * rawModel 是诊断用的富快照，但它不能保存登录账号或下单会话数据。
+   * 大对象在这里先做业务白名单抽取，再递归跑敏感 key 兜底过滤。
+   */
   return sanitizeModelValue({
     seller: pageModel.seller,
     item: pageModel.item,
-    plusViewVO: isRecord(pageModel.plusViewVO) ? {
-      industryParamVO: pageModel.plusViewVO.industryParamVO,
-    } : undefined,
+    plusViewVO: {
+      industryParamVO: plusViewVO.industryParamVO,
+      leftButtonStyleVO: {
+        logParams: {
+          catId: logParams.catId,
+        },
+      },
+    },
     skuBase: pageModel.skuBase,
-    skuCore: isRecord(pageModel.skuCore) ? {
-      sku2info: pageModel.skuCore.sku2info,
-    } : undefined,
-    componentsVO: isRecord(pageModel.componentsVO) ? {
-      headImageVO: pageModel.componentsVO.headImageVO,
-      titleVO: pageModel.componentsVO.titleVO,
-      deliveryVO: pageModel.componentsVO.deliveryVO,
-      priceVO: pageModel.componentsVO.priceVO,
-      categoryVO: pageModel.componentsVO.categoryVO,
-      breadcrumbVO: pageModel.componentsVO.breadcrumbVO,
-    } : undefined,
+    pcTrade: {
+      pcBuyParams: {
+        rootCatId: pcBuyParams.rootCatId,
+      },
+    },
+    skuCore: {
+      sku2info: pickPublicSku2Info(getRecord(pageModel, 'skuCore').sku2info),
+    },
+    componentsVO: {
+      headImageVO: componentsVO.headImageVO,
+      titleVO: componentsVO.titleVO,
+      deliveryVO: pickPublicKeys(componentsVO.deliveryVO, PUBLIC_DELIVERY_KEYS),
+      priceVO: componentsVO.priceVO,
+      extensionInfoVO: componentsVO.extensionInfoVO,
+      categoryVO: componentsVO.categoryVO,
+      breadcrumbVO: componentsVO.breadcrumbVO,
+    },
   });
 }
