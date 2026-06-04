@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "source": "data/wxshop-categories/wxshop-category-paths.json",
+  "source": "archive/wxshop-categories/source-data/wxshop-category-paths.json",
   "generatedAt": 1780499175323,
   "total": 4321,
   "paths": [

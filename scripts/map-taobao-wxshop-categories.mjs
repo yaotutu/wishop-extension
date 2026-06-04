@@ -5,10 +5,10 @@ import path from 'node:path';
  * 一次性生成“淘宝首页类目 -> 微信小店类目”的候选映射表。
  *
  * 输入：
- * 1. data/taobao-home-categories/taobao-home-categories-clean.json
+ * 1. archive/category-mapping/source-data/taobao-home-categories/taobao-home-categories-clean.json
  *    这是前面清洗好的淘宝首页类目，只包含类目层级。
  * 2. 微信小店类目：
- *    - 优先读取 data/wxshop-categories/wxshop-category-paths.json；
+ *    - 优先读取 archive/wxshop-categories/source-data/wxshop-category-paths.json；
  *    - 如果本地没有，则通过微信官方接口 GET /shop/ec/category/all 拉取。
  *
  * 微信接口凭证：
@@ -16,19 +16,19 @@ import path from 'node:path';
  * - 或 WXSHOP_APP_ID + WXSHOP_APP_SECRET：脚本先调用 /cgi-bin/token 换 token。
  *
  * 输出：
- * - data/category-mapping/taobao-to-wxshop-category-map.csv
- * - data/category-mapping/taobao-to-wxshop-category-map.json
- * - data/wxshop-categories/wxshop-category-paths.json
+ * - archive/category-mapping/source-data/taobao-to-wxshop-category-map.csv
+ * - archive/category-mapping/source-data/taobao-to-wxshop-category-map.json
+ * - archive/wxshop-categories/source-data/wxshop-category-paths.json
  *
  * 这个脚本是一次性数据工具，不接入插件运行时，不读取/打印本地账号密钥。
  */
 
 const PROJECT_ROOT = process.cwd();
-const TAOBAO_CLEAN_JSON = path.join(PROJECT_ROOT, 'data', 'taobao-home-categories', 'taobao-home-categories-clean.json');
-const WX_CATEGORY_DIR = path.join(PROJECT_ROOT, 'data', 'wxshop-categories');
+const TAOBAO_CLEAN_JSON = path.join(PROJECT_ROOT, 'archive', 'category-mapping', 'source-data', 'taobao-home-categories', 'taobao-home-categories-clean.json');
+const WX_CATEGORY_DIR = path.join(PROJECT_ROOT, 'archive', 'wxshop-categories', 'source-data');
 const WX_CATEGORY_JSON = path.join(WX_CATEGORY_DIR, 'wxshop-category-paths.json');
 const WX_CATEGORY_CSV = path.join(WX_CATEGORY_DIR, 'wxshop-category-paths.csv');
-const OUTPUT_DIR = path.join(PROJECT_ROOT, 'data', 'category-mapping');
+const OUTPUT_DIR = path.join(PROJECT_ROOT, 'archive', 'category-mapping', 'source-data');
 const OUTPUT_JSON = path.join(OUTPUT_DIR, 'taobao-to-wxshop-category-map.json');
 const OUTPUT_CSV = path.join(OUTPUT_DIR, 'taobao-to-wxshop-category-map.csv');
 

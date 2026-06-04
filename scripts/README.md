@@ -64,7 +64,7 @@ node scripts/fetch-taobao-itemcats.ts --out=data/category-snapshots/taobao-itemc
 
 ```bash
 public/data/taobao-itemcats/taobao-itemcats-runtime.json
-data/wxshop-categories/wxshop-category-paths.json
+archive/wxshop-categories/source-data/wxshop-category-paths.json
 ```
 
 运行：
@@ -76,9 +76,9 @@ node scripts/build-taobao-itemcat-wxshop-category-map.mjs
 输出：
 
 ```bash
-data/category-mapping/taobao-itemcat-to-wxshop-category-map.json
-data/category-mapping/taobao-itemcat-to-wxshop-category-map.csv
-data/category-mapping/taobao-itemcat-wxshop-category-map.runtime.json
+archive/category-mapping/source-data/taobao-itemcat-to-wxshop-category-map.json
+archive/category-mapping/source-data/taobao-itemcat-to-wxshop-category-map.csv
+archive/category-mapping/source-data/taobao-itemcat-wxshop-category-map.runtime.json
 ```
 
 默认只映射淘宝叶子类目。需要把父类目也纳入审计时：
@@ -102,7 +102,7 @@ node scripts/build-taobao-itemcat-wxshop-category-map.mjs --full-json
 默认优先读取已有快照：
 
 ```bash
-data/wxshop-categories/wxshop-category-paths.json
+archive/wxshop-categories/source-data/wxshop-category-paths.json
 ```
 
 运行：

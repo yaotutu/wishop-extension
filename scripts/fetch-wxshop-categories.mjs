@@ -5,7 +5,7 @@ import path from 'node:path';
  * 一次性生成微信小店全量叶子类目缓存。
  *
  * 这个脚本只用于开发期/人工刷新静态数据，不接入插件运行时：
- * - 默认优先读取 data/wxshop-categories/wxshop-category-paths.json；
+ * - 默认优先读取 archive/wxshop-categories/source-data/wxshop-category-paths.json；
  * - 加 --refresh 或本地没有快照时，才调用微信官方 GET /shop/ec/category/all；
  * - 输出给 AI 使用的叶子类目路径列表到 public/data/wxshop-categories。
  *
@@ -16,7 +16,7 @@ import path from 'node:path';
  */
 
 const PROJECT_ROOT = process.cwd();
-const SOURCE_JSON = path.join(PROJECT_ROOT, 'data', 'wxshop-categories', 'wxshop-category-paths.json');
+const SOURCE_JSON = path.join(PROJECT_ROOT, 'archive', 'wxshop-categories', 'source-data', 'wxshop-category-paths.json');
 const OUTPUT_DIR = path.join(PROJECT_ROOT, 'public', 'data', 'wxshop-categories');
 const OUTPUT_JSON = path.join(OUTPUT_DIR, 'wxshop-category-paths.runtime.json');
 const OUTPUT_CSV = path.join(OUTPUT_DIR, 'wxshop-category-paths.runtime.csv');
@@ -366,7 +366,7 @@ async function loadSourcePaths() {
 function createRuntimeSnapshot(paths) {
   return {
     version: 1,
-    source: SHOULD_REFRESH ? 'wxshop.category.all' : 'data/wxshop-categories/wxshop-category-paths.json',
+    source: SHOULD_REFRESH ? 'wxshop.category.all' : 'archive/wxshop-categories/source-data/wxshop-category-paths.json',
     generatedAt: Date.now(),
     total: paths.length,
     paths,

@@ -19,7 +19,7 @@ import path from 'node:path';
  */
 
 const PROJECT_ROOT = process.cwd();
-const OUTPUT_DIR = path.join(PROJECT_ROOT, 'data', 'taobao-home-categories');
+const OUTPUT_DIR = path.join(PROJECT_ROOT, 'archive', 'category-mapping', 'source-data', 'taobao-home-categories');
 const OUTPUT_JSON = path.join(OUTPUT_DIR, 'taobao-home-categories.json');
 const OUTPUT_CSV = path.join(OUTPUT_DIR, 'taobao-home-categories.csv');
 const RAW_JSON = path.join(OUTPUT_DIR, 'taobao-home-raw.json');

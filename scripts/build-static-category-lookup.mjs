@@ -12,9 +12,9 @@ import path from 'node:path';
  */
 
 const PROJECT_ROOT = process.cwd();
-const MAPPING_JSON = path.join(PROJECT_ROOT, 'data', 'category-mapping', 'taobao-to-wxshop-category-map.json');
-const WX_CATEGORY_JSON = path.join(PROJECT_ROOT, 'data', 'wxshop-categories', 'wxshop-category-paths.json');
-const OUTPUT_DIR = path.join(PROJECT_ROOT, 'data', 'category-mapping');
+const MAPPING_JSON = path.join(PROJECT_ROOT, 'archive', 'category-mapping', 'source-data', 'taobao-to-wxshop-category-map.json');
+const WX_CATEGORY_JSON = path.join(PROJECT_ROOT, 'archive', 'wxshop-categories', 'source-data', 'wxshop-category-paths.json');
+const OUTPUT_DIR = path.join(PROJECT_ROOT, 'archive', 'category-mapping', 'source-data');
 const OUTPUT_JSON = path.join(OUTPUT_DIR, 'taobao-wxshop-category-lookup.json');
 
 function readJson(filePath) {

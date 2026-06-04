@@ -10,8 +10,8 @@ import path from 'node:path';
  */
 
 const PROJECT_ROOT = process.cwd();
-const INPUT_JSON = path.join(PROJECT_ROOT, 'data', 'taobao-home-categories', 'taobao-home-categories.json');
-const OUTPUT_DIR = path.join(PROJECT_ROOT, 'data', 'taobao-home-categories');
+const INPUT_JSON = path.join(PROJECT_ROOT, 'archive', 'category-mapping', 'source-data', 'taobao-home-categories', 'taobao-home-categories.json');
+const OUTPUT_DIR = path.join(PROJECT_ROOT, 'archive', 'category-mapping', 'source-data', 'taobao-home-categories');
 const OUTPUT_JSON = path.join(OUTPUT_DIR, 'taobao-home-categories-clean.json');
 const OUTPUT_CSV = path.join(OUTPUT_DIR, 'taobao-home-categories-clean.csv');
 const OUTPUT_TXT = path.join(OUTPUT_DIR, 'taobao-home-categories-clean-paths.txt');

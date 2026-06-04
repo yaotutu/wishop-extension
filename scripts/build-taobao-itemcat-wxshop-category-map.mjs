@@ -12,18 +12,18 @@ import { fileURLToPath } from 'node:url';
  *
  * 输入：
  * - public/data/taobao-itemcats/taobao-itemcats-runtime.json
- * - data/wxshop-categories/wxshop-category-paths.json
+ * - archive/wxshop-categories/source-data/wxshop-category-paths.json
  *
  * 输出：
- * - data/category-mapping/taobao-itemcat-to-wxshop-category-map.json
- * - data/category-mapping/taobao-itemcat-to-wxshop-category-map.csv
- * - data/category-mapping/taobao-itemcat-wxshop-category-map.runtime.json
+ * - archive/category-mapping/source-data/taobao-itemcat-to-wxshop-category-map.json
+ * - archive/category-mapping/source-data/taobao-itemcat-to-wxshop-category-map.csv
+ * - archive/category-mapping/source-data/taobao-itemcat-wxshop-category-map.runtime.json
  */
 
 const PROJECT_ROOT = process.cwd();
 const TAOBAO_ITEMCAT_JSON = path.join(PROJECT_ROOT, 'public', 'data', 'taobao-itemcats', 'taobao-itemcats-runtime.json');
-const WX_CATEGORY_JSON = path.join(PROJECT_ROOT, 'data', 'wxshop-categories', 'wxshop-category-paths.json');
-const OUTPUT_DIR = path.join(PROJECT_ROOT, 'data', 'category-mapping');
+const WX_CATEGORY_JSON = path.join(PROJECT_ROOT, 'archive', 'wxshop-categories', 'source-data', 'wxshop-category-paths.json');
+const OUTPUT_DIR = path.join(PROJECT_ROOT, 'archive', 'category-mapping', 'source-data');
 const OUTPUT_JSON = path.join(OUTPUT_DIR, 'taobao-itemcat-to-wxshop-category-map.json');
 const OUTPUT_CSV = path.join(OUTPUT_DIR, 'taobao-itemcat-to-wxshop-category-map.csv');
 const RUNTIME_OUTPUT_DIR = OUTPUT_DIR;
