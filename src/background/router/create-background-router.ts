@@ -20,6 +20,7 @@ import { createTaobaoWorkspaceRuntimeHandlers } from '../runtime-handlers/taobao
 import { createTaobaoRefundRuntimeHandlers } from '../runtime-handlers/taobao-refund-handlers';
 import { createViolationRuntimeHandlers } from '../runtime-handlers/violation-handlers';
 import { createLicenseRuntimeHandlers } from '../runtime-handlers/license-handlers';
+import { createWxCategoryDataRuntimeHandlers } from '../runtime-handlers/wx-category-data-handlers';
 import { assertFeatureAccess } from '../licensing/licensing-service';
 import { clearDraftPagination, deleteDraft, fetchDrafts, submitDraftAudit } from '../services/draft-service';
 import { runProductAuditTask } from '../services/product-audit-task-service';
@@ -78,11 +79,12 @@ const FEATURE_CHANNELS = {
   'productListingCollection:resolveChallenge': 'listing',
   'productListingCollection:complete': 'listing',
   'productListingCollection:fail': 'listing',
-  'productListingCollection:suggestWxDraft': 'listing',
   'productListingCollection:suggestWxCategoryFromFullList': 'listing',
   'productListingCollection:prepareWxDraft': 'listing',
   'productListingCollection:submitPreparedWxDraft': 'listing',
   'productListingCollection:createWxDraft': 'listing',
+  'wxCategoryData:downloadProductRules': 'listing',
+  'wxCategoryData:getProductRuleCacheStatus': 'listing',
   'drafts:fetch': 'productAudit',
   'drafts:submitAudit': 'productAudit',
   'drafts:delete': 'productAudit',
@@ -160,6 +162,7 @@ export function createBackgroundRouter(options: CreateBackgroundRouterOptions): 
     ...createPurchaseLookupRuntimeHandlers(options.getCurrentTabPurchaseLookupSession),
     ...createTaobaoRefundRuntimeHandlers(options.getCurrentTabTaobaoRefundSession),
     ...createProductListingCollectionRuntimeHandlers(options.getCurrentTabProductListingCollectionSession),
+    ...createWxCategoryDataRuntimeHandlers(),
     ...createDraftRuntimeHandlers({
       fetchDrafts,
       submitDraftAudit,

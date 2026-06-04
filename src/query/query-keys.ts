@@ -45,6 +45,9 @@ export const queryKeys = {
   productListingCollection: {
     list: ['productListingCollection', 'list'] as const,
   },
+  wxCategoryData: {
+    productRuleCacheStatus: ['wxCategoryData', 'productRuleCacheStatus'] as const,
+  },
   orderAssociations: {
     list: (accountId: string) => ['orderAssociations', accountId] as const,
   },

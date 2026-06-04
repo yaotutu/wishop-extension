@@ -15,6 +15,7 @@ import type {
   ScheduledJob,
   StatusRule,
   StoredOrderSource,
+  WxCategoryProductRuleCacheItem,
 } from '../../shared/types';
 
 export interface AccountRecord {
@@ -88,6 +89,7 @@ export class ExtensionDb extends Dexie {
   accountLogs!: Table<AccountLogRecord, string>;
   accountSyncStates!: Table<AccountSyncStateRecord, string>;
   collectedProductListings!: Table<CollectedProductListing, string>;
+  wxCategoryProductRules!: Table<WxCategoryProductRuleCacheItem, string>;
 
   constructor() {
     super('wishop-extension');
@@ -115,6 +117,15 @@ export class ExtensionDb extends Dexie {
       collectedProductListings: 'id, updatedAt, collectedAt',
     }).upgrade(async tx => {
       await tx.table('collectedProductListings').clear();
+    });
+    this.version(4).stores({
+      accounts: 'id, appId, updatedAt',
+      orders: '[accountId+orderId], accountId, [accountId+status+updateTime], [accountId+createTime], [accountId+lastFetchedAt]',
+      accountWorkspaces: 'accountId, updatedAt',
+      accountLogs: 'id, accountId, kind, [accountId+kind+timestamp], timestamp',
+      accountSyncStates: 'accountId, appId, revision, updatedAt',
+      collectedProductListings: 'id, updatedAt, collectedAt',
+      wxCategoryProductRules: 'id, catId, releaseMode, updatedAt, lastError',
     });
   }
 }

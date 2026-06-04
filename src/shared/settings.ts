@@ -17,8 +17,6 @@ export interface AiListingSettings {
   siliconFlowApiKey: string;
   /** 默认使用 SiliconFlow 文档里的聊天补全示例模型，设置页允许用户按账号额度自行替换。 */
   siliconFlowModel: string;
-  /** 微信小店默认运费模板 ID；为空时创建草稿仍允许用户在弹窗里手动填写。 */
-  defaultExpressTemplateId: string;
 }
 
 export interface AppSettings {
@@ -50,7 +48,6 @@ export const DEFAULT_SHIPMENT_CHECK_SETTINGS: ShipmentCheckSettings = {
 export const DEFAULT_AI_LISTING_SETTINGS: AiListingSettings = {
   siliconFlowApiKey: '',
   siliconFlowModel: 'Qwen/QwQ-32B',
-  defaultExpressTemplateId: '',
 };
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -110,7 +107,6 @@ export function normalizeAiListingSettings(input?: Partial<AiListingSettings>): 
   return {
     siliconFlowApiKey: normalizeOptionalText(input?.siliconFlowApiKey),
     siliconFlowModel: model || DEFAULT_AI_LISTING_SETTINGS.siliconFlowModel,
-    defaultExpressTemplateId: normalizeOptionalText(input?.defaultExpressTemplateId),
   };
 }
 

@@ -15,6 +15,7 @@ const WX_HEAD_IMAGE_MIN_COUNT = 3;
 const WX_HEAD_IMAGE_MAX_COUNT = 9;
 const WX_DETAIL_IMAGE_MAX_COUNT = 80;
 const WX_SKU_MAX_COUNT = 500;
+const DEFAULT_WX_STOCK_NUM = 999;
 const DEFAULT_BRAND_ID = '2100000000';
 const WX_CATEGORY_MIN_DEPTH = 3;
 const WX_CATEGORY_MAX_DEPTH = 4;
@@ -22,6 +23,7 @@ const WX_CATEGORY_MAX_DEPTH = 4;
 export interface ProductListingWxDraftMappingOptions {
   catIds: string[];
   expressTemplateId?: string;
+  afterSaleAddressId?: string;
   brandId?: string;
   defaultStockNum?: number;
   autoListing?: boolean;
@@ -112,8 +114,22 @@ function normalizeCategoryIds(catIds: string[]): string[] {
   return normalized;
 }
 
+function normalizeRequiredText(value: string | undefined, label: string): string {
+  const normalized = value?.trim() || '';
+  if (!normalized) throw new Error(`${label} 不能为空`);
+  return normalized;
+}
+
+function normalizeRequiredNumericId(value: string | undefined, label: string): number {
+  const normalized = normalizeRequiredText(value, label);
+  if (!/^\d+$/u.test(normalized)) throw new Error(`${label}必须是数字 ID`);
+  const numericId = Number(normalized);
+  if (!Number.isSafeInteger(numericId) || numericId <= 0) throw new Error(`${label}不是有效数字 ID`);
+  return numericId;
+}
+
 function normalizeDefaultStock(defaultStockNum?: number): number {
-  if (defaultStockNum === undefined) return 100;
+  if (defaultStockNum === undefined) return DEFAULT_WX_STOCK_NUM;
   if (!Number.isInteger(defaultStockNum) || defaultStockNum < 0) {
     throw new Error('默认库存必须是大于等于 0 的整数');
   }
@@ -225,6 +241,8 @@ export function mapCollectedListingToWxAddProductRequest(
   }
 
   const catIds = normalizeCategoryIds(options.catIds);
+  const expressTemplateId = normalizeRequiredText(options.expressTemplateId, '运费模板 ID');
+  const afterSaleAddressId = normalizeRequiredNumericId(options.afterSaleAddressId, '售后地址 ID');
   const defaultStockNum = normalizeDefaultStock(options.defaultStockNum);
   const headImgs = resolveMainImages(listing, options.uploadedImages);
   const detailImgs = resolveDetailImages(listing, options.uploadedImages);
@@ -244,14 +262,15 @@ export function mapCollectedListingToWxAddProductRequest(
     cats_v2: catIds.map(cat_id => ({ cat_id })),
     attrs: attrs.length > 0 ? attrs : undefined,
     brand_id: options.brandId?.trim() || DEFAULT_BRAND_ID,
-    extra_service: { is_open_cod: 0 },
+    // 微信小店部分类目强制要求七天无理由退货。这里默认开启七天无理由，
+    // 运费险保持关闭，避免把非必需付费服务隐式打开。
+    extra_service: { is_open_cod: 0, seven_day_return: 1, freight_insurance: 0 },
     skus: buildSkus(listing, defaultStockNum, options.uploadedImages, headImgs[0]),
     listing: options.autoListing ? 1 : 0,
+    express_info: { template_id: expressTemplateId },
+    after_sale_info: { after_sale_address_id: afterSaleAddressId },
   };
 
-  if (options.expressTemplateId?.trim()) {
-    request.express_info = { template_id: options.expressTemplateId.trim() };
-  }
   if (detailImgs.length === 0) {
     request.desc_info = { desc: title };
   }

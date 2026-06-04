@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { extensionApi } from '../../shared/extension-api';
-import { Alert, Button, Card, Descriptions, Form, Image, Input, Menu, Space, Tag, Typography, message } from 'antd';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Alert, Button, Card, Descriptions, Form, Image, Input, Menu, Progress, Space, Tag, Typography, message } from 'antd';
 import {
+  CloudDownloadOutlined,
   InfoCircleOutlined,
   AppstoreOutlined,
   CustomerServiceOutlined,
@@ -10,14 +12,17 @@ import {
 } from '@ant-design/icons';
 import wechatQrcode from '../../assets/wechat-qrcode.png';
 import douyinQrcode from '../../assets/douyin-qrcode.png';
-import type { LicenseState } from '../../shared/types';
+import type { Account, LicenseState } from '../../shared/types';
 import { DEFAULT_AI_LISTING_SETTINGS } from '../../shared/settings';
 import { useAppSettingsQuery, useUpdateAppSettingsMutation } from '../../hooks/useOrderQueries';
 import type { SettingsTab } from '../../stores/dashboard-ui-preferences-store';
+import { queryKeys } from '../../query/query-keys';
 
 const { Title, Paragraph, Text } = Typography;
 
 interface SettingsPageProps {
+  accounts: Account[];
+  activeAccountId: string;
   defaultTab?: SettingsTab;
   onTabChange?: (tab: SettingsTab) => void;
 }
@@ -27,8 +32,13 @@ const MENU_ITEMS = [
   { key: 'product', label: '产品介绍', icon: <AppstoreOutlined /> },
   { key: 'license', label: '授权状态', icon: <SafetyCertificateOutlined /> },
   { key: 'aiListing', label: 'AI 上货', icon: <RobotOutlined /> },
+  { key: 'baseData', label: '基础数据', icon: <CloudDownloadOutlined /> },
   { key: 'contact', label: '联系我们', icon: <CustomerServiceOutlined /> },
 ];
+
+function formatTime(timestamp: number): string {
+  return new Date(timestamp).toLocaleString('zh-CN');
+}
 
 /** 关于 */
 const AboutPanel: React.FC = () => {
@@ -157,7 +167,6 @@ const LicensePanel: React.FC = () => {
 interface AiListingFormValues {
   siliconFlowApiKey: string;
   siliconFlowModel: string;
-  defaultExpressTemplateId: string;
 }
 
 const AiListingPanel: React.FC = () => {
@@ -176,7 +185,6 @@ const AiListingPanel: React.FC = () => {
       aiListing: {
         siliconFlowApiKey: values.siliconFlowApiKey,
         siliconFlowModel: values.siliconFlowModel,
-        defaultExpressTemplateId: values.defaultExpressTemplateId,
       },
     });
     message.success('AI 上货设置已保存');
@@ -209,12 +217,6 @@ const AiListingPanel: React.FC = () => {
         >
           <Input allowClear placeholder={DEFAULT_AI_LISTING_SETTINGS.siliconFlowModel} />
         </Form.Item>
-        <Form.Item
-          name="defaultExpressTemplateId"
-          label="默认运费模板 ID"
-        >
-          <Input allowClear placeholder="47428464001" />
-        </Form.Item>
         <Button
           type="primary"
           htmlType="submit"
@@ -223,6 +225,95 @@ const AiListingPanel: React.FC = () => {
           保存设置
         </Button>
       </Form>
+    </Card>
+  );
+};
+
+interface BaseDataPanelProps {
+  accounts: Account[];
+  activeAccountId: string;
+}
+
+const BaseDataPanel: React.FC<BaseDataPanelProps> = ({ accounts, activeAccountId }) => {
+  const queryClient = useQueryClient();
+  const statusQuery = useQuery({
+    queryKey: queryKeys.wxCategoryData.productRuleCacheStatus,
+    queryFn: () => extensionApi.wxCategoryData.getProductRuleCacheStatus(),
+    refetchInterval: query => query.state.data?.syncing ? 2000 : false,
+  });
+
+  const downloadMutation = useMutation({
+    mutationFn: () => {
+      const accountId = activeAccountId || accounts[0]?.id || '';
+      if (!accountId) throw new Error('请先配置微信小店账号');
+      return extensionApi.wxCategoryData.downloadProductRules({ accountId });
+    },
+    onSuccess: async result => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.wxCategoryData.productRuleCacheStatus });
+      message.success(result.started ? '已开始下载微信类目云端数据' : '微信类目云端数据正在下载中');
+    },
+    onError: error => {
+      const detail = error instanceof Error ? error.message : '下载微信类目云端数据失败';
+      message.error(detail);
+    },
+  });
+
+  const status = statusQuery.data;
+  const percent = status?.total
+    ? Math.round(((status.cached + status.failed) / status.total) * 100)
+    : 0;
+
+  return (
+    <Card title="微信类目云端数据">
+      <Space direction="vertical" size={12} style={{ width: '100%', maxWidth: 760 }}>
+        <Space size={6} wrap>
+          <Tag>总类目 {status?.total ?? '-'}</Tag>
+          <Tag color="green">已下载 {status?.cached ?? '-'}</Tag>
+          <Tag color={status?.failed ? 'orange' : 'default'}>失败 {status?.failed ?? '-'}</Tag>
+          <Tag color={status?.missing ? 'blue' : 'default'}>缺失 {status?.missing ?? '-'}</Tag>
+          {status?.lastUpdatedAt && (
+            <Tag>最近更新 {formatTime(status.lastUpdatedAt)}</Tag>
+          )}
+        </Space>
+        <Progress
+          percent={percent}
+          size="small"
+          status={status?.failed ? 'exception' : status?.syncing ? 'active' : 'normal'}
+        />
+        {status?.syncing && (
+          <Alert
+            type="info"
+            showIcon
+            title="微信类目云端数据下载中"
+            description={`已处理 ${status.processed}/${status.total}，跳过 ${status.skipped}，当前：${status.currentPath || status.currentCatId || '-'}`}
+          />
+        )}
+        {status?.lastError && !status.syncing && (
+          <Alert
+            type="error"
+            showIcon
+            title="上次下载失败"
+            description={status.lastError}
+          />
+        )}
+        <Space>
+          <Button
+            type="primary"
+            icon={<CloudDownloadOutlined />}
+            loading={downloadMutation.isPending}
+            disabled={accounts.length === 0 || status?.syncing}
+            onClick={() => downloadMutation.mutate()}
+          >
+            下载云端类目数据
+          </Button>
+          <Button
+            onClick={() => statusQuery.refetch()}
+            loading={statusQuery.isFetching}
+          >
+            刷新状态
+          </Button>
+        </Space>
+      </Space>
     </Card>
   );
 };
@@ -261,7 +352,7 @@ const ContactPanel: React.FC = () => (
   </Card>
 );
 
-const SettingsPage: React.FC<SettingsPageProps> = ({ defaultTab = 'about', onTabChange }) => {
+const SettingsPage: React.FC<SettingsPageProps> = ({ accounts, activeAccountId, defaultTab = 'about', onTabChange }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>(defaultTab);
 
   useEffect(() => {
@@ -286,6 +377,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ defaultTab = 'about', onTab
         {activeTab === 'product' && <ProductPanel />}
         {activeTab === 'license' && <LicensePanel />}
         {activeTab === 'aiListing' && <AiListingPanel />}
+        {activeTab === 'baseData' && <BaseDataPanel accounts={accounts} activeAccountId={activeAccountId} />}
         {activeTab === 'contact' && <ContactPanel />}
       </div>
     </div>

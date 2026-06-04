@@ -5,10 +5,100 @@ import type {
   ProductListResult,
   WxShopAddProductRequest,
   WxShopAddProductResult,
+  WxShopCategoryPrecheckResult,
+  WxShopCategoryProductAttrRule,
+  WxShopCategoryProductRule,
   WxShopListingClient,
+  WxShopMerchantAddressDetail,
   WxShopProductImageUploadResult,
 } from './types';
 import { normalizeWxCategoryPaths } from './category-paths.ts';
+
+function normalizeIdList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(item => String(item ?? '').trim())
+    .filter(Boolean);
+}
+
+function normalizeFlag(value: unknown): boolean {
+  return value === true || value === 1 || value === '1';
+}
+
+function extractAddressIds(data: Record<string, unknown>): string[] {
+  const addressIds = normalizeIdList(data.address_id_list);
+  if (addressIds.length > 0) return addressIds;
+  if (!Array.isArray(data.address_list)) return [];
+  return normalizeIdList(data.address_list.map((item: any) => item?.address_id ?? item?.id));
+}
+
+function normalizeFailReasons(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(item => {
+      if (typeof item === 'string') return item.trim();
+      if (!item || typeof item !== 'object') return '';
+      const record = item as Record<string, unknown>;
+      return String(record.reason ?? record.message ?? record.desc ?? record.name ?? JSON.stringify(record)).trim();
+    })
+    .filter(Boolean);
+}
+
+function normalizeText(value: unknown): string {
+  return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
+}
+
+function parseRuleValues(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return Array.from(new Set(value.map(normalizeText).filter(Boolean)));
+  }
+  const text = normalizeText(value);
+  if (!text) return [];
+
+  if (text.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) {
+        return Array.from(new Set(parsed.map(normalizeText).filter(Boolean)));
+      }
+    } catch {
+      // 官方规则值可能以 JSON 数组字符串或分号字符串表达；解析失败时按分号格式读取枚举。
+    }
+  }
+
+  return Array.from(new Set(text.split(/[;；]/u).map(item => item.trim()).filter(Boolean)));
+}
+
+function normalizeRuleRequired(record: Record<string, unknown>): boolean {
+  if (record.is_must === 1 || record.is_must === true || record.is_must === '1') return true;
+  const requiredRule = record.required_rule;
+  if (!requiredRule || typeof requiredRule !== 'object') return false;
+  const ruleType = Number((requiredRule as Record<string, unknown>).rule_type);
+  // 微信小店 getcategoryproductrule 文档里 rule_type=1 表示当前属性为必填规则。
+  return ruleType === 1;
+}
+
+function normalizeCategoryAttrRule(item: unknown): WxShopCategoryProductAttrRule | null {
+  if (!item || typeof item !== 'object') return null;
+  const record = item as Record<string, unknown>;
+  const name = normalizeText(record.name);
+  if (!name) return null;
+  return {
+    name,
+    type: normalizeText(record.type_v2) || normalizeText(record.type),
+    values: parseRuleValues(record.value),
+    required: normalizeRuleRequired(record),
+    appendAllowed: record.append_allowed === true || record.append_allowed === 1 || record.append_allowed === '1',
+    hint: normalizeText(record.hint) || undefined,
+  };
+}
+
+function normalizeCategoryAttrRules(value: unknown): WxShopCategoryProductAttrRule[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(normalizeCategoryAttrRule)
+    .filter((item): item is WxShopCategoryProductAttrRule => Boolean(item));
+}
 
 export function createWxShopListingClient(accountId: string): WxShopListingClient {
   const wxshop = createWxShopRequestClient({
@@ -104,6 +194,112 @@ export function createWxShopListingClient(accountId: string): WxShopListingClien
     return paths;
   }
 
+  async function precheckProductCategory(catId: string): Promise<WxShopCategoryPrecheckResult> {
+    const path = '/channels/ec/product/categoryprecheck';
+    const stage = '发品前类目校验';
+    const normalizedCatId = catId.trim();
+    if (!/^\d+$/u.test(normalizedCatId)) throw new Error('发品前类目校验缺少有效叶子类目 ID');
+    wxshop.logger.info('按微信小店官方文档执行发品前类目校验', {
+      method: 'POST',
+      path,
+      body: { cat_id: Number(normalizedCatId) },
+    });
+    const data = await wxshop.request<any>(path, { cat_id: Number(normalizedCatId) }, stage);
+
+    if (data.errcode && data.errcode !== 0) {
+      wxshop.throwWxApiError(path, stage, data);
+    }
+
+    return {
+      catId: normalizedCatId,
+      allPass: Boolean(data.all_pass),
+      failReasons: normalizeFailReasons(data.fail_reasons),
+    };
+  }
+
+  async function getCategoryProductRule(catId: string): Promise<WxShopCategoryProductRule> {
+    const path = '/shop/ec/category/getcategoryproductrule';
+    const stage = '获取类目发品规则';
+    const normalizedCatId = catId.trim();
+    if (!/^\d+$/u.test(normalizedCatId)) throw new Error('获取类目发品规则缺少有效叶子类目 ID');
+    const body = { cat_id: Number(normalizedCatId), release_mode: 0 };
+    wxshop.logger.info('按微信小店官方文档读取类目发品规则', {
+      method: 'POST',
+      path,
+      body,
+    });
+    const data = await wxshop.request<any>(path, body, stage);
+
+    if (data.errcode && data.errcode !== 0) {
+      wxshop.throwWxApiError(path, stage, data);
+    }
+
+    return {
+      catId: String(data.info?.cat_id ?? normalizedCatId),
+      name: normalizeText(data.info?.name) || undefined,
+      productAttrs: normalizeCategoryAttrRules(data.product_attr_list),
+      saleAttrs: normalizeCategoryAttrRules(data.sale_attr_list),
+    };
+  }
+
+  async function getFreightTemplateIds(): Promise<string[]> {
+    const path = '/channels/ec/merchant/getfreighttemplatelist';
+    const stage = '获取运费模板列表';
+    const pageInput = { offset: 0, limit: 10 };
+    // 微信小店运费模板列表接口要求分页参数，之前传空对象会被微信按 limit=0 校验失败。
+    wxshop.logger.info('按微信小店官方文档读取运费模板列表', {
+      method: 'POST',
+      path,
+      body: pageInput,
+    });
+    const data = await wxshop.request<any>(path, pageInput, stage);
+
+    if (data.errcode && data.errcode !== 0) {
+      wxshop.throwWxApiError(path, stage, data);
+    }
+
+    return normalizeIdList(data.template_id_list);
+  }
+
+  async function getMerchantAddressIds(): Promise<string[]> {
+    const path = '/channels/ec/merchant/address/list';
+    const stage = '获取商家地址列表';
+    const pageInput = { offset: 0, limit: 100 };
+    wxshop.logger.info('按微信小店官方文档读取商家地址列表', {
+      method: 'POST',
+      path,
+      body: pageInput,
+    });
+    const data = await wxshop.request<any>(path, pageInput, stage);
+
+    if (data.errcode && data.errcode !== 0) {
+      wxshop.throwWxApiError(path, stage, data);
+    }
+
+    return extractAddressIds(data);
+  }
+
+  async function getMerchantAddressDetail(addressId: string): Promise<WxShopMerchantAddressDetail> {
+    const path = '/channels/ec/merchant/address/get';
+    const stage = '获取商家地址详情';
+    const data = await wxshop.request<any>(path, { address_id: addressId }, stage);
+
+    if (data.errcode && data.errcode !== 0) {
+      wxshop.throwWxApiError(path, stage, data);
+    }
+
+    const detail = data.address_detail;
+    const normalizedAddressId = String(detail?.address_id ?? addressId ?? '').trim();
+    if (!normalizedAddressId) throw new Error('微信小店地址详情未返回地址 ID');
+    return {
+      addressId: normalizedAddressId,
+      defaultSend: normalizeFlag(detail?.default_send),
+      defaultRecv: normalizeFlag(detail?.default_recv),
+      sendAddr: normalizeFlag(detail?.send_addr),
+      recvAddr: normalizeFlag(detail?.recv_addr),
+    };
+  }
+
   async function uploadImageByUrl(imgUrl: string): Promise<WxShopProductImageUploadResult> {
     const path = '/shop/ec/basics/img/upload?upload_type=1&resp_type=1';
     const stage = '上传商品图片';
@@ -173,6 +369,11 @@ export function createWxShopListingClient(accountId: string): WxShopListingClien
     getProductDetail,
     getProductQrcode,
     getAllCategoryPaths,
+    precheckProductCategory,
+    getCategoryProductRule,
+    getFreightTemplateIds,
+    getMerchantAddressIds,
+    getMerchantAddressDetail,
     uploadImageByUrl,
     addProduct,
     submitProductAudit,

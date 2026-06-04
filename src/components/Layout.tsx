@@ -278,7 +278,12 @@ const Layout: React.FC = () => {
               )}
               {activeModule === 'settings' && (
                 <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                  <SettingsPage defaultTab={settingsTab} onTabChange={(tab: SettingsTab) => setSettingsTab(tab)} />
+                  <SettingsPage
+                    accounts={accounts}
+                    activeAccountId={activeAccountId}
+                    defaultTab={settingsTab}
+                    onTabChange={(tab: SettingsTab) => setSettingsTab(tab)}
+                  />
                 </div>
               )}
             </Suspense>

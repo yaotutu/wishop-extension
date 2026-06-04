@@ -56,12 +56,10 @@ test('AI listing settings keep SiliconFlow credentials local and normalize optio
   const settings = normalizeAiListingSettings({
     siliconFlowApiKey: '  sk-test-123  ',
     siliconFlowModel: '  Qwen/QwQ-32B  ',
-    defaultExpressTemplateId: '  47428464001  ',
   });
 
   assert.equal(settings.siliconFlowApiKey, 'sk-test-123');
   assert.equal(settings.siliconFlowModel, 'Qwen/QwQ-32B');
-  assert.equal(settings.defaultExpressTemplateId, '47428464001');
 });
 
 test('AI listing settings fall back to a documented SiliconFlow chat model when model is empty', () => {
@@ -69,7 +67,6 @@ test('AI listing settings fall back to a documented SiliconFlow chat model when 
     aiListing: {
       siliconFlowApiKey: '',
       siliconFlowModel: '',
-      defaultExpressTemplateId: '',
     },
   });
 

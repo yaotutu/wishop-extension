@@ -14,6 +14,7 @@ export interface ActivityLogSummary {
   scanned?: number;
   listed?: number;
   deleted?: number;
+  uploadedImages?: number;
   skipped?: number;
   errors?: number;
 }

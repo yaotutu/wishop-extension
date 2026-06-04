@@ -3,7 +3,7 @@ import { create } from 'zustand';
 export type DashboardModuleType = 'orders' | 'storeManagement' | 'productListing' | 'commonFunctions' | 'scheduledJobs' | 'violation' | 'settings';
 export type ProductReviewScope = 'global' | 'account';
 export type ProductReviewGlobalView = 'tasks' | 'rules';
-export type SettingsTab = 'about' | 'product' | 'license' | 'aiListing' | 'contact';
+export type SettingsTab = 'about' | 'product' | 'license' | 'aiListing' | 'baseData' | 'contact';
 
 interface DashboardUiPreferences {
   activeModule: DashboardModuleType;
@@ -31,7 +31,7 @@ const DEFAULT_PREFERENCES: DashboardUiPreferences = {
 const MODULES = new Set<DashboardModuleType>(['orders', 'storeManagement', 'productListing', 'commonFunctions', 'scheduledJobs', 'violation', 'settings']);
 const REVIEW_SCOPES = new Set<ProductReviewScope>(['global', 'account']);
 const REVIEW_GLOBAL_VIEWS = new Set<ProductReviewGlobalView>(['tasks', 'rules']);
-const SETTINGS_TABS = new Set<SettingsTab>(['about', 'product', 'license', 'aiListing', 'contact']);
+const SETTINGS_TABS = new Set<SettingsTab>(['about', 'product', 'license', 'aiListing', 'baseData', 'contact']);
 
 function parsePreferences(value: unknown): DashboardUiPreferences {
   const saved = value as Partial<DashboardUiPreferences> | undefined;

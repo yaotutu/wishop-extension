@@ -1,12 +1,19 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { CollectedProductListing } from '../src/shared/types.ts';
+import { DEFAULT_APP_SETTINGS, type AppSettings } from '../src/shared/settings.ts';
+import type { SiliconFlowJsonCompletionInput } from '../src/background/ai/siliconflow-client.ts';
 import {
   createWxProductDraftFromCollectedListing,
   prepareWxProductDraftFromCollectedListing,
   submitPreparedWxProductDraft,
 } from '../src/background/services/product-listing-wx-draft-service.ts';
-import type { WxShopAddProductRequest, WxShopListingClient } from '../src/background/wxshop/listing/types.ts';
+import type {
+  WxShopAddProductRequest,
+  WxShopCategoryProductRule,
+  WxShopListingClient,
+  WxShopMerchantAddressDetail,
+} from '../src/background/wxshop/listing/types.ts';
 import { sampleCollectedProductListing } from './product-listing-fixtures.ts';
 
 function sampleListing(): CollectedProductListing {
@@ -29,7 +36,31 @@ function sampleListing(): CollectedProductListing {
   });
 }
 
-function fakeListingClient(uploaded: string[], addRequests: WxShopAddProductRequest[]): WxShopListingClient {
+async function emptyCachedCategoryProductRule(catId: string): Promise<WxShopCategoryProductRule> {
+  return { catId, productAttrs: [], saleAttrs: [] };
+}
+
+function aiSettings(): AppSettings {
+  return {
+    ...DEFAULT_APP_SETTINGS,
+    aiListing: {
+      siliconFlowApiKey: 'sk-test',
+      siliconFlowModel: 'Qwen/QwQ-32B',
+    },
+  };
+}
+
+interface FakeListingClientOptions {
+  freightTemplateIds?: string[];
+  addressIds?: string[];
+  addressDetails?: Record<string, Partial<WxShopMerchantAddressDetail>>;
+}
+
+function fakeListingClient(
+  uploaded: string[],
+  addRequests: WxShopAddProductRequest[],
+  options: FakeListingClientOptions = {},
+): WxShopListingClient {
   return {
     async getDraftProducts() {
       return { productIds: [], nextKey: '', hasMore: false };
@@ -42,6 +73,29 @@ function fakeListingClient(uploaded: string[], addRequests: WxShopAddProductRequ
     },
     async getAllCategoryPaths() {
       return [];
+    },
+    async precheckProductCategory(catId: string) {
+      return { catId, allPass: true, failReasons: [] };
+    },
+    async getCategoryProductRule(catId: string) {
+      return { catId, productAttrs: [], saleAttrs: [] };
+    },
+    async getFreightTemplateIds() {
+      return options.freightTemplateIds ?? ['47428464001'];
+    },
+    async getMerchantAddressIds() {
+      return options.addressIds ?? ['111111', '123456'];
+    },
+    async getMerchantAddressDetail(addressId: string) {
+      const override = options.addressDetails?.[addressId] || {};
+      return {
+        addressId,
+        defaultSend: false,
+        defaultRecv: addressId === '123456',
+        sendAddr: false,
+        recvAddr: true,
+        ...override,
+      };
     },
     async uploadImageByUrl(imgUrl: string) {
       uploaded.push(imgUrl);
@@ -63,6 +117,32 @@ function fakeListingClient(uploaded: string[], addRequests: WxShopAddProductRequ
   };
 }
 
+function fakeFailingUploadClient(uploaded: string[], addRequests: WxShopAddProductRequest[], failAt: number): WxShopListingClient {
+  const client = fakeListingClient(uploaded, addRequests);
+  return {
+    ...client,
+    async uploadImageByUrl(imgUrl: string) {
+      uploaded.push(imgUrl);
+      if (uploaded.length === failAt) throw new Error('图片服务拒绝上传');
+      return { imgUrl: `https://mmecimage.cn/p/${uploaded.length}.jpg` };
+    },
+  };
+}
+
+function fakeBlockedCategoryClient(uploaded: string[], addRequests: WxShopAddProductRequest[]): WxShopListingClient {
+  const client = fakeListingClient(uploaded, addRequests);
+  return {
+    ...client,
+    async precheckProductCategory(catId: string) {
+      return {
+        catId,
+        allPass: false,
+        failReasons: ['无该类目权限，请申请类目后再发品', '保证金余额不足类目保证金应缴，无法上架商品'],
+      };
+    },
+  };
+}
+
 test('creates a WeChat product draft from a collected listing using uploaded WeChat images', async () => {
   const uploaded: string[] = [];
   const addRequests: WxShopAddProductRequest[] = [];
@@ -71,12 +151,11 @@ test('creates a WeChat product draft from a collected listing using uploaded WeC
     accountId: 'account-1',
     listingId: 'taobao:1010211244888',
     catIds: ['10000111', '10000113', '6091'],
-    expressTemplateId: '47428464001',
-    defaultStockNum: 30,
     autoListing: false,
   }, {
     getListing: async () => sampleListing(),
     getClient: async () => fakeListingClient(uploaded, addRequests),
+    getCategoryProductRule: emptyCachedCategoryProductRule,
     recordStarted: async () => {},
     recordCompleted: async () => {},
     recordFailed: async () => {},
@@ -93,6 +172,8 @@ test('creates a WeChat product draft from a collected listing using uploaded WeC
   assert.equal(addRequests[0].head_imgs[0], 'https://mmecimage.cn/p/1.jpg');
   assert.equal(addRequests[0].desc_info?.imgs?.[0], 'https://mmecimage.cn/p/4.jpg');
   assert.equal(addRequests[0].skus[0].thumb_img, 'https://mmecimage.cn/p/5.jpg');
+  assert.deepEqual(addRequests[0].express_info, { template_id: '47428464001' });
+  assert.deepEqual(addRequests[0].after_sale_info, { after_sale_address_id: 123456 });
   assert.deepEqual(result, {
     accountId: 'account-1',
     listingId: 'taobao:1010211244888',
@@ -106,18 +187,23 @@ test('creates a WeChat product draft from a collected listing using uploaded WeC
 test('prepares a WeChat product draft without submitting it to the add-product API', async () => {
   const uploaded: string[] = [];
   const addRequests: WxShopAddProductRequest[] = [];
+  const startedLogs: Record<string, unknown>[] = [];
+  const completedLogs: Record<string, unknown>[] = [];
+  const failedLogs: Record<string, unknown>[] = [];
 
   const prepared = await prepareWxProductDraftFromCollectedListing({
     accountId: 'account-1',
     listingId: 'taobao:1010211244888',
     catIds: ['10000111', '10000113', '6091'],
-    expressTemplateId: '47428464001',
     attrs: [{ attrKey: '型号', attrValue: 'KPW-1' }],
-    defaultStockNum: 30,
     autoListing: false,
   }, {
     getListing: async () => sampleListing(),
     getClient: async () => fakeListingClient(uploaded, addRequests),
+    getCategoryProductRule: emptyCachedCategoryProductRule,
+    recordStarted: async input => { startedLogs.push(input); },
+    recordCompleted: async input => { completedLogs.push(input); },
+    recordFailed: async input => { failedLogs.push(input); },
   });
 
   assert.deepEqual(uploaded, [
@@ -133,15 +219,217 @@ test('prepares a WeChat product draft without submitting it to the add-product A
   assert.equal(prepared.uploadedImageCount, 5);
   assert.equal(prepared.request.title, sampleListing().title);
   assert.equal(prepared.request.head_imgs[0], 'https://mmecimage.cn/p/1.jpg');
-  assert.deepEqual(prepared.request.attrs, [{ attr_key: '型号', attr_value: 'KPW-1' }]);
+  assert.equal(prepared.request.attrs, undefined);
+  assert.deepEqual(prepared.request.express_info, { template_id: '47428464001' });
+  assert.deepEqual(prepared.request.after_sale_info, { after_sale_address_id: 123456 });
+  assert.deepEqual(prepared.warnings, []);
   assert.deepEqual(prepared.summary, {
     title: sampleListing().title,
     headImageCount: 3,
     detailImageCount: 1,
     skuCount: 1,
-    attrCount: 1,
+    attrCount: 0,
     listing: false,
   });
+  assert.equal(startedLogs.length, 1);
+  assert.equal(completedLogs.length, 1);
+  assert.equal(failedLogs.length, 0);
+  assert.equal(startedLogs[0].title, '微信小店上架数据生成开始');
+  assert.equal(completedLogs[0].title, '微信小店上架数据生成完成');
+  assert.deepEqual(completedLogs[0].summary, { uploadedImages: 5 });
+});
+
+test('records a failed prepare log with the failed image index when image upload fails', async () => {
+  const uploaded: string[] = [];
+  const addRequests: WxShopAddProductRequest[] = [];
+  const failedLogs: Record<string, unknown>[] = [];
+
+  await assert.rejects(
+    () => prepareWxProductDraftFromCollectedListing({
+      accountId: 'account-1',
+      listingId: 'taobao:1010211244888',
+      catIds: ['10000111', '10000113', '6091'],
+    }, {
+      getListing: async () => sampleListing(),
+      getClient: async () => fakeFailingUploadClient(uploaded, addRequests, 2),
+      getCategoryProductRule: emptyCachedCategoryProductRule,
+      recordStarted: async () => {},
+      recordCompleted: async () => {},
+      recordFailed: async input => { failedLogs.push(input); },
+    }),
+    /第 2\/5 张商品图片上传失败：图片服务拒绝上传/,
+  );
+
+  assert.equal(addRequests.length, 0);
+  assert.equal(failedLogs.length, 1);
+  assert.equal(failedLogs[0].title, '微信小店上架数据生成失败');
+  assert.deepEqual(failedLogs[0].error, { message: '第 2/5 张商品图片上传失败：图片服务拒绝上传' });
+});
+
+test('stops before image upload when WeChat category precheck fails', async () => {
+  const uploaded: string[] = [];
+  const addRequests: WxShopAddProductRequest[] = [];
+  const failedLogs: Record<string, unknown>[] = [];
+
+  await assert.rejects(
+    () => prepareWxProductDraftFromCollectedListing({
+      accountId: 'account-1',
+      listingId: 'taobao:1010211244888',
+      catIds: ['10000111', '10000113', '6091'],
+    }, {
+      getListing: async () => sampleListing(),
+      getClient: async () => fakeBlockedCategoryClient(uploaded, addRequests),
+      recordStarted: async () => {},
+      recordCompleted: async () => {},
+      recordFailed: async input => { failedLogs.push(input); },
+    }),
+    /微信小店类目发品前校验未通过：无该类目权限，请申请类目后再发品；保证金余额不足类目保证金应缴，无法上架商品/,
+  );
+
+  assert.deepEqual(uploaded, []);
+  assert.deepEqual(addRequests, []);
+  assert.equal(failedLogs.length, 1);
+});
+
+test('stops before image upload when the local WeChat category product rule cache is missing', async () => {
+  const uploaded: string[] = [];
+  const addRequests: WxShopAddProductRequest[] = [];
+  const failedLogs: Record<string, unknown>[] = [];
+
+  await assert.rejects(
+    () => prepareWxProductDraftFromCollectedListing({
+      accountId: 'account-1',
+      listingId: 'taobao:1010211244888',
+      catIds: ['10000111', '10000113', '6091'],
+    }, {
+      getListing: async () => sampleListing(),
+      getClient: async () => fakeListingClient(uploaded, addRequests),
+      getCategoryProductRule: async () => null,
+      recordStarted: async () => {},
+      recordCompleted: async () => {},
+      recordFailed: async input => { failedLogs.push(input); },
+    }),
+    /微信小店类目 6091 的发品规则未缓存，请先在设置的基础数据中下载云端类目数据/,
+  );
+
+  assert.deepEqual(uploaded, []);
+  assert.deepEqual(addRequests, []);
+  assert.equal(failedLogs.length, 1);
+  assert.deepEqual(failedLogs[0].error, {
+    message: '微信小店类目 6091 的发品规则未缓存，请先在设置的基础数据中下载云端类目数据',
+  });
+});
+
+test('fills required product attributes with AI and local WeChat category rules before image upload', async () => {
+  const uploaded: string[] = [];
+  const addRequests: WxShopAddProductRequest[] = [];
+  const client = fakeListingClient(uploaded, addRequests);
+  const aiCalls: SiliconFlowJsonCompletionInput[] = [];
+
+  const prepared = await prepareWxProductDraftFromCollectedListing({
+    accountId: 'account-1',
+    listingId: 'taobao:1010211244888',
+    catIds: ['10000111', '10000113', '6091'],
+  }, {
+    getListing: async () => sampleListing(),
+    getClient: async () => client,
+    getCategoryProductRule: async catId => ({
+      catId,
+      productAttrs: [
+        { name: '腕托', type: 'string', values: [], required: true, appendAllowed: false },
+        { name: '产品净重', type: 'string', values: [], required: true, appendAllowed: false },
+        { name: '尺寸', type: 'string', values: [], required: true, appendAllowed: false },
+        { name: '产地', type: 'select_one', values: ['中国大陆', '中国澳门', '中国台湾', '中国香港', '国外'], required: true, appendAllowed: false },
+        { name: '颜色', type: 'string', values: [], required: true, appendAllowed: false },
+        { name: '材质', type: 'select_one', values: ['皮质', '橡胶', '树脂垫', '金属', '其他', '布'], required: true, appendAllowed: false },
+        { name: '类型', type: 'select_one', values: ['大垫', '小垫', '桌垫'], required: true, appendAllowed: false },
+        { name: '数量', type: 'integer_unit', values: ['只', '个'], required: true, appendAllowed: false },
+      ],
+      saleAttrs: [],
+    }),
+    getSettings: async () => aiSettings(),
+    completeJson: async input => {
+      aiCalls.push(input);
+      return {
+        attrs: [
+          { attrKey: '腕托', attrValue: '无' },
+          { attrKey: '产品净重', attrValue: '0.1kg' },
+          { attrKey: '尺寸', attrValue: '1m' },
+          { attrKey: '产地', attrValue: '中国大陆' },
+          { attrKey: '颜色', attrValue: '白色' },
+          { attrKey: '材质', attrValue: '其他' },
+          { attrKey: '类型', attrValue: '大垫' },
+          { attrKey: '数量', attrValue: '10只' },
+        ],
+        warnings: ['腕托和产品净重为 AI 推断值，请复核。'],
+      };
+    },
+    recordStarted: async () => {},
+    recordCompleted: async () => {},
+    recordFailed: async () => {},
+  });
+
+  assert.equal(aiCalls.length, 1);
+  const aiPrompt = JSON.parse(aiCalls[0].messages[1].content) as {
+    categoryRule: { requiredProductAttrs: Array<{ name: string }> };
+  };
+  assert.deepEqual(aiPrompt.categoryRule.requiredProductAttrs.map(attr => attr.name), [
+    '腕托',
+    '产品净重',
+    '尺寸',
+    '产地',
+    '颜色',
+    '材质',
+    '类型',
+    '数量',
+  ]);
+  const attrs = new Map(prepared.request.attrs?.map(attr => [attr.attr_key, attr.attr_value]) || []);
+  assert.equal(attrs.get('腕托'), '无');
+  assert.equal(attrs.get('产品净重'), '0.1kg');
+  assert.equal(attrs.get('尺寸'), '1m');
+  assert.equal(attrs.get('产地'), '中国大陆');
+  assert.equal(attrs.get('材质'), '其他');
+  assert.equal(attrs.get('类型'), '大垫');
+  assert.equal(attrs.get('颜色'), '白色');
+  assert.equal(attrs.get('数量'), '10只');
+  assert.equal(prepared.summary.attrCount, 8);
+  assert.equal(prepared.warnings.some(warning => warning.includes('腕托和产品净重')), true);
+  assert.equal(prepared.warnings.some(warning => warning.includes('AI 已按微信类目规则补齐 8/8 个必填商品参数')), true);
+});
+
+test('rejects AI product attributes that do not satisfy local enum rules before image upload', async () => {
+  const uploaded: string[] = [];
+  const addRequests: WxShopAddProductRequest[] = [];
+
+  await assert.rejects(
+    () => prepareWxProductDraftFromCollectedListing({
+      accountId: 'account-1',
+      listingId: 'taobao:1010211244888',
+      catIds: ['10000111', '10000113', '6091'],
+    }, {
+      getListing: async () => sampleListing(),
+      getClient: async () => fakeListingClient(uploaded, addRequests),
+      getCategoryProductRule: async catId => ({
+        catId,
+        productAttrs: [
+          { name: '材质', type: 'select_one', values: ['皮质', '橡胶', '树脂垫', '金属', '其他', '布'], required: true, appendAllowed: false },
+        ],
+        saleAttrs: [],
+      }),
+      getSettings: async () => aiSettings(),
+      completeJson: async () => ({
+        attrs: [{ attrKey: '材质', attrValue: '玻璃' }],
+        warnings: [],
+      }),
+      recordStarted: async () => {},
+      recordCompleted: async () => {},
+      recordFailed: async () => {},
+    }),
+    /商品参数「材质」值「玻璃」不在微信允许值内，期望值为：皮质；橡胶；树脂垫；金属；其他；布/,
+  );
+
+  assert.deepEqual(uploaded, []);
+  assert.deepEqual(addRequests, []);
 });
 
 test('submits a prepared WeChat product draft without re-uploading images', async () => {
@@ -154,6 +442,10 @@ test('submits a prepared WeChat product draft without re-uploading images', asyn
   }, {
     getListing: async () => sampleListing(),
     getClient: async () => fakeListingClient(uploaded, addRequests),
+    getCategoryProductRule: emptyCachedCategoryProductRule,
+    recordStarted: async () => {},
+    recordCompleted: async () => {},
+    recordFailed: async () => {},
   });
   uploaded.length = 0;
 

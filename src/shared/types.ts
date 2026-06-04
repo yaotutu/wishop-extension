@@ -463,6 +463,56 @@ export interface WxProductDraftAttribute {
   attrValue: string;
 }
 
+export interface WxCategoryProductRuleAttr {
+  name: string;
+  type: string;
+  values: string[];
+  required: boolean;
+  appendAllowed: boolean;
+  hint?: string;
+}
+
+export interface WxCategoryProductRuleCacheItem {
+  id: string;
+  catId: string;
+  catIds: string[];
+  categoryPath: string[];
+  path: string;
+  releaseMode: number;
+  productAttrs: WxCategoryProductRuleAttr[];
+  saleAttrs: WxCategoryProductRuleAttr[];
+  requiredProductAttrs: WxCategoryProductRuleAttr[];
+  fetchedByAccountId: string;
+  updatedAt: number;
+  lastError?: string;
+}
+
+export interface WxCategoryProductRuleCacheStatus {
+  total: number;
+  cached: number;
+  failed: number;
+  missing: number;
+  syncing: boolean;
+  processed: number;
+  skipped: number;
+  startedAt?: number;
+  finishedAt?: number;
+  currentCatId?: string;
+  currentPath?: string;
+  lastUpdatedAt?: number;
+  lastError?: string;
+}
+
+export interface SyncWxCategoryProductRulesInput {
+  accountId: string;
+  force?: boolean;
+  limit?: number;
+}
+
+export interface SyncWxCategoryProductRulesResult extends WxCategoryProductRuleCacheStatus {
+  started: boolean;
+}
+
 export interface WxProductCategoryPath {
   catIds: string[];
   names: string[];
@@ -470,32 +520,17 @@ export interface WxProductCategoryPath {
   qualificationTips?: string[];
 }
 
-export type WxProductCategoryCandidateSource = 'taobaoWxLookup' | 'wxApi' | 'wxStaticSnapshot';
+export type WxProductCategoryCandidateSource = 'wxStaticSnapshot';
 
-export type WxProductCategoryMatchStatus = 'high' | 'review' | 'low';
-
-export type WxProductCategoryCandidateScope =
-  | 'exact'
-  | 'level3Children'
-  | 'level2Children'
-  | 'level1Children'
-  | 'wxApiFallback'
-  | 'wxStaticAll';
+export type WxProductCategoryCandidateScope = 'wxStaticAll';
 
 export interface WxProductCategoryCandidate extends WxProductCategoryPath {
   source: WxProductCategoryCandidateSource;
-  confidence?: number;
-  status?: WxProductCategoryMatchStatus;
-  reason?: string;
 }
 
 export interface WxProductCategoryLookupSummary {
   source: WxProductCategoryCandidateSource;
-  status: 'matched' | 'not_found' | 'missing_source_category' | 'fallback_wx_api';
-  taobaoPath?: string;
-  matchedTaobaoPath?: string;
-  sourceDepth?: number;
-  matchDepth?: number;
+  status: 'matched';
   candidateScope?: WxProductCategoryCandidateScope;
   candidateCount: number;
   warnings: string[];
@@ -535,8 +570,13 @@ export interface WxProductDraftPreparedRequest {
   express_info?: {
     template_id: string;
   };
+  after_sale_info?: {
+    after_sale_address_id: number;
+  };
   extra_service: {
     is_open_cod: number;
+    seven_day_return: number;
+    freight_insurance: number;
   };
   skus: WxProductDraftPreparedSku[];
   listing: 0 | 1;
@@ -547,6 +587,7 @@ export interface CreateWxProductDraftInput {
   listingId: string;
   catIds: string[];
   expressTemplateId?: string;
+  afterSaleAddressId?: string;
   brandId?: string;
   defaultStockNum?: number;
   autoListing?: boolean;
@@ -561,6 +602,7 @@ export interface WxProductDraftPrepareResult {
   request: WxProductDraftPreparedRequest;
   uploadedImageCount: number;
   preparedAt: number;
+  warnings: string[];
   summary: {
     title: string;
     headImageCount: number;
@@ -591,7 +633,6 @@ export interface WxProductDraftCreationResult {
 export interface CreateWxProductDraftSuggestionInput {
   accountId?: string;
   listingId: string;
-  wxCatIds?: string[];
 }
 
 export interface WxProductDraftSuggestionResult {
@@ -605,7 +646,6 @@ export interface WxProductDraftSuggestionResult {
   confidence: number;
   reason: string;
   warnings: string[];
-  expressTemplateId: string;
 }
 
 export type ProductListingCollectionSessionStatus =

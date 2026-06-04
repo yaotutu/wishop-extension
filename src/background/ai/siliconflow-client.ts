@@ -24,6 +24,33 @@ interface SiliconFlowCompletionResponse {
 
 const SILICON_FLOW_CHAT_COMPLETIONS_URL = 'https://api.siliconflow.cn/v1/chat/completions';
 
+/**
+ * SiliconFlow 请求由不同上货步骤复用，但每个步骤的用户提示不同。
+ * 这里只统一 AbortController 接线，具体超时文案由调用方传入，避免日志里混淆是类目选择还是参数补齐。
+ */
+export function createSiliconFlowTimeoutFetcher(input: {
+  timeoutMs: number;
+  timeoutMessage: string;
+}): typeof fetch {
+  return async (request, init) => {
+    const controller = new AbortController();
+    const timeoutId = globalThis.setTimeout(() => controller.abort(), input.timeoutMs);
+    try {
+      return await fetch(request, {
+        ...init,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new Error(input.timeoutMessage);
+      }
+      throw error;
+    } finally {
+      globalThis.clearTimeout(timeoutId);
+    }
+  };
+}
+
 function normalizeSecret(value: string): string {
   return value.trim();
 }

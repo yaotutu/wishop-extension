@@ -1,4 +1,5 @@
 import { defineConfig } from 'wxt';
+import { resolve } from 'node:path';
 import packageJson from './package.json';
 
 const HOST_PERMISSIONS = [
@@ -23,6 +24,8 @@ function formatBuildTime(date = new Date()): string {
 }
 
 const BUILD_TIME = formatBuildTime();
+const WXT_CHROME_DATA_DIR = resolve('wxt-chrome-data');
+const WXT_CDP_PORT = 19222;
 
 // See https://wxt.dev/api/config.html
 export default defineConfig({
@@ -45,9 +48,16 @@ export default defineConfig({
     exclude: ['**/*.map'],
   },
   webExt: {
-    chromiumProfile: '.wxt/chrome-profile',
-    keepProfileChanges: true,
-    chromiumArgs: ['--user-data-dir=./wxt-chrome-data'],
+    // WXT 默认每次开发启动都可能创建临时浏览器数据目录。
+    // 淘宝登录态依赖 Chrome profile cookies，所以开发浏览器必须固定到同一个 user-data-dir。
+    // 自动化测试统一连接同一个 Chrome DevTools Protocol 端口：127.0.0.1:19222。
+    chromiumPort: WXT_CDP_PORT,
+    chromiumArgs: [
+      `--user-data-dir=${WXT_CHROME_DATA_DIR}`,
+      '--remote-debugging-address=127.0.0.1',
+      // web-ext-run 会默认追加 --remote-debugging-pipe；这里显式追加端口，确保外部测试工具能连接。
+      `--remote-debugging-port=${WXT_CDP_PORT}`,
+    ],
   },
   manifest: {
     name: '微店管家',

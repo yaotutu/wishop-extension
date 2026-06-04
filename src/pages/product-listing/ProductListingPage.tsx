@@ -10,7 +10,6 @@ import {
   Form,
   Image,
   Input,
-  InputNumber,
   message,
   Modal,
   Popconfirm,
@@ -22,14 +21,12 @@ import {
   Tag,
 } from 'antd';
 import type { TableProps } from 'antd';
-import { useAppSettingsQuery } from '../../hooks/useOrderQueries';
 import { queryKeys } from '../../query/query-keys';
 import { extensionApi } from '../../shared/extension-api';
 import type {
   Account,
   CollectedProductListing,
   ProductListingCollectionSession,
-  WxProductDraftAttribute,
   WxProductDraftCreationResult,
   WxProductDraftPrepareResult,
   WxProductDraftSuggestionResult,
@@ -99,17 +96,8 @@ interface ProductListingPageProps {
 interface WxDraftFormValues {
   accountId: string;
   catIdsText?: string;
-  expressTemplateId?: string;
   brandId?: string;
-  defaultStockNum: number;
   autoListing?: boolean;
-}
-
-function parseCatIds(value?: string): string[] {
-  return (value || '')
-    .split(/[,\s，、/]+/u)
-    .map(item => item.trim())
-    .filter(Boolean);
 }
 
 function isValidCategoryPathIds(catIds: string[]): boolean {
@@ -117,33 +105,17 @@ function isValidCategoryPathIds(catIds: string[]): boolean {
 }
 
 function categoryCandidateSourceText(source?: WxProductDraftSuggestionResult['categoryCandidateSource']): string {
-  if (source === 'taobaoWxLookup') return '本地类目 lookup';
-  if (source === 'wxApi') return '微信全量类目筛选';
   if (source === 'wxStaticSnapshot') return '静态全量类目';
   return '未记录来源';
-}
-
-function categoryCandidateScopeText(
-  scope?: NonNullable<WxProductDraftSuggestionResult['categoryLookup']>['candidateScope'],
-): string {
-  if (scope === 'exact') return '完整路径命中';
-  if (scope === 'level3Children') return '三级父类候选';
-  if (scope === 'level2Children') return '二级父类候选';
-  if (scope === 'level1Children') return '一级父类候选';
-  if (scope === 'wxApiFallback') return '微信全量回退';
-  if (scope === 'wxStaticAll') return '静态全量类目';
-  return '未记录范围';
 }
 
 const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activeAccountId }) => {
   const [form] = Form.useForm<{ url: string }>();
   const [draftForm] = Form.useForm<WxDraftFormValues>();
   const queryClient = useQueryClient();
-  const appSettingsQuery = useAppSettingsQuery();
   const [activeSession, setActiveSession] = useState<ProductListingCollectionSession | null>(null);
   const [previewListing, setPreviewListing] = useState<CollectedProductListing | null>(null);
   const [draftModalListing, setDraftModalListing] = useState<CollectedProductListing | null>(null);
-  const [draftAiAttrs, setDraftAiAttrs] = useState<WxProductDraftAttribute[]>([]);
   const [draftPrepared, setDraftPrepared] = useState<WxProductDraftPrepareResult | null>(null);
   const [draftSuggestion, setDraftSuggestion] = useState<WxProductDraftSuggestionResult | null>(null);
   const [draftSubmittedResult, setDraftSubmittedResult] = useState<WxProductDraftCreationResult | null>(null);
@@ -171,39 +143,60 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
     },
   });
 
-  const prepareDraftMutation = useMutation({
+  /**
+   * 上货主流程只保留这一条生成入口：
+   * 1. 每次都让 AI 从静态全量微信叶子类目里选择类目，避免手填类目和 AI 路径混用；
+   * 2. 后台读取本地类目发品规则，让 AI 按必填规则补齐商品参数并做本地校验；
+   * 3. 准备阶段会上传商品图片到微信小店，但不会创建草稿商品，真正创建仍由“提交草稿”单独触发。
+   */
+  const generateDraftDataMutation = useMutation({
+    onMutate: () => {
+      setFullCategoryStatus('正在选择微信类目并生成上架数据，图片会同步上传到微信小店。');
+    },
     mutationFn: async () => {
-      if (!draftModalListing) throw new Error('请选择要准备的采集商品');
+      if (!draftModalListing) throw new Error('请选择要处理的采集商品');
       const values = await draftForm.validateFields();
-      const catIds = parseCatIds(values.catIdsText);
+      const suggestion = await extensionApi.productListingCollection.suggestWxCategoryFromFullList({
+        accountId: values.accountId,
+        listingId: draftModalListing.id,
+      });
+      const catIds = suggestion.catIds;
+
       if (!isValidCategoryPathIds(catIds)) {
-        throw new Error('请先运行 AI 测试生成微信小店类目路径，或手动填写 3 到 4 个类目 ID');
+        throw new Error('AI 返回的微信小店类目路径不完整，请重新生成');
       }
-      return extensionApi.productListingCollection.prepareWxDraft({
+      const prepared = await extensionApi.productListingCollection.prepareWxDraft({
         accountId: values.accountId,
         listingId: draftModalListing.id,
         catIds,
-        expressTemplateId: values.expressTemplateId?.trim() || undefined,
         brandId: values.brandId?.trim() || undefined,
-        defaultStockNum: values.defaultStockNum,
         autoListing: Boolean(values.autoListing),
-        attrs: draftAiAttrs.length > 0 ? draftAiAttrs : undefined,
       });
+      return { suggestion, prepared, catIds };
     },
-    onSuccess: prepared => {
+    onSuccess: ({ suggestion, prepared, catIds }) => {
+      setDraftSuggestion(suggestion);
+      draftForm.setFieldsValue({
+        catIdsText: suggestion.catIds.join(','),
+      });
       setDraftPrepared(prepared);
       setDraftSubmittedResult(null);
-      message.success('商品准备完成，可以提交草稿');
+      const categoryText = suggestion?.categoryPath?.join(' / ') || catIds.join(' / ');
+      setFullCategoryStatus(prepared.warnings.length > 0
+        ? `已生成：${categoryText}，${prepared.warnings.length} 条商品参数复核提示。`
+        : `已生成：${categoryText}`);
+      message.success('上架数据已生成，可以提交草稿');
     },
     onError: error => {
-      const detail = error instanceof Error ? error.message : '商品准备失败';
+      const detail = error instanceof Error ? error.message : '上架数据生成失败';
+      setFullCategoryStatus(`失败：${detail}`);
       message.error(detail);
     },
   });
 
   const submitPreparedDraftMutation = useMutation({
     mutationFn: () => {
-      if (!draftPrepared) throw new Error('请先完成商品准备');
+      if (!draftPrepared) throw new Error('请先生成上架数据');
       return extensionApi.productListingCollection.submitPreparedWxDraft({
         accountId: draftPrepared.accountId,
         listingId: draftPrepared.listingId,
@@ -218,65 +211,6 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
     },
     onError: error => {
       const detail = error instanceof Error ? error.message : '提交微信小店草稿失败';
-      message.error(detail);
-    },
-  });
-
-  const suggestDraftMutation = useMutation({
-    mutationFn: async () => {
-      if (!draftModalListing) throw new Error('请选择要处理的采集商品');
-      const values = await draftForm.validateFields(['accountId', 'catIdsText']);
-      const manualCatIds = parseCatIds(values.catIdsText);
-      return extensionApi.productListingCollection.suggestWxDraft({
-        accountId: values.accountId,
-        listingId: draftModalListing.id,
-        wxCatIds: manualCatIds.length > 0 ? manualCatIds : undefined,
-      });
-    },
-    onSuccess: suggestion => {
-      setDraftSuggestion(suggestion);
-      setDraftAiAttrs(suggestion.attrs);
-      setDraftPrepared(null);
-      setDraftSubmittedResult(null);
-      draftForm.setFieldsValue({
-        catIdsText: suggestion.catIds.join(','),
-        expressTemplateId: suggestion.expressTemplateId || draftForm.getFieldValue('expressTemplateId'),
-      });
-      message.success('AI 已选择微信类目并整理上架属性');
-    },
-    onError: error => {
-      const detail = error instanceof Error ? error.message : 'AI 处理失败';
-      message.error(detail);
-    },
-  });
-
-  const suggestFullCategoryMutation = useMutation({
-    onMutate: () => {
-      setFullCategoryStatus('正在读取静态微信类目并调用 LLM，最多等待 90 秒。');
-    },
-    mutationFn: async () => {
-      if (!draftModalListing) throw new Error('请选择要处理的采集商品');
-      const values = await draftForm.validateFields(['accountId']);
-      return extensionApi.productListingCollection.suggestWxCategoryFromFullList({
-        accountId: values.accountId,
-        listingId: draftModalListing.id,
-      });
-    },
-    onSuccess: suggestion => {
-      setDraftSuggestion(suggestion);
-      setDraftAiAttrs(suggestion.attrs);
-      setDraftPrepared(null);
-      setDraftSubmittedResult(null);
-      draftForm.setFieldsValue({
-        catIdsText: suggestion.catIds.join(','),
-        expressTemplateId: suggestion.expressTemplateId || draftForm.getFieldValue('expressTemplateId'),
-      });
-      setFullCategoryStatus(`已完成：${suggestion.categoryPath?.join(' / ') || suggestion.catIds.join(' / ')}`);
-      message.success('AI 已从静态全量类目中选择微信类目');
-    },
-    onError: error => {
-      const detail = error instanceof Error ? error.message : 'AI 全量类目处理失败';
-      setFullCategoryStatus(`失败：${detail}`);
       message.error(detail);
     },
   });
@@ -307,9 +241,7 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
 
   const openDraftModal = useCallback((listing: CollectedProductListing) => {
     const defaultAccountId = activeAccountId || accounts[0]?.id || '';
-    const defaultExpressTemplateId = appSettingsQuery.data?.aiListing.defaultExpressTemplateId || '';
     setDraftModalListing(listing);
-    setDraftAiAttrs([]);
     setDraftPrepared(null);
     setDraftSuggestion(null);
     setDraftSubmittedResult(null);
@@ -317,16 +249,13 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
     draftForm.setFieldsValue({
       accountId: defaultAccountId,
       catIdsText: '',
-      expressTemplateId: defaultExpressTemplateId,
       brandId: '2100000000',
-      defaultStockNum: 100,
       autoListing: false,
     });
-  }, [accounts, activeAccountId, appSettingsQuery.data?.aiListing.defaultExpressTemplateId, draftForm]);
+  }, [accounts, activeAccountId, draftForm]);
 
   const closeDraftModal = () => {
     setDraftModalListing(null);
-    setDraftAiAttrs([]);
     setDraftPrepared(null);
     setDraftSuggestion(null);
     setDraftSubmittedResult(null);
@@ -334,9 +263,10 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
     draftForm.resetFields();
   };
 
-  const resetPreparedDraft = () => {
+  const resetPreparedDraft = (changedValues?: Partial<WxDraftFormValues>) => {
     setDraftPrepared(null);
     setDraftSubmittedResult(null);
+    setFullCategoryStatus('');
   };
 
   const draftStepItems: React.ComponentProps<typeof Steps>['items'] = [
@@ -346,14 +276,9 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
       status: draftModalListing ? 'finish' : 'wait',
     },
     {
-      title: 'AI 测试',
-      description: draftSuggestion ? '已生成建议' : '可选',
-      status: suggestDraftMutation.isPending || suggestFullCategoryMutation.isPending ? 'process' : draftSuggestion ? 'finish' : 'wait',
-    },
-    {
-      title: '商品准备',
-      description: draftPrepared ? '请求体已生成' : '待准备',
-      status: prepareDraftMutation.isPending ? 'process' : draftPrepared ? 'finish' : 'wait',
+      title: '生成上架数据',
+      description: draftPrepared ? '请求体已生成' : '待生成',
+      status: generateDraftDataMutation.isPending ? 'process' : draftPrepared ? 'finish' : 'wait',
     },
     {
       title: '提交草稿',
@@ -649,29 +574,13 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
             关闭
           </Button>,
           <Button
-            key="ai"
+            key="generate"
             icon={<RobotOutlined />}
-            loading={suggestDraftMutation.isPending}
-            disabled={suggestFullCategoryMutation.isPending}
-            onClick={() => suggestDraftMutation.mutate()}
+            loading={generateDraftDataMutation.isPending}
+            disabled={submitPreparedDraftMutation.isPending}
+            onClick={() => generateDraftDataMutation.mutate()}
           >
-            AI 测试
-          </Button>,
-          <Button
-            key="ai-full"
-            icon={<RobotOutlined />}
-            loading={suggestFullCategoryMutation.isPending}
-            disabled={suggestDraftMutation.isPending}
-            onClick={() => suggestFullCategoryMutation.mutate()}
-          >
-            AI 全量类目
-          </Button>,
-          <Button
-            key="prepare"
-            loading={prepareDraftMutation.isPending}
-            onClick={() => prepareDraftMutation.mutate()}
-          >
-            商品准备
+            生成上架数据
           </Button>,
           <Button
             key="submit"
@@ -687,7 +596,7 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
       >
         <Steps
           size="small"
-          current={draftSubmittedResult ? 3 : draftPrepared ? 2 : draftSuggestion ? 1 : 0}
+          current={draftSubmittedResult ? 2 : draftPrepared ? 1 : 0}
           items={draftStepItems}
           style={{ marginBottom: 20 }}
         />
@@ -722,28 +631,19 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
           />
           {fullCategoryStatus && (
             <Alert
-              type={suggestFullCategoryMutation.isError ? 'error' : suggestFullCategoryMutation.isSuccess ? 'success' : 'info'}
+              type={generateDraftDataMutation.isError ? 'error' : generateDraftDataMutation.isSuccess ? 'success' : 'info'}
               showIcon
               style={{ marginBottom: 16 }}
-              title="AI 全量类目状态"
+              title="上架数据生成状态"
               description={fullCategoryStatus}
             />
           )}
           <Form.Item
             name="catIdsText"
-            label="微信小店类目路径 ID（AI 回填）"
-            extra="AI 测试保留旧 lookup 逻辑；AI 全量类目会读取静态微信叶子类目缓存，让模型直接从全部候选中选择。手动兜底时按完整路径填写 3 到 4 个 ID。"
-            rules={[
-              {
-                validator: async (_, value: string) => {
-                  const catIds = parseCatIds(value);
-                  if (catIds.length === 0 || isValidCategoryPathIds(catIds)) return;
-                  throw new Error('手动指定时需要填写 3 到 4 个类目 ID');
-                },
-              },
-            ]}
+            label="微信小店类目路径 ID（AI 生成）"
+            extra="每次生成上架数据都会从静态微信叶子类目全量缓存中重新选择类目。"
           >
-            <Input placeholder="AI 自动回填，或手动输入 10000111,10000113,6091" />
+            <Input disabled placeholder="生成后展示类目路径 ID" />
           </Form.Item>
           {draftSuggestion && (
             <Alert
@@ -761,19 +661,14 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
                     {draftSuggestion.categoryPath && (
                       <Tag color="cyan">类目 {draftSuggestion.categoryPath.join(' / ')}</Tag>
                     )}
-                    <Tag color={draftSuggestion.categoryCandidateSource === 'taobaoWxLookup' ? 'green' : draftSuggestion.categoryCandidateSource === 'wxStaticSnapshot' ? 'purple' : 'default'}>
+                    <Tag color="purple">
                       来源 {categoryCandidateSourceText(draftSuggestion.categoryCandidateSource)}
                     </Tag>
                   </Space>
                   {draftSuggestion.categoryLookup && (
                     <Space size={4} wrap>
-                      <Tag>淘宝匹配 {draftSuggestion.categoryLookup.matchedTaobaoPath || draftSuggestion.categoryLookup.taobaoPath || '-'}</Tag>
-                      <Tag>{categoryCandidateScopeText(draftSuggestion.categoryLookup.candidateScope)}</Tag>
-                      <Tag>
-                        层级 {draftSuggestion.categoryLookup.matchDepth ?? 0}
-                        /{draftSuggestion.categoryLookup.sourceDepth ?? 0}
-                      </Tag>
                       <Tag>候选 {draftSuggestion.categoryLookup.candidateCount}</Tag>
+                      <Tag>范围 静态全量类目</Tag>
                     </Space>
                   )}
                   {draftSuggestion.categoryCandidates && draftSuggestion.categoryCandidates.length > 0 && (
@@ -781,20 +676,10 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
                       {draftSuggestion.categoryCandidates.map(candidate => (
                         <Tag key={candidate.catIds.join('/')}>
                           {candidate.names.join(' / ')}
-                          {typeof candidate.confidence === 'number' ? ` ${Math.round(candidate.confidence * 100)}%` : ''}
                         </Tag>
                       ))}
                     </Space>
                   )}
-                  <Space size={4} wrap>
-                    {draftAiAttrs.length > 0
-                      ? draftAiAttrs.map(attr => (
-                        <Tag key={`${attr.attrKey}:${attr.attrValue}`}>
-                          {attr.attrKey}: {attr.attrValue}
-                        </Tag>
-                      ))
-                      : <Tag>沿用采集参数</Tag>}
-                  </Space>
                   {draftSuggestion.warnings.length > 0 && (
                     <Space size={4} wrap>
                       {draftSuggestion.warnings.map(warning => (
@@ -811,7 +696,7 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
               type="success"
               showIcon
               style={{ marginBottom: 16 }}
-              title="商品准备完成"
+              title="上架数据已生成"
               description={(
                 <Space size={4} wrap>
                   <Tag>主图 {draftPrepared.summary.headImageCount}</Tag>
@@ -822,10 +707,28 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
                   <Tag color={draftPrepared.summary.listing ? 'blue' : 'default'}>
                     {draftPrepared.summary.listing ? '创建后提审' : '草稿箱'}
                   </Tag>
+                  {draftPrepared.warnings.length > 0 && (
+                    <Tag color="orange">参数复核 {draftPrepared.warnings.length}</Tag>
+                  )}
                 </Space>
               )}
             />
           )}
+          {draftPrepared?.warnings.length ? (
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginBottom: 16 }}
+              title="商品参数已按微信类目规则补齐"
+              description={(
+                <Space size={4} wrap>
+                  {draftPrepared.warnings.map(warning => (
+                    <Tag key={warning} color="orange">{warning}</Tag>
+                  ))}
+                </Space>
+              )}
+            />
+          ) : null}
           {draftSubmittedResult && (
             <Alert
               type="success"
@@ -835,26 +738,8 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
               description={`商品 ID：${draftSubmittedResult.productId}`}
             />
           )}
-          <Form.Item
-            name="expressTemplateId"
-            label="运费模板 ID"
-            extra="不填写时不传 express_info，由微信小店接口按店铺规则处理。"
-          >
-            <Input allowClear placeholder="47428464001" />
-          </Form.Item>
-          <Form.Item
-            name="brandId"
-            label="品牌 ID"
-            extra="默认 2100000000 表示无品牌。"
-          >
+          <Form.Item name="brandId" label="品牌 ID" extra="默认 2100000000 表示无品牌。">
             <Input allowClear placeholder="2100000000" />
-          </Form.Item>
-          <Form.Item
-            name="defaultStockNum"
-            label="默认库存"
-            rules={[{ required: true, message: '请输入默认库存' }]}
-          >
-            <InputNumber min={0} precision={0} style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item
             name="autoListing"

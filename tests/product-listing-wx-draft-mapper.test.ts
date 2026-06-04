@@ -97,6 +97,7 @@ test('maps a collected Taobao listing to a WeChat add-product draft request', ()
   const request = mapCollectedListingToWxAddProductRequest(listing, {
     catIds: ['10000111', '10000113', '6091'],
     expressTemplateId: '47428464001',
+    afterSaleAddressId: '123456',
     brandId: '2100000000',
     defaultStockNum: 88,
     autoListing: false,
@@ -122,8 +123,9 @@ test('maps a collected Taobao listing to a WeChat add-product draft request', ()
     { attr_key: '型号', attr_value: '1' },
   ]);
   assert.deepEqual(request.express_info, { template_id: '47428464001' });
+  assert.deepEqual(request.after_sale_info, { after_sale_address_id: 123456 });
   assert.equal(request.brand_id, '2100000000');
-  assert.deepEqual(request.extra_service, { is_open_cod: 0 });
+  assert.deepEqual(request.extra_service, { is_open_cod: 0, seven_day_return: 1, freight_insurance: 0 });
   assert.equal(request.listing, 0);
   assert.deepEqual(request.skus[0], {
     thumb_img: 'https://mmecimage.cn/p/uploaded-5.jpg',
@@ -160,7 +162,8 @@ test('builds one default SKU when the collected listing has no SKU matrix', () =
 
   const request = mapCollectedListingToWxAddProductRequest(listing, {
     catIds: ['10000111', '10000113', '6091'],
-    defaultStockNum: 25,
+    expressTemplateId: '47428464001',
+    afterSaleAddressId: '123456',
     autoListing: true,
     uploadedImages: imageMap,
   });
@@ -169,7 +172,7 @@ test('builds one default SKU when the collected listing has no SKU matrix', () =
   assert.deepEqual(request.skus, [{
     thumb_img: 'https://mmecimage.cn/p/uploaded-0.jpg',
     sale_price: 1280,
-    stock_num: 25,
+    stock_num: 999,
     sku_code: 'taobao-1010211244888-default',
     sku_attrs: [],
     sku_deliver_info: { stock_type: 0 },
@@ -182,6 +185,8 @@ test('uses AI-normalized attributes when they are supplied for the WeChat draft'
 
   const request = mapCollectedListingToWxAddProductRequest(listing, {
     catIds: ['10000111', '10000113', '6091'],
+    expressTemplateId: '47428464001',
+    afterSaleAddressId: '123456',
     attrs: [
       { attrKey: ' 型号 ', attrValue: ' KPW-1 ' },
       { attrKey: '', attrValue: 'ignored' },
@@ -198,6 +203,8 @@ test('accepts a four-level WeChat leaf category path when preparing a draft requ
 
   const request = mapCollectedListingToWxAddProductRequest(listing, {
     catIds: ['10000215', '10000218', '10000603', '546890'],
+    expressTemplateId: '47428464001',
+    afterSaleAddressId: '123456',
     uploadedImages: imageMap,
   });
 
@@ -216,6 +223,8 @@ test('rejects listings that cannot satisfy WeChat add-product minimum fields', (
   assert.throws(
     () => mapCollectedListingToWxAddProductRequest(listing, {
       catIds: ['10000111', '10000113', '6091'],
+      expressTemplateId: '47428464001',
+      afterSaleAddressId: '123456',
       defaultStockNum: 10,
       uploadedImages: imageMap,
     }),
@@ -225,8 +234,30 @@ test('rejects listings that cannot satisfy WeChat add-product minimum fields', (
   assert.throws(
     () => mapCollectedListingToWxAddProductRequest(sampleListing(), {
       catIds: ['6091'],
+      expressTemplateId: '47428464001',
+      afterSaleAddressId: '123456',
       uploadedImages: imageMap,
     }),
     /请输入完整的微信小店类目路径 ID/,
+  );
+
+  assert.throws(
+    () => mapCollectedListingToWxAddProductRequest(sampleListing(), {
+      catIds: ['10000111', '10000113', '6091'],
+      expressTemplateId: '',
+      afterSaleAddressId: '123456',
+      uploadedImages: imageMap,
+    }),
+    /运费模板 ID 不能为空/,
+  );
+
+  assert.throws(
+    () => mapCollectedListingToWxAddProductRequest(sampleListing(), {
+      catIds: ['10000111', '10000113', '6091'],
+      expressTemplateId: '47428464001',
+      afterSaleAddressId: '',
+      uploadedImages: imageMap,
+    }),
+    /售后地址 ID 不能为空/,
   );
 });

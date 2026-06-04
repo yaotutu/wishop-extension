@@ -53,9 +53,12 @@ import type {
   ViolationMatch,
   ViolationScanResult,
   SubmitPreparedWxProductDraftInput,
+  SyncWxCategoryProductRulesInput,
   WxProductDraftPrepareResult,
   WxProductDraftSuggestionResult,
   WxProductDraftCreationResult,
+  SyncWxCategoryProductRulesResult,
+  WxCategoryProductRuleCacheStatus,
 } from './types';
 import type { ActivityLogEntry } from './activity-log';
 import type { NotificationEntry, NotificationPreference } from './notification';
@@ -217,8 +220,6 @@ export const extensionApi = {
       invoke('productListingCollection:complete', sessionId, snapshot),
     fail: (sessionId: string, error: string): Promise<ProductListingCollectionSession> =>
       invoke('productListingCollection:fail', sessionId, error),
-    suggestWxDraft: (input: CreateWxProductDraftSuggestionInput): Promise<WxProductDraftSuggestionResult> =>
-      invoke('productListingCollection:suggestWxDraft', input),
     suggestWxCategoryFromFullList: (input: CreateWxProductDraftSuggestionInput): Promise<WxProductDraftSuggestionResult> =>
       invoke('productListingCollection:suggestWxCategoryFromFullList', input),
     prepareWxDraft: (input: CreateWxProductDraftPrepareInput): Promise<WxProductDraftPrepareResult> =>
@@ -233,6 +234,12 @@ export const extensionApi = {
       onRuntimeEvent('productListingCollection:failed', callback),
     onChallenge: (callback: (payload: { url: string; reason: string }) => void) =>
       onRuntimeEvent('productListingCollection:challenge', callback),
+  },
+  wxCategoryData: {
+    downloadProductRules: (input: SyncWxCategoryProductRulesInput): Promise<SyncWxCategoryProductRulesResult> =>
+      invoke('wxCategoryData:downloadProductRules', input),
+    getProductRuleCacheStatus: (): Promise<WxCategoryProductRuleCacheStatus> =>
+      invoke('wxCategoryData:getProductRuleCacheStatus'),
   },
   shipping: {
     open: (input: CreateShippingSessionInput): Promise<ShippingSession> => invoke('shipping:open', input),
