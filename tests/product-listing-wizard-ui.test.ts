@@ -47,3 +47,11 @@ test('product listing page is a page-level wizard that ends at draft box creatio
   assert.doesNotMatch(pageSource, /autoListing: false/);
   assert.doesNotMatch(pageSource, /extensionApi\.drafts\.delete/);
 });
+
+test('product listing preview images retry Taobao CDN images through local blob urls', () => {
+  assert.match(pageSource, /const ProductListingPreviewImage: React\.FC<ProductListingPreviewImageProps>/);
+  assert.match(pageSource, /fetch\(url, \{ credentials: 'include' \}\)/);
+  assert.match(pageSource, /URL\.createObjectURL\(blob\)/);
+  assert.match(pageSource, /URL\.revokeObjectURL\(objectUrlRef\.current\)/);
+  assert.match(pageSource, /<ProductListingPreviewImage[\s\S]*url=\{url\}[\s\S]*detail=\{detail\}/);
+});

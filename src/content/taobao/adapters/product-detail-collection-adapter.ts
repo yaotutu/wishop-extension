@@ -119,8 +119,12 @@ function normalizeImageUrl(rawUrl: string): string {
   const trimmed = rawUrl.trim();
   if (!trimmed) return '';
   const url = trimmed.startsWith('//') ? `https:${trimmed}` : trimmed.replace(/^http:\/\//i, 'https://');
+  /**
+   * 淘宝主图常见形态是 `O1CN...~crop,200,0,600,800~_!!seller.jpg`。
+   * `~crop...~` 是中间变换段，后面的 `_!!seller.jpg` 仍属于真实图片文件名，不能一起删掉。
+   */
   return url
-    .replace(/~(?:crop|tplv|resize|q\d+|webp)[^?#]*/i, '')
+    .replace(/~(?:crop|tplv|resize|q\d+|webp)[^~?#]*~/i, '')
     .replace(/_(?:\d+x\d+(?:q\d+)?|sum|webp)\.(jpg|jpeg|png|webp)(?=$|[?#])/i, '');
 }
 
@@ -243,24 +247,52 @@ function normalizeImageList(values: unknown[], limit: number): string[] {
   return uniqueStrings(values.map(value => typeof value === 'string' ? normalizeImageUrl(value) : ''), limit);
 }
 
+function isPlatformTpsImageUrl(url: string): boolean {
+  return /!!600000\d+-\d+-tps-\d+-\d+/iu.test(url);
+}
+
+function isNonProductDetailImageUrl(url: string): boolean {
+  return isPlatformTpsImageUrl(url);
+}
+
+function isNonProductDetailImageAsset(asset: TaobaoProductImageAsset): boolean {
+  if (isNonProductDetailImageUrl(asset.normalizedUrl)) return true;
+  if (asset.flags?.includes('platformPriceDescription')) return true;
+  if (
+    asset.naturalWidth !== undefined
+    && asset.naturalHeight !== undefined
+    && asset.naturalWidth <= 120
+    && asset.naturalHeight <= 120
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function normalizeDetailContent(input: BuildTaobaoProductSnapshotInput): TaobaoProductDetailContent {
   if (input.detailContent) {
     return {
       text: normalizeText(input.detailContent.text),
       source: input.detailContent.source,
-      images: uniqueImageAssets(input.detailContent.images.map(asset => ({
-        ...asset,
-        normalizedUrl: normalizeImageUrl(asset.normalizedUrl || asset.url),
-        url: asset.url || asset.normalizedUrl,
-        role: asset.role || 'detail',
-        source: asset.source || 'detailDom',
-        flags: asset.flags || [],
-      })), 120),
+      images: uniqueImageAssets(input.detailContent.images
+        .map(asset => {
+          const rawUrl = asset.url || asset.normalizedUrl;
+          return {
+            ...asset,
+            normalizedUrl: normalizeImageUrl(rawUrl) || normalizeImageUrl(asset.normalizedUrl),
+            url: rawUrl,
+            role: asset.role || 'detail',
+            source: asset.source || 'detailDom',
+            flags: asset.flags || [],
+          };
+        })
+        .filter(asset => !isNonProductDetailImageAsset(asset)), 120),
     };
   }
   const images = (input.detailImages || [])
     .map(url => imageAsset(url, 'detail', 'detailDom'))
-    .filter((asset): asset is TaobaoProductImageAsset => Boolean(asset));
+    .filter((asset): asset is TaobaoProductImageAsset => Boolean(asset))
+    .filter(asset => !isNonProductDetailImageAsset(asset));
   return {
     text: '',
     source: images.length > 0 ? 'detailDom' : 'none',
@@ -282,7 +314,10 @@ function readProductImages(root: ParentNode): { mainImages: string[]; detailImag
     ))
     .filter(imageLooksLikeProduct);
   const mainImages = uniqueStrings([...metaImages, ...allImages], 12);
-  const detailImages = uniqueStrings(allImages.filter(url => !mainImages.includes(url)), 40);
+  const detailImages = uniqueStrings(
+    allImages.filter(url => !mainImages.includes(url) && !isNonProductDetailImageUrl(url)),
+    40,
+  );
   return { mainImages, detailImages };
 }
 
@@ -446,15 +481,23 @@ function readDetailTextFromPageModel(pageModel: unknown, group: 'sales' | 'deliv
   return getString(getRecord(components, 'deliveryVO'), 'agingDesc');
 }
 
-function readMainImagesFromPageModel(pageModel: unknown): string[] {
+function readMainImageUrlsFromPageModel(pageModel: unknown): string[] {
   const item = getRecord(pageModel, 'item');
   const headImages = getArray(getRecord(getRecord(pageModel, 'componentsVO'), 'headImageVO'), 'images');
   const itemImages = getArray(item, 'images');
-  return normalizeImageList([...itemImages, ...headImages], 20);
+  return uniqueStrings(
+    [...itemImages, ...headImages]
+      .map(value => typeof value === 'string' ? value.trim() : ''),
+    20,
+  );
+}
+
+function readMainImagesFromPageModel(pageModel: unknown): string[] {
+  return normalizeImageList(readMainImageUrlsFromPageModel(pageModel), 20);
 }
 
 function readMainImageAssetsFromPageModel(pageModel: unknown): TaobaoProductImageAsset[] {
-  return readMainImagesFromPageModel(pageModel)
+  return readMainImageUrlsFromPageModel(pageModel)
     .map(url => imageAsset(url, 'main', 'pageModel'))
     .filter((asset): asset is TaobaoProductImageAsset => Boolean(asset));
 }

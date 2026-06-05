@@ -23,8 +23,12 @@ function normalizeImageUrl(rawUrl: string): string {
   const trimmed = rawUrl.trim();
   if (!trimmed) return '';
   const url = trimmed.startsWith('//') ? `https:${trimmed}` : trimmed.replace(/^http:\/\//i, 'https://');
+  /**
+   * 淘宝 `~crop...~_!!seller.jpg` 里的 `_!!seller.jpg` 是真实文件名，
+   * 只移除中间变换段，不能把后半截图片名一起删掉。
+   */
   return url
-    .replace(/~(?:crop|tplv|resize|q\d+|webp)[^?#]*/i, '')
+    .replace(/~(?:crop|tplv|resize|q\d+|webp)[^~?#]*~/i, '')
     .replace(/_(?:\d+x\d+(?:q\d+)?|sum|webp)\.(jpg|jpeg|png|webp)(?=$|[?#])/i, '');
 }
 

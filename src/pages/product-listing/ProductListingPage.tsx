@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircleOutlined, ImportOutlined, RobotOutlined } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -80,6 +80,13 @@ const detailImageGridStyle: React.CSSProperties = {
   gap: 8,
 };
 
+const previewImageTileStyle: React.CSSProperties = {
+  width: '100%',
+  overflow: 'hidden',
+  background: '#f6f8fa',
+  borderRadius: 4,
+};
+
 const actionBarStyle: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'space-between',
@@ -137,6 +144,71 @@ function normalizedCategoryText(suggestion: WxProductDraftSuggestionResult | nul
   return suggestion.categoryPath?.join(' / ') || suggestion.catIds.join(' / ') || '-';
 }
 
+interface ProductListingPreviewImageProps {
+  url: string;
+  alt: string;
+  detail?: boolean;
+}
+
+const ProductListingPreviewImage: React.FC<ProductListingPreviewImageProps> = ({ url, alt, detail = false }) => {
+  const objectUrlRef = useRef<string | null>(null);
+  const fallbackRequestedRef = useRef(false);
+  const [displaySrc, setDisplaySrc] = useState(url);
+  const [failed, setFailed] = useState(false);
+  const height = detail ? 128 : 72;
+
+  useEffect(() => {
+    fallbackRequestedRef.current = false;
+    setDisplaySrc(url);
+    setFailed(false);
+    return () => {
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
+    };
+  }, [url]);
+
+  const handleImageError = useCallback(async () => {
+    if (fallbackRequestedRef.current) {
+      setFailed(true);
+      return;
+    }
+    fallbackRequestedRef.current = true;
+
+    try {
+      const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      if (!blob.type.startsWith('image/')) throw new Error('响应不是图片');
+
+      const objectUrl = URL.createObjectURL(blob);
+      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = objectUrl;
+      setDisplaySrc(objectUrl);
+      setFailed(false);
+    } catch {
+      setFailed(true);
+    }
+  }, [url]);
+
+  if (failed) {
+    return <div aria-label={alt} style={{ ...previewImageTileStyle, height }} />;
+  }
+
+  return (
+    <Image
+      src={displaySrc}
+      width="100%"
+      height={height}
+      alt={alt}
+      loading="lazy"
+      onError={handleImageError}
+      style={{ objectFit: 'cover', background: '#f6f8fa', borderRadius: 4 }}
+    />
+  );
+};
+
 function renderImageGroup(urls: string[], alt: string, detail = false): React.ReactNode {
   if (urls.length === 0) {
     return <div style={{ color: '#9ca3af', fontSize: 13, padding: '12px 0' }}>暂无图片</div>;
@@ -145,13 +217,11 @@ function renderImageGroup(urls: string[], alt: string, detail = false): React.Re
     <Image.PreviewGroup>
       <div style={detail ? detailImageGridStyle : imageGridStyle}>
         {urls.map((url, index) => (
-          <Image
+          <ProductListingPreviewImage
             key={`${url}:${index}`}
-            src={url}
-            width="100%"
-            height={detail ? 128 : 72}
+            url={url}
             alt={alt}
-            styles={{ root: { objectFit: 'cover', background: '#f6f8fa', borderRadius: 4 } }}
+            detail={detail}
           />
         ))}
       </div>

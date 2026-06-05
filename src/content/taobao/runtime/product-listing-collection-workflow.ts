@@ -62,6 +62,21 @@ function shouldUseFallbackImageAssets(snapshot: TaobaoProductSnapshot): boolean 
     || snapshot.images.detail.length === 0;
 }
 
+function isTaobaoPlatformTpsImageUrl(url: string): boolean {
+  return /!!600000\d+-\d+-tps-\d+-\d+/iu.test(url);
+}
+
+function shouldKeepMergedImageAsset(asset: TaobaoProductSnapshot['images']['assets'][number]): boolean {
+  if (!asset.normalizedUrl) return false;
+  /**
+   * document fallback 可能扫到淘宝平台自己的说明图、角标和保障图。
+   * 这些图片的 seller 段通常是 `!!600000...-tps-宽-高`，不是商家的商品素材。
+   */
+  if (isTaobaoPlatformTpsImageUrl(asset.normalizedUrl)) return false;
+  if (asset.flags?.includes('platformPriceDescription')) return false;
+  return true;
+}
+
 function mergeImageAssets(
   primary: TaobaoProductSnapshot['images']['assets'],
   fallback: TaobaoProductSnapshot['images']['assets'],
@@ -69,7 +84,7 @@ function mergeImageAssets(
   const seen = new Set<string>();
   const merged: TaobaoProductSnapshot['images']['assets'] = [];
   for (const asset of [...primary, ...fallback]) {
-    if (!asset.normalizedUrl || seen.has(asset.normalizedUrl)) continue;
+    if (!shouldKeepMergedImageAsset(asset) || seen.has(asset.normalizedUrl)) continue;
     seen.add(asset.normalizedUrl);
     merged.push(asset);
   }

@@ -333,13 +333,14 @@ test('reads Taobao 2025 detail category id from log params when category name is
 });
 
 test('normalizes Taobao cropped image urls before rendering previews', () => {
+  const croppedMainUrl = 'https://img.alicdn.com/imgextra/i3/2208240310997/O1CN013kFxXl1JEfb4wWNBH~crop,200,0,600,800~_!!2208240310997.jpg';
   const snapshot = buildTaobaoProductSnapshotFromPageModel({
     pageModel: {
       ...pageModel,
       item: {
         ...pageModel.item,
         images: [
-          'https://gw.alicdn.com/bao/uploaded/i1/221/O1CN.png~crop,3,0,749,749~_!!221.png',
+          croppedMainUrl,
           'https://img.alicdn.com/imgextra/i1/221/O1CN.jpg_120x120q90.jpg',
         ],
       },
@@ -349,9 +350,87 @@ test('normalizes Taobao cropped image urls before rendering previews', () => {
   });
 
   assert.deepEqual(snapshot.images.main, [
-    'https://gw.alicdn.com/bao/uploaded/i1/221/O1CN.png',
+    'https://img.alicdn.com/imgextra/i3/2208240310997/O1CN013kFxXl1JEfb4wWNBH_!!2208240310997.jpg',
     'https://img.alicdn.com/imgextra/i1/221/O1CN.jpg',
   ]);
+  assert.equal(snapshot.images.assets[0].url, croppedMainUrl);
+  assert.equal(
+    snapshot.images.assets[0].normalizedUrl,
+    'https://img.alicdn.com/imgextra/i3/2208240310997/O1CN013kFxXl1JEfb4wWNBH_!!2208240310997.jpg',
+  );
+});
+
+test('filters non-product detail images and keeps valid Taobao detail filenames', () => {
+  const croppedDetailUrl = 'https://img.alicdn.com/imgextra/i4/2208240310997/O1CN01validDetail~crop,0,0,750,1000~_!!2208240310997.jpg';
+  const snapshot = buildTaobaoProductSnapshotFromPageModel({
+    pageModel,
+    url: 'https://item.taobao.com/item.htm?id=1010211244888',
+    detailContent: {
+      text: '',
+      source: 'detailDom',
+      images: [
+        {
+          url: 'https://gw.alicdn.com/imgextra/i2/O1CN010DB1Un24kXOjdGhG3_!!6000000007429-0-tps-84-82.jpg',
+          normalizedUrl: 'https://gw.alicdn.com/imgextra/i2/O1CN010DB1Un24kXOjdGhG3_!!6000000007429-0-tps-84-82.jpg',
+          role: 'detail',
+          source: 'detailDom',
+          naturalWidth: 84,
+          naturalHeight: 82,
+          flags: [],
+        },
+        {
+          url: 'https://img.alicdn.com/imgextra/i3/O1CN01XU1Y2d1Sk7fIMOkeU_!!6000000002284-2-tps-1125-1446.png',
+          normalizedUrl: 'https://img.alicdn.com/imgextra/i3/O1CN01XU1Y2d1Sk7fIMOkeU_!!6000000002284-2-tps-1125-1446.png',
+          role: 'detail',
+          source: 'detailDom',
+          naturalWidth: 1125,
+          naturalHeight: 1446,
+          flags: ['platformPriceDescription'],
+        },
+        {
+          url: 'https://img.alicdn.com/imgextra/i2/O1CN012pqGiT1gp4XhKkkRs_!!6000000004190-2-tps-96-96.png',
+          normalizedUrl: 'https://img.alicdn.com/imgextra/i2/O1CN012pqGiT1gp4XhKkkRs_!!6000000004190-2-tps-96-96.png',
+          role: 'detail',
+          source: 'detailDom',
+          flags: [],
+        },
+        {
+          url: croppedDetailUrl,
+          normalizedUrl: 'https://img.alicdn.com/imgextra/i4/2208240310997/O1CN01validDetail',
+          role: 'detail',
+          source: 'detailDom',
+          naturalWidth: 750,
+          naturalHeight: 1000,
+          flags: [],
+        },
+      ],
+    },
+    collectedAt: 1700000000000,
+  });
+
+  assert.deepEqual(snapshot.images.detail, [
+    'https://img.alicdn.com/imgextra/i4/2208240310997/O1CN01validDetail_!!2208240310997.jpg',
+  ]);
+  assert.equal(snapshot.images.assets.some(asset => asset.normalizedUrl.includes('tps-84-82')), false);
+  assert.equal(snapshot.images.assets.some(asset => asset.normalizedUrl.includes('6000000002284-2-tps')), false);
+  assert.equal(snapshot.images.assets.some(asset => asset.normalizedUrl.includes('6000000004190-2-tps')), false);
+});
+
+test('filters Taobao platform TPS assets from document fallback detail images', () => {
+  const snapshot = buildTaobaoProductSnapshotFromPageModel({
+    pageModel,
+    url: 'https://item.taobao.com/item.htm?id=1010211244888',
+    detailImages: [
+      'https://img.alicdn.com/imgextra/i2/2200619642876/O1CN01A3eq5W1X7GDS9za2L_!!2200619642876.png',
+      'https://img.alicdn.com/imgextra/i2/O1CN012pqGiT1gp4XhKkkRs_!!6000000004190-2-tps-96-96.png',
+    ],
+    collectedAt: 1700000000000,
+  });
+
+  assert.deepEqual(snapshot.images.detail, [
+    'https://img.alicdn.com/imgextra/i2/2200619642876/O1CN01A3eq5W1X7GDS9za2L_!!2200619642876.png',
+  ]);
+  assert.equal(snapshot.images.assets.some(asset => asset.normalizedUrl.includes('6000000004190-2-tps')), false);
 });
 
 test('falls back to DOM snapshot when page-world collection times out', async () => {
@@ -408,4 +487,40 @@ test('does not merge document fallback image assets when page model assets are c
 
   assert.equal(snapshot.images.assets.some(asset => asset.source === 'documentDom'), false);
   assert.equal(snapshot.images.assets.some(asset => asset.normalizedUrl.includes('decorative-icon')), false);
+});
+
+test('filters Taobao platform fallback assets during page-world fallback merge', async () => {
+  const fallback = buildTaobaoProductSnapshotFromPageModel({
+    pageModel,
+    url: 'https://item.taobao.com/item.htm?id=1010211244888',
+    detailContent: { text: '', images: [], source: 'none' },
+    collectedAt: 1700000000000,
+  });
+  fallback.images.assets = [
+    {
+      url: 'https://img.alicdn.com/imgextra/i2/2200619642876/O1CN01A3eq5W1X7GDS9za2L_!!2200619642876.png',
+      normalizedUrl: 'https://img.alicdn.com/imgextra/i2/2200619642876/O1CN01A3eq5W1X7GDS9za2L_!!2200619642876.png',
+      role: 'fallback',
+      source: 'documentDom',
+      flags: [],
+    },
+    {
+      url: 'https://img.alicdn.com/imgextra/i2/O1CN012pqGiT1gp4XhKkkRs_!!6000000004190-2-tps-96-96.png',
+      normalizedUrl: 'https://img.alicdn.com/imgextra/i2/O1CN012pqGiT1gp4XhKkkRs_!!6000000004190-2-tps-96-96.png',
+      role: 'fallback',
+      source: 'documentDom',
+      flags: [],
+    },
+  ];
+
+  const snapshot = await collectTaobaoProductSnapshotFromSources(
+    fallback,
+    async () => ({
+      pageModel,
+      detailContent: { text: '', source: 'none', images: [] },
+    }),
+  );
+
+  assert.equal(snapshot.images.assets.some(asset => asset.normalizedUrl.includes('2200619642876')), true);
+  assert.equal(snapshot.images.assets.some(asset => asset.normalizedUrl.includes('6000000004190-2-tps')), false);
 });
