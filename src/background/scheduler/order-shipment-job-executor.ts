@@ -8,6 +8,7 @@ import { addScheduledJob, getScheduledJob, getScheduledJobs, updateScheduledJob 
 import { getAppSettings } from '../store/settings-repository';
 import { getOrdersClient } from '../wxshop/client-registry';
 import { registerScheduledJobExecutor } from './scheduler-center';
+import { createCancelledScheduledJobResult } from './scheduled-job-run-result';
 import {
   buildShipmentCheckDispatchPlan,
   selectShipmentCheckCandidates,
@@ -139,8 +140,9 @@ export async function ensureOrderShipmentCheckScheduledJob(): Promise<ScheduledJ
 }
 
 export function registerOrderShipmentScheduledJobs(): void {
-  registerScheduledJobExecutor('orders.checkShipmentStatus', async ({ accountId }) => {
+  registerScheduledJobExecutor('orders.checkShipmentStatus', async ({ accountId, signal }) => {
     if (!accountId) throw new Error('缺少账号 ID');
+    if (signal.aborted) return createCancelledScheduledJobResult();
     const settings = normalizeShipmentCheckSettings((await getAppSettings()).shipmentCheck);
     if (!settings.enabled) {
       return { listed: 0, status: 'skipped' as const, message: null, error: '发货状态检测已关闭', completed: false };
@@ -150,6 +152,8 @@ export function registerOrderShipmentScheduledJobs(): void {
       fetchPendingShipmentOrders(accountId),
       getOrderAssociations(accountId),
     ]);
+    if (signal.aborted) return createCancelledScheduledJobResult();
+
     const associationsByOrderId = Object.fromEntries(associations.map(association => [association.orderId, association]));
     const candidates = selectShipmentCheckCandidates({
       accountId,
@@ -160,6 +164,7 @@ export function registerOrderShipmentScheduledJobs(): void {
       activeKeys: getActivePurchaseLookupKeys(),
     });
     const plan = buildShipmentCheckDispatchPlan({ candidates, settings, now: Date.now() });
+    if (signal.aborted) return createCancelledScheduledJobResult();
     await scheduleDispatches(plan, settings);
 
     return {

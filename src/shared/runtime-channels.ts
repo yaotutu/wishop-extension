@@ -45,6 +45,7 @@ import type {
   ScheduledJobInput,
   ScheduledJobView,
   ScheduledJobRunNowResult,
+  ScheduledJobStopRunResult,
   ShippingSession,
   TaobaoRefundPrepareSnapshot,
   TaobaoRefundSession,
@@ -170,6 +171,7 @@ export interface RuntimeChannels {
   'scheduledJobs:update': { args: [jobId: string, patch: Partial<ScheduledJob>]; result: void };
   'scheduledJobs:remove': { args: [jobId: string]; result: void };
   'scheduledJobs:runNow': { args: [jobId: string]; result: ScheduledJobRunNowResult };
+  'scheduledJobs:stopRun': { args: [jobId: string]; result: ScheduledJobStopRunResult };
 
   'productAudit:configGet': { args: [accountId: string]; result: ProductAuditTaskConfig };
   'productAudit:configSet': { args: [accountId: string, config: ProductAuditTaskConfig]; result: void };

@@ -106,6 +106,7 @@ const FEATURE_CHANNELS = {
   'scheduledJobs:update': null,
   'scheduledJobs:remove': null,
   'scheduledJobs:runNow': null,
+  'scheduledJobs:stopRun': null,
   'productAudit:run': 'productAudit',
   'productAudit:stop': 'productAudit',
   'productAudit:configGet': 'productAudit',

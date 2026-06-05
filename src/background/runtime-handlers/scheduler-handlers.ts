@@ -7,7 +7,9 @@ import {
 } from '../store/scheduled-job-repository';
 import {
   getScheduledJobNextRunAt,
+  getScheduledJobActiveRuns,
   isSupportedJobCron,
+  cancelScheduledJobRun,
   runScheduledJobNow,
   startScheduledJob,
   stopScheduledJob,
@@ -29,6 +31,7 @@ export function createSchedulerRuntimeHandlers(): RuntimeHandlerMap {
       return Promise.all(jobs.map(async job => ({
         ...job,
         nextRunAt: await getScheduledJobNextRunAt(job),
+        activeRuns: getScheduledJobActiveRuns(job.id),
       } satisfies ScheduledJobView)));
     },
     async 'scheduledJobs:add'(args) {
@@ -66,6 +69,9 @@ export function createSchedulerRuntimeHandlers(): RuntimeHandlerMap {
     },
     async 'scheduledJobs:runNow'(args) {
       return runScheduledJobNow(args[0] as string);
+    },
+    async 'scheduledJobs:stopRun'(args) {
+      return cancelScheduledJobRun(args[0] as string);
     },
   };
 }

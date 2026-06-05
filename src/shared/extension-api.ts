@@ -42,6 +42,7 @@ import type {
   ScheduledJobInput,
   ScheduledJobView,
   ScheduledJobRunNowResult,
+  ScheduledJobStopRunResult,
   ShippingSession,
   StatusRule,
   TaobaoWorkspaceRole,
@@ -300,6 +301,7 @@ export const extensionApi = {
     update: (jobId: string, patch: Partial<ScheduledJob>): Promise<void> => invoke('scheduledJobs:update', jobId, patch),
     remove: (jobId: string): Promise<void> => invoke('scheduledJobs:remove', jobId),
     runNow: (jobId: string): Promise<ScheduledJobRunNowResult> => invoke('scheduledJobs:runNow', jobId),
+    stopRun: (jobId: string): Promise<ScheduledJobStopRunResult> => invoke('scheduledJobs:stopRun', jobId),
   },
   violation: {
     getWords: (accountId: string): Promise<string[]> => invoke('violation:getWords', accountId),

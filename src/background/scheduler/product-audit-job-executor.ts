@@ -4,9 +4,10 @@ import { createScopedProductAuditLog } from '../store/log-repository';
 import { getProductAuditFailurePolicy, getStatusRules } from '../store/rule-repository';
 import { getListingClient } from '../wxshop/client-registry';
 import { registerScheduledJobExecutor } from './scheduler-center';
+import { SCHEDULED_JOB_CANCELLED_MESSAGE } from './scheduled-job-run-result';
 
 export function registerProductAuditScheduledJobs(): void {
-  registerScheduledJobExecutor('productAudit.submitDrafts', async ({ job, accountId, runId }) => {
+  registerScheduledJobExecutor('productAudit.submitDrafts', async ({ job, accountId, runId, signal }) => {
     const targetAccountId = accountId || (job.scope === 'account' ? job.accountId : undefined);
     if (!targetAccountId) throw new Error('缺少账号 ID');
 
@@ -32,17 +33,31 @@ export function registerProductAuditScheduledJobs(): void {
       addLog: createScopedProductAuditLog(targetAccountId),
       config: { ...configured, submitLimit },
       runId,
+      signal,
       accountId: targetAccountId,
       failureRules: failurePolicy.rules,
       defaultFailureAction: failurePolicy.defaultAction,
       statusRules: await getStatusRules(),
     });
+    const manuallyStopped = signal.aborted && result.stopped && result.reason === SCHEDULED_JOB_CANCELLED_MESSAGE;
 
     return {
       listed: result.submitted,
-      status: result.stopped || result.errors > 0 ? 'failed' as const : 'completed' as const,
-      message: result.stopped || result.errors > 0 ? null : result.reason || '商品提审任务执行完成',
-      error: result.stopped || result.errors > 0 ? result.reason || '商品提审任务执行失败' : null,
+      status: manuallyStopped
+        ? 'cancelled' as const
+        : result.stopped || result.errors > 0
+          ? 'failed' as const
+          : 'completed' as const,
+      message: manuallyStopped
+        ? result.reason || SCHEDULED_JOB_CANCELLED_MESSAGE
+        : result.stopped || result.errors > 0
+          ? null
+          : result.reason || '商品提审任务执行完成',
+      error: manuallyStopped
+        ? null
+        : result.stopped || result.errors > 0
+          ? result.reason || '商品提审任务执行失败'
+          : null,
       completed: false,
     };
   });

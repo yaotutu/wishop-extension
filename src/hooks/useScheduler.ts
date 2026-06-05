@@ -7,14 +7,20 @@ import type {
   GlobalScheduledJob,
   GlobalScheduledJobInput,
   ScheduledJob,
+  ScheduledJobActiveRun,
   ScheduledJobView,
   ProductAuditTaskConfig,
 } from '../shared/types';
 import { queryKeys } from '../query/query-keys';
 
+type ScheduledJobViewRuntimeFields = {
+  nextRunAt: number | null;
+  activeRuns: ScheduledJobActiveRun[];
+};
+
 export type ProductAuditScheduledJob =
-  | (AccountScheduledJob<ProductAuditTaskConfig> & { nextRunAt: number | null })
-  | (GlobalScheduledJob<ProductAuditTaskConfig> & { nextRunAt: number | null });
+  | (AccountScheduledJob<ProductAuditTaskConfig> & ScheduledJobViewRuntimeFields)
+  | (GlobalScheduledJob<ProductAuditTaskConfig> & ScheduledJobViewRuntimeFields);
 type AccountProductAuditScheduledJob = Extract<ProductAuditScheduledJob, { scope: 'account' }>;
 type GlobalProductAuditScheduledJob = Extract<ProductAuditScheduledJob, { scope: 'global' }>;
 type AccountProductAuditJobInput = AccountScheduledJobInput<ProductAuditTaskConfig>;
@@ -25,8 +31,15 @@ const defaultProductAuditConfig: ProductAuditTaskConfig = {
   submitLimit: 0,
 };
 
+function isProductAuditTaskConfig(payload: unknown): payload is ProductAuditTaskConfig {
+  // 调度列表返回的是通用 ScheduledJobView，商品提审页需要先确认 payload
+  // 真的符合商品提审配置结构，再把任务收窄为 ProductAuditScheduledJob。
+  const value = typeof payload === 'object' && payload !== null ? payload as ProductAuditTaskConfig : null;
+  return typeof value?.submitUnauditedDrafts === 'boolean' && typeof value.submitLimit === 'number';
+}
+
 function isProductAuditJob(job: ScheduledJobView): job is ProductAuditScheduledJob {
-  return job.jobType === 'productAudit.submitDrafts';
+  return job.jobType === 'productAudit.submitDrafts' && isProductAuditTaskConfig(job.payload);
 }
 
 function isAccountProductAuditJob(job: ProductAuditScheduledJob, accountId: string): job is AccountProductAuditScheduledJob {

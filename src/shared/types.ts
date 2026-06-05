@@ -13,8 +13,26 @@ export type ScheduledJobType =
   | 'orders.syncRecent'
   | 'orders.backfillHistory'
   | 'violation.scanProducts';
-export type ScheduledJobStatus = 'idle' | 'running' | 'waiting_user' | 'completed' | 'failed' | 'skipped';
+export type ScheduledJobStatus = 'idle' | 'running' | 'waiting_user' | 'completed' | 'failed' | 'skipped' | 'cancelled';
 export type ScheduledJobRunMode = 'recurring' | 'untilComplete';
+
+export interface ScheduledJobActiveRun {
+  jobId: string;
+  jobType: ScheduledJobType;
+  runId: string;
+  accountId?: string;
+  startedAt: number;
+  /**
+   * 用户点击停止后先标记 requestedStopAt，再由执行器通过 AbortSignal 协作退出。
+   * 这个字段只描述当前后台内存里的运行实例，不作为持久化任务状态来源。
+   */
+  requestedStopAt?: number;
+}
+
+export interface ScheduledJobStopRunResult {
+  stoppedRunCount: number;
+  message: string;
+}
 
 export interface ScheduledJobRunStats {
   lastRunDate: string;
@@ -74,6 +92,7 @@ export type ScheduledJobInput<TPayload = unknown> =
 
 export type ScheduledJobView<TPayload = unknown> = ScheduledJob<TPayload> & {
   nextRunAt: number | null;
+  activeRuns: ScheduledJobActiveRun[];
 };
 
 export interface ScheduledJobExecutorResult {

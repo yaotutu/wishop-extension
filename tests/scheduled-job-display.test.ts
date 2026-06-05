@@ -18,6 +18,7 @@ function makeJob(patch: Partial<ScheduledJobView> = {}): ScheduledJobView {
     completedAt: null,
     stats: { lastRunDate: '', todayRunCount: 0 },
     nextRunAt: null,
+    activeRuns: [],
     createdAt: 1700000000000,
     updatedAt: 1700000000000,
     ...patch,
