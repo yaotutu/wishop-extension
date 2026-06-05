@@ -4,9 +4,10 @@ import type { CollectedProductListing } from '../src/shared/types.ts';
 import { DEFAULT_APP_SETTINGS, type AppSettings } from '../src/shared/settings.ts';
 import type { SiliconFlowJsonCompletionInput } from '../src/background/ai/siliconflow-client.ts';
 import {
-  createWxProductDraftFromCollectedListing,
-  prepareWxProductDraftFromCollectedListing,
-  submitPreparedWxProductDraft,
+  createPreparedWxDraftBoxProduct,
+  createWxDraftBoxProductFromCollectedListing,
+  deleteCreatedWxDraftBoxProduct,
+  prepareWxDraftBoxProductFromCollectedListing,
 } from '../src/background/services/product-listing-wx-draft-service.ts';
 import type {
   WxShopAddProductRequest,
@@ -14,6 +15,7 @@ import type {
   WxShopListingClient,
   WxShopMerchantAddressDetail,
 } from '../src/background/wxshop/listing/types.ts';
+import type { WxDraftImageUploadSource } from '../src/background/services/product-listing-image-transfer-service.ts';
 import { sampleCollectedProductListing } from './product-listing-fixtures.ts';
 
 function sampleListing(): CollectedProductListing {
@@ -50,10 +52,21 @@ function aiSettings(): AppSettings {
   };
 }
 
+async function fakeDownloadImage(source: WxDraftImageUploadSource) {
+  return {
+    sourceUrl: source.sourceUrl,
+    fetchedUrl: source.candidates[0],
+    filename: 'wishop-test-image.jpg',
+    mimeType: 'image/jpeg',
+    data: new Uint8Array([1, 2, 3]).buffer,
+  };
+}
+
 interface FakeListingClientOptions {
   freightTemplateIds?: string[];
   addressIds?: string[];
   addressDetails?: Record<string, Partial<WxShopMerchantAddressDetail>>;
+  deletedProductIds?: string[];
 }
 
 function fakeListingClient(
@@ -111,7 +124,8 @@ function fakeListingClient(
     async getAuditQuota() {
       return { quota: 0, total: 0 };
     },
-    async deleteProduct() {
+    async deleteProduct(productId: string) {
+      options.deletedProductIds?.push(productId);
       return { errcode: 0, errmsg: 'ok' };
     },
   };
@@ -143,18 +157,18 @@ function fakeBlockedCategoryClient(uploaded: string[], addRequests: WxShopAddPro
   };
 }
 
-test('creates a WeChat product draft from a collected listing using uploaded WeChat images', async () => {
+test('creates a WeChat draft-box product from a collected listing using uploaded WeChat images', async () => {
   const uploaded: string[] = [];
   const addRequests: WxShopAddProductRequest[] = [];
 
-  const result = await createWxProductDraftFromCollectedListing({
+  const result = await createWxDraftBoxProductFromCollectedListing({
     accountId: 'account-1',
     listingId: 'taobao:1010211244888',
     catIds: ['10000111', '10000113', '6091'],
-    autoListing: false,
   }, {
     getListing: async () => sampleListing(),
     getClient: async () => fakeListingClient(uploaded, addRequests),
+    downloadImage: fakeDownloadImage,
     getCategoryProductRule: emptyCachedCategoryProductRule,
     recordStarted: async () => {},
     recordCompleted: async () => {},
@@ -169,6 +183,7 @@ test('creates a WeChat product draft from a collected listing using uploaded WeC
     'https://img.alicdn.com/white.jpg',
   ]);
   assert.equal(addRequests.length, 1);
+  assert.equal(addRequests[0].listing, 0);
   assert.equal(addRequests[0].head_imgs[0], 'https://mmecimage.cn/p/1.jpg');
   assert.equal(addRequests[0].desc_info?.imgs?.[0], 'https://mmecimage.cn/p/4.jpg');
   assert.equal(addRequests[0].skus[0].thumb_img, 'https://mmecimage.cn/p/5.jpg');
@@ -179,27 +194,27 @@ test('creates a WeChat product draft from a collected listing using uploaded WeC
     listingId: 'taobao:1010211244888',
     productId: '987654321',
     createTime: '2026-06-01 12:00:00',
-    autoListing: false,
+    listing: 0,
     uploadedImageCount: 5,
   });
 });
 
-test('prepares a WeChat product draft without submitting it to the add-product API', async () => {
+test('prepares a WeChat draft-box product without submitting it to the add-product API', async () => {
   const uploaded: string[] = [];
   const addRequests: WxShopAddProductRequest[] = [];
   const startedLogs: Record<string, unknown>[] = [];
   const completedLogs: Record<string, unknown>[] = [];
   const failedLogs: Record<string, unknown>[] = [];
 
-  const prepared = await prepareWxProductDraftFromCollectedListing({
+  const prepared = await prepareWxDraftBoxProductFromCollectedListing({
     accountId: 'account-1',
     listingId: 'taobao:1010211244888',
     catIds: ['10000111', '10000113', '6091'],
     attrs: [{ attrKey: '型号', attrValue: 'KPW-1' }],
-    autoListing: false,
   }, {
     getListing: async () => sampleListing(),
     getClient: async () => fakeListingClient(uploaded, addRequests),
+    downloadImage: fakeDownloadImage,
     getCategoryProductRule: emptyCachedCategoryProductRule,
     recordStarted: async input => { startedLogs.push(input); },
     recordCompleted: async input => { completedLogs.push(input); },
@@ -245,13 +260,14 @@ test('records a failed prepare log with the failed image index when image upload
   const failedLogs: Record<string, unknown>[] = [];
 
   await assert.rejects(
-    () => prepareWxProductDraftFromCollectedListing({
+    () => prepareWxDraftBoxProductFromCollectedListing({
       accountId: 'account-1',
       listingId: 'taobao:1010211244888',
       catIds: ['10000111', '10000113', '6091'],
     }, {
       getListing: async () => sampleListing(),
       getClient: async () => fakeFailingUploadClient(uploaded, addRequests, 2),
+      downloadImage: fakeDownloadImage,
       getCategoryProductRule: emptyCachedCategoryProductRule,
       recordStarted: async () => {},
       recordCompleted: async () => {},
@@ -266,29 +282,30 @@ test('records a failed prepare log with the failed image index when image upload
   assert.deepEqual(failedLogs[0].error, { message: '第 2/5 张商品图片上传失败：图片服务拒绝上传' });
 });
 
-test('stops before image upload when WeChat category precheck fails', async () => {
+test('prepares preview data without running the WeChat category precheck', async () => {
   const uploaded: string[] = [];
   const addRequests: WxShopAddProductRequest[] = [];
   const failedLogs: Record<string, unknown>[] = [];
 
-  await assert.rejects(
-    () => prepareWxProductDraftFromCollectedListing({
-      accountId: 'account-1',
-      listingId: 'taobao:1010211244888',
-      catIds: ['10000111', '10000113', '6091'],
-    }, {
-      getListing: async () => sampleListing(),
-      getClient: async () => fakeBlockedCategoryClient(uploaded, addRequests),
-      recordStarted: async () => {},
-      recordCompleted: async () => {},
-      recordFailed: async input => { failedLogs.push(input); },
-    }),
-    /微信小店类目发品前校验未通过：无该类目权限，请申请类目后再发品；保证金余额不足类目保证金应缴，无法上架商品/,
-  );
+  const prepared = await prepareWxDraftBoxProductFromCollectedListing({
+    accountId: 'account-1',
+    listingId: 'taobao:1010211244888',
+    catIds: ['10000111', '10000113', '6091'],
+  }, {
+    getListing: async () => sampleListing(),
+    getClient: async () => fakeBlockedCategoryClient(uploaded, addRequests),
+    downloadImage: fakeDownloadImage,
+    getCategoryProductRule: emptyCachedCategoryProductRule,
+    recordStarted: async () => {},
+    recordCompleted: async () => {},
+    recordFailed: async input => { failedLogs.push(input); },
+  });
 
-  assert.deepEqual(uploaded, []);
+  assert.equal(prepared.request.cats_v2.at(-1)?.cat_id, '6091');
+  assert.equal(prepared.uploadedImageCount, 5);
+  assert.equal(uploaded.length, 5);
   assert.deepEqual(addRequests, []);
-  assert.equal(failedLogs.length, 1);
+  assert.equal(failedLogs.length, 0);
 });
 
 test('stops before image upload when the local WeChat category product rule cache is missing', async () => {
@@ -297,13 +314,14 @@ test('stops before image upload when the local WeChat category product rule cach
   const failedLogs: Record<string, unknown>[] = [];
 
   await assert.rejects(
-    () => prepareWxProductDraftFromCollectedListing({
+    () => prepareWxDraftBoxProductFromCollectedListing({
       accountId: 'account-1',
       listingId: 'taobao:1010211244888',
       catIds: ['10000111', '10000113', '6091'],
     }, {
       getListing: async () => sampleListing(),
       getClient: async () => fakeListingClient(uploaded, addRequests),
+      downloadImage: fakeDownloadImage,
       getCategoryProductRule: async () => null,
       recordStarted: async () => {},
       recordCompleted: async () => {},
@@ -326,13 +344,14 @@ test('fills required product attributes with AI and local WeChat category rules 
   const client = fakeListingClient(uploaded, addRequests);
   const aiCalls: SiliconFlowJsonCompletionInput[] = [];
 
-  const prepared = await prepareWxProductDraftFromCollectedListing({
+  const prepared = await prepareWxDraftBoxProductFromCollectedListing({
     accountId: 'account-1',
     listingId: 'taobao:1010211244888',
     catIds: ['10000111', '10000113', '6091'],
   }, {
     getListing: async () => sampleListing(),
     getClient: async () => client,
+    downloadImage: fakeDownloadImage,
     getCategoryProductRule: async catId => ({
       catId,
       productAttrs: [
@@ -402,13 +421,14 @@ test('rejects AI product attributes that do not satisfy local enum rules before 
   const addRequests: WxShopAddProductRequest[] = [];
 
   await assert.rejects(
-    () => prepareWxProductDraftFromCollectedListing({
+    () => prepareWxDraftBoxProductFromCollectedListing({
       accountId: 'account-1',
       listingId: 'taobao:1010211244888',
       catIds: ['10000111', '10000113', '6091'],
     }, {
       getListing: async () => sampleListing(),
       getClient: async () => fakeListingClient(uploaded, addRequests),
+      downloadImage: fakeDownloadImage,
       getCategoryProductRule: async catId => ({
         catId,
         productAttrs: [
@@ -432,16 +452,17 @@ test('rejects AI product attributes that do not satisfy local enum rules before 
   assert.deepEqual(addRequests, []);
 });
 
-test('submits a prepared WeChat product draft without re-uploading images', async () => {
+test('creates a prepared WeChat draft-box product without re-uploading images', async () => {
   const uploaded: string[] = [];
   const addRequests: WxShopAddProductRequest[] = [];
-  const prepared = await prepareWxProductDraftFromCollectedListing({
+  const prepared = await prepareWxDraftBoxProductFromCollectedListing({
     accountId: 'account-1',
     listingId: 'taobao:1010211244888',
     catIds: ['10000111', '10000113', '6091'],
   }, {
     getListing: async () => sampleListing(),
     getClient: async () => fakeListingClient(uploaded, addRequests),
+    downloadImage: fakeDownloadImage,
     getCategoryProductRule: emptyCachedCategoryProductRule,
     recordStarted: async () => {},
     recordCompleted: async () => {},
@@ -449,12 +470,11 @@ test('submits a prepared WeChat product draft without re-uploading images', asyn
   });
   uploaded.length = 0;
 
-  const result = await submitPreparedWxProductDraft({
+  const result = await createPreparedWxDraftBoxProduct({
     accountId: 'account-1',
     listingId: 'taobao:1010211244888',
     request: prepared.request,
     uploadedImageCount: prepared.uploadedImageCount,
-    autoListing: false,
   }, {
     getClient: async () => fakeListingClient(uploaded, addRequests),
     recordStarted: async () => {},
@@ -470,21 +490,88 @@ test('submits a prepared WeChat product draft without re-uploading images', asyn
     listingId: 'taobao:1010211244888',
     productId: '987654321',
     createTime: '2026-06-01 12:00:00',
-    autoListing: false,
+    listing: 0,
     uploadedImageCount: 5,
   });
+});
+
+test('skips the WeChat category precheck when creating a draft-box product', async () => {
+  const uploaded: string[] = [];
+  const addRequests: WxShopAddProductRequest[] = [];
+  const failedLogs: Record<string, unknown>[] = [];
+  const prepared = await prepareWxDraftBoxProductFromCollectedListing({
+    accountId: 'account-1',
+    listingId: 'taobao:1010211244888',
+    catIds: ['10000111', '10000113', '6091'],
+  }, {
+    getListing: async () => sampleListing(),
+    getClient: async () => fakeListingClient(uploaded, addRequests),
+    downloadImage: fakeDownloadImage,
+    getCategoryProductRule: emptyCachedCategoryProductRule,
+    recordStarted: async () => {},
+    recordCompleted: async () => {},
+    recordFailed: async () => {},
+  });
+  uploaded.length = 0;
+
+  const result = await createPreparedWxDraftBoxProduct({
+    accountId: 'account-1',
+    listingId: 'taobao:1010211244888',
+    request: prepared.request,
+    uploadedImageCount: prepared.uploadedImageCount,
+  }, {
+    getClient: async () => fakeBlockedCategoryClient(uploaded, addRequests),
+    recordStarted: async () => {},
+    recordCompleted: async () => {},
+    recordFailed: async input => { failedLogs.push(input); },
+  });
+
+  assert.deepEqual(uploaded, []);
+  assert.equal(addRequests.length, 1);
+  assert.equal(addRequests[0].listing, 0);
+  assert.equal(failedLogs.length, 0);
+  assert.equal(result.productId, '987654321');
+  assert.equal(result.listing, 0);
+});
+
+test('deletes the draft-box product created by the product listing test flow', async () => {
+  const deletedProductIds: string[] = [];
+  const completedLogs: Record<string, unknown>[] = [];
+
+  const result = await deleteCreatedWxDraftBoxProduct({
+    accountId: 'account-1',
+    listingId: 'taobao:1010211244888',
+    productId: '987654321',
+    productTitle: '测试商品',
+  }, {
+    getClient: async () => fakeListingClient([], [], { deletedProductIds }),
+    recordStarted: async () => {},
+    recordCompleted: async input => { completedLogs.push(input); },
+    recordFailed: async () => {},
+  });
+
+  assert.deepEqual(deletedProductIds, ['987654321']);
+  assert.deepEqual(result, {
+    accountId: 'account-1',
+    listingId: 'taobao:1010211244888',
+    productId: '987654321',
+    deleted: true,
+  });
+  assert.equal(completedLogs.length, 1);
+  assert.equal((completedLogs[0].metadata as Record<string, unknown>).submitMode, 'draftBoxCleanup');
 });
 
 test('fails before calling WeChat when the collected listing no longer exists', async () => {
   let clientRequested = false;
 
   await assert.rejects(
-    () => createWxProductDraftFromCollectedListing({
+    () => createWxDraftBoxProductFromCollectedListing({
       accountId: 'account-1',
       listingId: 'missing',
       catIds: ['10000111', '10000113', '6091'],
     }, {
       getListing: async () => null,
+      downloadImage: fakeDownloadImage,
       getClient: async () => {
         clientRequested = true;
         return fakeListingClient([], []);

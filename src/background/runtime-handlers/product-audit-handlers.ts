@@ -1,5 +1,6 @@
-import type { ProductAuditFailurePolicy, ProductAuditTaskConfig } from '../../shared/types';
+import type { ProductAuditCategoryPrecheckInput, ProductAuditFailurePolicy, ProductAuditTaskConfig } from '../../shared/types';
 import type { RuntimeHandlerMap } from '../router/runtime-router';
+import { precheckCategoryForProductAudit } from '../services/product-audit-precheck-service.ts';
 import { getProductAuditConfig, setProductAuditConfig } from '../store/product-audit-config-repository';
 import {
   getDefaultProductAuditFailurePolicy,
@@ -27,6 +28,9 @@ export function createProductAuditRuntimeHandlers(deps: ProductAuditHandlerDeps)
     async 'productAudit:stop'(args) {
       deps.stop(args[0] as string);
       return undefined;
+    },
+    async 'productAudit:precheckCategory'(args) {
+      return precheckCategoryForProductAudit(args[0] as ProductAuditCategoryPrecheckInput);
     },
     async 'productAudit:logsGet'(args) {
       return getProductAuditLogs(args[0] as string);

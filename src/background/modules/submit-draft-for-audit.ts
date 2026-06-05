@@ -1,11 +1,11 @@
-import type { DraftProduct, WxShopListingClient } from '../wxshop/listing/types';
+import type { DraftProduct, WxShopListingClient } from '../wxshop/listing/types.ts';
 import type {
   AddLogFn,
   ProductAuditFailureDefaultAction,
   ProductAuditFailureRule,
-} from '../../shared/types';
+} from '../../shared/types.ts';
 import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
-import { decideProductAuditFailure } from './product-audit-failure-policy';
+import { decideProductAuditFailure } from './product-audit-failure-policy.ts';
 
 export type SubmitDraftForAuditResultAction = 'success' | 'keepDraft' | 'deleteDraft' | 'stopTask' | 'skipped';
 

@@ -601,7 +601,9 @@ export interface WxProductDraftPreparedRequest {
   listing: 0 | 1;
 }
 
-export interface CreateWxProductDraftInput {
+export type WxProductDraftBoxPreparedRequest = WxProductDraftPreparedRequest & { listing: 0 };
+
+export interface CreateWxDraftBoxProductInput {
   accountId: string;
   listingId: string;
   catIds: string[];
@@ -609,35 +611,36 @@ export interface CreateWxProductDraftInput {
   afterSaleAddressId?: string;
   brandId?: string;
   defaultStockNum?: number;
-  autoListing?: boolean;
   attrs?: WxProductDraftAttribute[];
 }
 
-export type CreateWxProductDraftPrepareInput = CreateWxProductDraftInput;
+export type CreateWxDraftBoxProductPrepareInput = CreateWxDraftBoxProductInput;
 
-export interface WxProductDraftPrepareResult {
+interface WxProductDraftPrepareResultSummary {
+  title: string;
+  headImageCount: number;
+  detailImageCount: number;
+  skuCount: number;
+  attrCount: number;
+}
+
+export interface WxDraftBoxProductPrepareResult {
   accountId: string;
   listingId: string;
-  request: WxProductDraftPreparedRequest;
+  request: WxProductDraftBoxPreparedRequest;
   uploadedImageCount: number;
   preparedAt: number;
   warnings: string[];
-  summary: {
-    title: string;
-    headImageCount: number;
-    detailImageCount: number;
-    skuCount: number;
-    attrCount: number;
-    listing: boolean;
+  summary: WxProductDraftPrepareResultSummary & {
+    listing: false;
   };
 }
 
-export interface SubmitPreparedWxProductDraftInput {
+export interface CreatePreparedWxDraftBoxProductInput {
   accountId: string;
   listingId: string;
-  request: WxProductDraftPreparedRequest;
+  request: WxProductDraftBoxPreparedRequest;
   uploadedImageCount: number;
-  autoListing?: boolean;
 }
 
 export interface WxProductDraftCreationResult {
@@ -645,8 +648,24 @@ export interface WxProductDraftCreationResult {
   listingId: string;
   productId: string;
   createTime?: string;
-  autoListing: boolean;
+  listing: 0;
   uploadedImageCount: number;
+}
+
+export interface DeleteCreatedWxDraftBoxProductInput {
+  accountId: string;
+  listingId: string;
+  productId: string;
+  productTitle?: string;
+}
+
+export interface DeleteCreatedWxDraftBoxProductResult {
+  accountId: string;
+  listingId: string;
+  productId: string;
+  deleted: boolean;
+  errorCode?: number;
+  error?: string;
 }
 
 export interface CreateWxProductDraftSuggestionInput {
@@ -665,6 +684,19 @@ export interface WxProductDraftSuggestionResult {
   confidence: number;
   reason: string;
   warnings: string[];
+}
+
+export interface ProductAuditCategoryPrecheckInput {
+  accountId: string;
+  catId: string;
+}
+
+export interface ProductAuditCategoryPrecheckResult {
+  accountId: string;
+  catId: string;
+  allPass: boolean;
+  failReasons: string[];
+  checkedAt: number;
 }
 
 export type ProductListingCollectionSessionStatus =

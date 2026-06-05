@@ -1,4 +1,4 @@
-import type { WxShopListingClient } from '../wxshop/listing/types';
+import type { WxShopListingClient } from '../wxshop/listing/types.ts';
 import type {
   AddLogFn,
   ProductAuditFailureRule,
@@ -6,11 +6,11 @@ import type {
   ProductAuditTaskConfig,
   ProductAuditTaskResult,
   StatusRule,
-} from '../../shared/types';
+} from '../../shared/types.ts';
 import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
-import { streamDraftProducts } from './fetch-draft-products';
-import { deleteOne } from './delete-failed-products';
-import { submitDraftForAudit } from './submit-draft-for-audit';
+import { streamDraftProducts } from './fetch-draft-products.ts';
+import { deleteOne } from './delete-failed-products.ts';
+import { submitDraftForAudit } from './submit-draft-for-audit.ts';
 
 export interface RunProductAuditCycleInput {
   api: WxShopListingClient;

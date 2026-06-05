@@ -100,7 +100,6 @@ test('maps a collected Taobao listing to a WeChat add-product draft request', ()
     afterSaleAddressId: '123456',
     brandId: '2100000000',
     defaultStockNum: 88,
-    autoListing: false,
     uploadedImages: imageMap,
   });
 
@@ -164,11 +163,10 @@ test('builds one default SKU when the collected listing has no SKU matrix', () =
     catIds: ['10000111', '10000113', '6091'],
     expressTemplateId: '47428464001',
     afterSaleAddressId: '123456',
-    autoListing: true,
     uploadedImages: imageMap,
   });
 
-  assert.equal(request.listing, 1);
+  assert.equal(request.listing, 0);
   assert.deepEqual(request.skus, [{
     thumb_img: 'https://mmecimage.cn/p/uploaded-0.jpg',
     sale_price: 1280,

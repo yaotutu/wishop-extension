@@ -5,10 +5,13 @@ import type {
   Account,
   CollectedProductListing,
   Config,
+  CreatePreparedWxDraftBoxProductInput,
   CreateProductListingCollectionSessionInput,
-  CreateWxProductDraftPrepareInput,
+  CreateWxDraftBoxProductInput,
+  CreateWxDraftBoxProductPrepareInput,
   CreateWxProductDraftSuggestionInput,
-  CreateWxProductDraftInput,
+  DeleteCreatedWxDraftBoxProductInput,
+  DeleteCreatedWxDraftBoxProductResult,
   CreateShippingSessionInput,
   DeliveryCompanyOption,
   DraftProduct,
@@ -36,6 +39,8 @@ import type {
   ProductSourceItem,
   ProductQrcodeResult,
   ProductListingCollectionSession,
+  ProductAuditCategoryPrecheckInput,
+  ProductAuditCategoryPrecheckResult,
   ProductAuditFailurePolicy,
   ProductAuditTaskConfig,
   ProductAuditTaskResult,
@@ -56,9 +61,8 @@ import type {
   TaobaoProductSnapshot,
   ViolationMatch,
   ViolationScanResult,
-  SubmitPreparedWxProductDraftInput,
   SyncWxCategoryProductRulesInput,
-  WxProductDraftPrepareResult,
+  WxDraftBoxProductPrepareResult,
   WxProductDraftSuggestionResult,
   WxProductDraftCreationResult,
   SyncWxCategoryProductRulesResult,
@@ -137,9 +141,10 @@ export interface RuntimeChannels {
   'productListingCollection:complete': { args: [sessionId: string, snapshot: TaobaoProductSnapshot]; result: CollectedProductListing };
   'productListingCollection:fail': { args: [sessionId: string, error: string]; result: ProductListingCollectionSession };
   'productListingCollection:suggestWxCategoryFromFullList': { args: [input: CreateWxProductDraftSuggestionInput]; result: WxProductDraftSuggestionResult };
-  'productListingCollection:prepareWxDraft': { args: [input: CreateWxProductDraftPrepareInput]; result: WxProductDraftPrepareResult };
-  'productListingCollection:submitPreparedWxDraft': { args: [input: SubmitPreparedWxProductDraftInput]; result: WxProductDraftCreationResult };
-  'productListingCollection:createWxDraft': { args: [input: CreateWxProductDraftInput]; result: WxProductDraftCreationResult };
+  'productListingCollection:prepareWxDraftBoxProduct': { args: [input: CreateWxDraftBoxProductPrepareInput]; result: WxDraftBoxProductPrepareResult };
+  'productListingCollection:createPreparedWxDraftBoxProduct': { args: [input: CreatePreparedWxDraftBoxProductInput]; result: WxProductDraftCreationResult };
+  'productListingCollection:createWxDraftBoxProduct': { args: [input: CreateWxDraftBoxProductInput]; result: WxProductDraftCreationResult };
+  'productListingCollection:deleteCreatedWxDraftBoxProduct': { args: [input: DeleteCreatedWxDraftBoxProductInput]; result: DeleteCreatedWxDraftBoxProductResult };
 
   'wxCategoryData:downloadProductRules': { args: [input: SyncWxCategoryProductRulesInput]; result: SyncWxCategoryProductRulesResult };
   'wxCategoryData:getProductRuleCacheStatus': { args: []; result: WxCategoryProductRuleCacheStatus };
@@ -177,6 +182,7 @@ export interface RuntimeChannels {
   'productAudit:configSet': { args: [accountId: string, config: ProductAuditTaskConfig]; result: void };
   'productAudit:run': { args: [accountId: string, config: ProductAuditTaskConfig]; result: ProductAuditTaskResult };
   'productAudit:stop': { args: [accountId: string]; result: void };
+  'productAudit:precheckCategory': { args: [input: ProductAuditCategoryPrecheckInput]; result: ProductAuditCategoryPrecheckResult };
 
   'violation:getWords': { args: [accountId: string]; result: string[] };
   'violation:setWords': { args: [accountId: string, words: string[]]; result: void };

@@ -11,6 +11,7 @@ import {
   Image,
   Input,
   message,
+  Modal,
   Space,
   Steps,
   Table,
@@ -21,9 +22,10 @@ import { queryKeys } from '../../query/query-keys';
 import { extensionApi } from '../../shared/extension-api';
 import type {
   CollectedProductListing,
+  DeleteCreatedWxDraftBoxProductResult,
   ProductListingCollectionSession,
+  WxDraftBoxProductPrepareResult,
   WxProductDraftCreationResult,
-  WxProductDraftPrepareResult,
   WxProductDraftSuggestionResult,
 } from '../../shared/types';
 
@@ -211,29 +213,16 @@ function renderCategorySuggestion(suggestion: WxProductDraftSuggestionResult | n
   );
 }
 
-function buildDraftBoxPreparedResult(prepared: WxProductDraftPrepareResult): WxProductDraftPrepareResult {
-  return {
-    ...prepared,
-    request: {
-      ...prepared.request,
-      listing: DRAFT_BOX_LISTING_VALUE,
-    },
-    summary: {
-      ...prepared.summary,
-      listing: false,
-    },
-  };
-}
-
 const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, accountName }) => {
   const [form] = Form.useForm<{ url: string }>();
   const queryClient = useQueryClient();
   const [currentStep, setCurrentStep] = useState<ProductListingWizardStep>('input');
   const [activeSession, setActiveSession] = useState<ProductListingCollectionSession | null>(null);
   const [collectedListing, setCollectedListing] = useState<CollectedProductListing | null>(null);
-  const [draftPrepared, setDraftPrepared] = useState<WxProductDraftPrepareResult | null>(null);
+  const [draftPrepared, setDraftPrepared] = useState<WxDraftBoxProductPrepareResult | null>(null);
   const [draftSuggestion, setDraftSuggestion] = useState<WxProductDraftSuggestionResult | null>(null);
   const [draftSubmittedResult, setDraftSubmittedResult] = useState<WxProductDraftCreationResult | null>(null);
+  const [draftDeleteResult, setDraftDeleteResult] = useState<DeleteCreatedWxDraftBoxProductResult | null>(null);
   const [fullCategoryStatus, setFullCategoryStatus] = useState('');
 
   const activeCollectionUrl = activeSession?.url || '';
@@ -253,6 +242,7 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
     setDraftPrepared(null);
     setDraftSuggestion(null);
     setDraftSubmittedResult(null);
+    setDraftDeleteResult(null);
     setFullCategoryStatus('');
   }, [form]);
 
@@ -270,6 +260,7 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
       setDraftPrepared(null);
       setDraftSuggestion(null);
       setDraftSubmittedResult(null);
+      setDraftDeleteResult(null);
       setFullCategoryStatus('');
       message.success('已打开淘宝工作页采集商品');
     },
@@ -305,7 +296,7 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
   /**
    * “下一步”是正式上货路径：
    * 先让后台按当前账号做微信类目转换，再准备微信小店新增商品请求体。
-   * 上货管理只负责创建草稿箱商品，因此这里和提交阶段都强制 autoListing=false。
+   * 上货管理只负责创建草稿箱商品，因此这里调用 DraftBox 专用命令。
    */
   const generateDraftDataMutation = useMutation({
     onMutate: () => {
@@ -323,19 +314,19 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
         throw new Error('AI 返回的微信小店类目路径不完整，请重新生成');
       }
 
-      const prepared = await extensionApi.productListingCollection.prepareWxDraft({
+      const prepared = await extensionApi.productListingCollection.prepareWxDraftBoxProduct({
         accountId,
         listingId: collectedListing.id,
         catIds,
         brandId: DEFAULT_BRAND_ID,
-        autoListing: false,
       });
-      return { suggestion, prepared: buildDraftBoxPreparedResult(prepared), catIds };
+      return { suggestion, prepared, catIds };
     },
     onSuccess: ({ suggestion, prepared, catIds }) => {
       setDraftSuggestion(suggestion);
       setDraftPrepared(prepared);
       setDraftSubmittedResult(null);
+      setDraftDeleteResult(null);
       setCurrentStep('draftPreview');
       const categoryText = suggestion.categoryPath?.join(' / ') || catIds.join(' / ');
       setFullCategoryStatus(prepared.warnings.length > 0
@@ -350,10 +341,35 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
     },
   });
 
+  const showTestCompletionConfirm = useCallback((result: WxProductDraftCreationResult, productTitle: string) => {
+    Modal.confirm({
+      title: '测试完成',
+      content: `测试草稿已创建到微信小店草稿箱，商品 ID：${result.productId}。是否现在删除这个测试商品？`,
+      okText: '删除',
+      cancelText: '保留',
+      okButtonProps: { danger: true },
+      async onOk() {
+        const deleteResult = await extensionApi.productListingCollection.deleteCreatedWxDraftBoxProduct({
+          accountId: result.accountId,
+          listingId: result.listingId,
+          productId: result.productId,
+          productTitle,
+        });
+        if (!deleteResult.deleted) {
+          const detail = deleteResult.error || '测试商品删除失败';
+          message.error(detail);
+          throw new Error(detail);
+        }
+        setDraftDeleteResult(deleteResult);
+        message.success('测试商品已删除');
+      },
+    });
+  }, []);
+
   const submitPreparedDraftMutation = useMutation({
     mutationFn: () => {
       if (!draftPrepared) throw new Error('请先生成草稿箱数据');
-      return extensionApi.productListingCollection.submitPreparedWxDraft({
+      return extensionApi.productListingCollection.createPreparedWxDraftBoxProduct({
         accountId: draftPrepared.accountId,
         listingId: draftPrepared.listingId,
         request: {
@@ -361,13 +377,14 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
           listing: DRAFT_BOX_LISTING_VALUE,
         },
         uploadedImageCount: draftPrepared.uploadedImageCount,
-        autoListing: false,
       });
     },
     onSuccess: result => {
       setDraftSubmittedResult(result);
+      setDraftDeleteResult(null);
       setCurrentStep('completed');
       message.success(`微信小店草稿已创建：${result.productId}`);
+      showTestCompletionConfirm(result, draftPrepared?.request.title || result.productId);
     },
     onError: error => {
       const detail = error instanceof Error ? error.message : '提交微信小店草稿失败';
@@ -389,6 +406,7 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
       setDraftPrepared(null);
       setDraftSuggestion(null);
       setDraftSubmittedResult(null);
+      setDraftDeleteResult(null);
       setFullCategoryStatus('');
       message.success('商品采集完成');
     });
@@ -414,6 +432,7 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
     setDraftPrepared(null);
     setDraftSuggestion(null);
     setDraftSubmittedResult(null);
+    setDraftDeleteResult(null);
     setFullCategoryStatus('');
     await collectMutation.mutateAsync(url);
   };
@@ -520,7 +539,7 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
     );
   };
 
-  const renderDraftPreview = (prepared: WxProductDraftPrepareResult): React.ReactNode => {
+  const renderDraftPreview = (prepared: WxDraftBoxProductPrepareResult): React.ReactNode => {
     const request = prepared.request;
     const attrRows = (request.attrs || []).map((attr, index) => ({ ...attr, key: `${attr.attr_key}:${index}` }));
     const skuRows = request.skus.map((sku, index) => ({ ...sku, key: sku.sku_code || `${index}` }));
@@ -784,9 +803,18 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
               <Tag color="blue">商品 ID {draftSubmittedResult.productId}</Tag>
               <Tag>已上传图片 {draftSubmittedResult.uploadedImageCount}</Tag>
               <Tag>草稿箱</Tag>
+              {draftDeleteResult?.deleted && <Tag color="red">测试商品已删除</Tag>}
             </Space>
           )}
         />
+        {draftDeleteResult?.deleted && (
+          <Alert
+            type="info"
+            showIcon
+            title="测试商品已删除"
+            description={`已删除微信小店商品 ID：${draftDeleteResult.productId}`}
+          />
+        )}
         <Button type="primary" onClick={resetWizard}>继续上货</Button>
       </Space>
     );

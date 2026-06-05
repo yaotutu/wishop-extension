@@ -26,7 +26,6 @@ export interface ProductListingWxDraftMappingOptions {
   afterSaleAddressId?: string;
   brandId?: string;
   defaultStockNum?: number;
-  autoListing?: boolean;
   attrs?: WxProductDraftAttribute[];
   uploadedImages: Map<string, string> | Record<string, string>;
 }
@@ -266,7 +265,9 @@ export function mapCollectedListingToWxAddProductRequest(
     // 运费险保持关闭，避免把非必需付费服务隐式打开。
     extra_service: { is_open_cod: 0, seven_day_return: 1, freight_insurance: 0 },
     skus: buildSkus(listing, defaultStockNum, options.uploadedImages, headImgs[0]),
-    listing: options.autoListing ? 1 : 0,
+    // 上货管理只创建微信小店草稿箱商品。提审和正式上架由商品提审模块接管，
+    // 因此这里从请求体转换层开始就固定 listing=0，避免业务层误传 listing=1。
+    listing: 0,
     express_info: { template_id: expressTemplateId },
     after_sale_info: { after_sale_address_id: afterSaleAddressId },
   };

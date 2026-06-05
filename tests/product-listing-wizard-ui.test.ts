@@ -35,10 +35,15 @@ test('product listing page is a page-level wizard that ends at draft box creatio
 
   assert.match(
     pageSource,
-    /submitPreparedWxDraft\(\{[\s\S]*autoListing: false,[\s\S]*\}\)/,
-    'final submit should always create a draft-box product and never auto submit audit',
+    /createPreparedWxDraftBoxProduct\(\{[\s\S]*listing: DRAFT_BOX_LISTING_VALUE,[\s\S]*\}\)/,
+    'final submit should use the explicit draft-box command and force listing=0',
   );
+  assert.match(pageSource, /Modal\.confirm\(\{[\s\S]*title: '测试完成'[\s\S]*okText: '删除'[\s\S]*cancelText: '保留'/);
+  assert.match(pageSource, /deleteCreatedWxDraftBoxProduct\(\{[\s\S]*productId: result\.productId/);
 
   assert.doesNotMatch(pageSource, /\bSwitch\b/, 'the submit-audit switch should not be present');
   assert.doesNotMatch(pageSource, /autoListing: draftPrepared\.request\.listing === 1/);
+  assert.doesNotMatch(pageSource, /submitPreparedWxDraft\(/);
+  assert.doesNotMatch(pageSource, /autoListing: false/);
+  assert.doesNotMatch(pageSource, /extensionApi\.drafts\.delete/);
 });

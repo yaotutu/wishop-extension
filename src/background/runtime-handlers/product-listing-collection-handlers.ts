@@ -1,9 +1,10 @@
 import type {
+  CreatePreparedWxDraftBoxProductInput,
   CreateProductListingCollectionSessionInput,
-  CreateWxProductDraftPrepareInput,
+  CreateWxDraftBoxProductInput,
+  CreateWxDraftBoxProductPrepareInput,
   CreateWxProductDraftSuggestionInput,
-  CreateWxProductDraftInput,
-  SubmitPreparedWxProductDraftInput,
+  DeleteCreatedWxDraftBoxProductInput,
   TaobaoProductSnapshot,
   TaobaoSecurityChallengeSnapshot,
 } from '../../shared/types.ts';
@@ -19,9 +20,10 @@ import {
 } from '../services/product-listing-collection-service.ts';
 import { createWxProductFullCategorySuggestion } from '../services/product-listing-full-category-ai-service.ts';
 import {
-  createWxProductDraftFromCollectedListing,
-  prepareWxProductDraftFromCollectedListing,
-  submitPreparedWxProductDraft,
+  createPreparedWxDraftBoxProduct,
+  createWxDraftBoxProductFromCollectedListing,
+  deleteCreatedWxDraftBoxProduct,
+  prepareWxDraftBoxProductFromCollectedListing,
 } from '../services/product-listing-wx-draft-service.ts';
 
 type GetCurrentTabSession = (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
@@ -60,14 +62,17 @@ export function createProductListingCollectionRuntimeHandlers(
     async 'productListingCollection:suggestWxCategoryFromFullList'(args) {
       return createWxProductFullCategorySuggestion(args[0] as CreateWxProductDraftSuggestionInput);
     },
-    async 'productListingCollection:prepareWxDraft'(args) {
-      return prepareWxProductDraftFromCollectedListing(args[0] as CreateWxProductDraftPrepareInput);
+    async 'productListingCollection:prepareWxDraftBoxProduct'(args) {
+      return prepareWxDraftBoxProductFromCollectedListing(args[0] as CreateWxDraftBoxProductPrepareInput);
     },
-    async 'productListingCollection:submitPreparedWxDraft'(args) {
-      return submitPreparedWxProductDraft(args[0] as SubmitPreparedWxProductDraftInput);
+    async 'productListingCollection:createPreparedWxDraftBoxProduct'(args) {
+      return createPreparedWxDraftBoxProduct(args[0] as CreatePreparedWxDraftBoxProductInput);
     },
-    async 'productListingCollection:createWxDraft'(args) {
-      return createWxProductDraftFromCollectedListing(args[0] as CreateWxProductDraftInput);
+    async 'productListingCollection:createWxDraftBoxProduct'(args) {
+      return createWxDraftBoxProductFromCollectedListing(args[0] as CreateWxDraftBoxProductInput);
+    },
+    async 'productListingCollection:deleteCreatedWxDraftBoxProduct'(args) {
+      return deleteCreatedWxDraftBoxProduct(args[0] as DeleteCreatedWxDraftBoxProductInput);
     },
   };
 }

@@ -2,10 +2,13 @@ import type {
   Account,
   CollectedProductListing,
   Config,
+  CreatePreparedWxDraftBoxProductInput,
   CreateProductListingCollectionSessionInput,
-  CreateWxProductDraftPrepareInput,
+  CreateWxDraftBoxProductInput,
+  CreateWxDraftBoxProductPrepareInput,
   CreateWxProductDraftSuggestionInput,
-  CreateWxProductDraftInput,
+  DeleteCreatedWxDraftBoxProductInput,
+  DeleteCreatedWxDraftBoxProductResult,
   CreateShippingSessionInput,
   DeliveryCompanyOption,
   DraftProduct,
@@ -33,6 +36,8 @@ import type {
   ProductSourceItem,
   ProductQrcodeResult,
   ProductListingCollectionSession,
+  ProductAuditCategoryPrecheckInput,
+  ProductAuditCategoryPrecheckResult,
   ProductAuditFailurePolicy,
   ProductAuditTaskConfig,
   ProductAuditTaskResult,
@@ -53,9 +58,8 @@ import type {
   TaobaoProductSnapshot,
   ViolationMatch,
   ViolationScanResult,
-  SubmitPreparedWxProductDraftInput,
   SyncWxCategoryProductRulesInput,
-  WxProductDraftPrepareResult,
+  WxDraftBoxProductPrepareResult,
   WxProductDraftSuggestionResult,
   WxProductDraftCreationResult,
   SyncWxCategoryProductRulesResult,
@@ -223,12 +227,14 @@ export const extensionApi = {
       invoke('productListingCollection:fail', sessionId, error),
     suggestWxCategoryFromFullList: (input: CreateWxProductDraftSuggestionInput): Promise<WxProductDraftSuggestionResult> =>
       invoke('productListingCollection:suggestWxCategoryFromFullList', input),
-    prepareWxDraft: (input: CreateWxProductDraftPrepareInput): Promise<WxProductDraftPrepareResult> =>
-      invoke('productListingCollection:prepareWxDraft', input),
-    submitPreparedWxDraft: (input: SubmitPreparedWxProductDraftInput): Promise<WxProductDraftCreationResult> =>
-      invoke('productListingCollection:submitPreparedWxDraft', input),
-    createWxDraft: (input: CreateWxProductDraftInput): Promise<WxProductDraftCreationResult> =>
-      invoke('productListingCollection:createWxDraft', input),
+    prepareWxDraftBoxProduct: (input: CreateWxDraftBoxProductPrepareInput): Promise<WxDraftBoxProductPrepareResult> =>
+      invoke('productListingCollection:prepareWxDraftBoxProduct', input),
+    createPreparedWxDraftBoxProduct: (input: CreatePreparedWxDraftBoxProductInput): Promise<WxProductDraftCreationResult> =>
+      invoke('productListingCollection:createPreparedWxDraftBoxProduct', input),
+    createWxDraftBoxProduct: (input: CreateWxDraftBoxProductInput): Promise<WxProductDraftCreationResult> =>
+      invoke('productListingCollection:createWxDraftBoxProduct', input),
+    deleteCreatedWxDraftBoxProduct: (input: DeleteCreatedWxDraftBoxProductInput): Promise<DeleteCreatedWxDraftBoxProductResult> =>
+      invoke('productListingCollection:deleteCreatedWxDraftBoxProduct', input),
     onCompleted: (callback: (listing: CollectedProductListing) => void) =>
       onRuntimeEvent('productListingCollection:completed', callback),
     onFailed: (callback: (payload: { url: string; error: string }) => void) =>
@@ -265,6 +271,8 @@ export const extensionApi = {
     setConfig: (accountId: string, config: ProductAuditTaskConfig): Promise<void> => invoke('productAudit:configSet', accountId, config),
     run: (accountId: string, config: ProductAuditTaskConfig): Promise<ProductAuditTaskResult> => invoke('productAudit:run', accountId, config),
     stop: (accountId: string): Promise<void> => invoke('productAudit:stop', accountId),
+    precheckCategory: (input: ProductAuditCategoryPrecheckInput): Promise<ProductAuditCategoryPrecheckResult> =>
+      invoke('productAudit:precheckCategory', input),
     getLogs: (accountId: string): Promise<LogEntry[]> => invoke('productAudit:logsGet', accountId),
     clearLogs: (accountId: string): Promise<void> => invoke('productAudit:logsClear', accountId),
     onLogAdded: (accountId: string, callback: (log: LogEntry) => void) => onRuntimeEvent(`productAuditLog:added:${accountId}`, callback),

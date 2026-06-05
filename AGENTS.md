@@ -61,6 +61,17 @@ Runtime IPC 必须保持类型化。每个新增 channel 都必须添加到 `Run
 - 账号配置新增、更新、删除时必须清理对应 token 缓存；校验配置时可以直接调用 `access-token-service` 强制刷新 token，但不要绕回 `WxShopClient`。
 - token、appSecret 和任何微信敏感凭证都不得进入全局日志、模块日志、通知、错误详情或 UI 展示。
 
+## 上货草稿与商品提审边界指南
+
+上货管理和商品提审是两个不同业务域，不能因为微信底层接口名称相近而混用流程。
+
+- 上货管理当前只允许创建微信小店草稿箱商品，业务命令必须使用 `DraftBox` 语义，例如 `prepareWxDraftBoxProduct`、`createPreparedWxDraftBoxProduct` 或 `createWxDraftBoxProduct`。
+- 上货管理创建草稿箱时必须固定 `listing=0`，不得暴露 `autoListing`、`listing=1` 或“自动提审/上架”开关。
+- 上货管理的草稿箱创建流程不得调用 `categoryprecheck`、`submitProductAudit`、`/channels/ec/product/listing` 或其它提审/上架门禁接口。草稿箱创建失败只能来自数据准备、图片上传、微信 `addProduct` 写草稿等草稿创建相关原因。
+- 微信小店 `addProduct` 是底层接口名，不代表业务上架。业务 service、runtime channel、extension API 和前端按钮文案必须用明确业务命名区分“创建草稿箱商品”和“提交商品提审”。
+- `categoryprecheck` 属于商品提审域的提审前诊断能力，应放在 `productAudit` 相关 service、runtime handler 和 IPC 中，例如 `productAudit:precheckCategory`。它可以用于提审前提示或诊断，但不得回流到上货草稿箱创建路径。
+- 新增或修改这两类流程时，必须补测试锁住边界：上货草稿箱测试要断言不调用发品前校验且提交 `listing=0`；商品提审测试要单独覆盖预检、提审接口和失败策略。
+
 ## 定时任务中心指南
 
 定时任务只允许走统一 `ScheduledJob` 架构，不保留旧兼容层。

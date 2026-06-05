@@ -1,10 +1,13 @@
 import type {
   CollectedProductListing,
-  CreateWxProductDraftPrepareInput,
-  CreateWxProductDraftInput,
-  SubmitPreparedWxProductDraftInput,
+  CreatePreparedWxDraftBoxProductInput,
+  CreateWxDraftBoxProductInput,
+  CreateWxDraftBoxProductPrepareInput,
+  DeleteCreatedWxDraftBoxProductInput,
+  DeleteCreatedWxDraftBoxProductResult,
+  WxDraftBoxProductPrepareResult,
   WxProductDraftCreationResult,
-  WxProductDraftPrepareResult,
+  WxProductDraftBoxPreparedRequest,
 } from '../../shared/types.ts';
 import type { AppSettings } from '../../shared/settings.ts';
 import type { SiliconFlowJsonCompletionInput } from '../ai/siliconflow-client.ts';
@@ -15,6 +18,11 @@ import {
   mapCollectedListingToWxAddProductRequest,
 } from './product-listing-wx-draft-mapper.ts';
 import { generateRuleDrivenWxProductAttributes } from './product-listing-wx-attribute-ai-service.ts';
+import {
+  type ProductListingImageDownloadResult,
+  type WxDraftImageUploadSource,
+  uploadWxDraftSourceImages,
+} from './product-listing-image-transfer-service.ts';
 import { getCachedWxCategoryProductRule } from './wx-category-product-rule-cache-service.ts';
 
 type ActivityRecorder = (input: Record<string, unknown>) => Promise<unknown>;
@@ -22,28 +30,38 @@ type CompleteJson = (input: SiliconFlowJsonCompletionInput) => Promise<unknown>;
 
 const DEFAULT_DRAFT_STOCK_NUM = 999;
 
-export interface CreateWxProductDraftDependencies {
+export interface WxDraftBoxProductDependencies {
   getListing?: (listingId: string) => Promise<CollectedProductListing | null>;
   getClient?: (accountId: string) => Promise<WxShopListingClient>;
   getCategoryProductRule?: (catId: string) => Promise<WxShopCategoryProductRule | null>;
   getSettings?: () => Promise<AppSettings>;
   completeJson?: CompleteJson;
+  downloadImage?: (source: WxDraftImageUploadSource) => Promise<ProductListingImageDownloadResult>;
   recordStarted?: ActivityRecorder;
   recordCompleted?: ActivityRecorder;
   recordFailed?: ActivityRecorder;
 }
 
 function createRunId(input: { accountId: string; listingId: string }): string {
-  return `createWxDraft:${input.accountId}:${input.listingId}:${Date.now()}`;
+  return `createWxDraftBoxProduct:${input.accountId}:${input.listingId}:${Date.now()}`;
 }
 
 function createPrepareRunId(input: { accountId: string; listingId: string }): string {
-  return `prepareWxDraft:${input.accountId}:${input.listingId}:${Date.now()}`;
+  return `prepareWxDraftBoxProduct:${input.accountId}:${input.listingId}:${Date.now()}`;
+}
+
+function createDeleteRunId(input: { accountId: string; listingId: string; productId: string }): string {
+  return `deleteCreatedWxDraftBoxProduct:${input.accountId}:${input.listingId}:${input.productId}:${Date.now()}`;
 }
 
 function validateInput(input: { accountId: string; listingId: string }): void {
   if (!input.accountId.trim()) throw new Error('缺少微信小店账号 ID');
   if (!input.listingId.trim()) throw new Error('缺少本地采集商品 ID');
+}
+
+function validateDeleteInput(input: DeleteCreatedWxDraftBoxProductInput): void {
+  validateInput(input);
+  if (!input.productId.trim()) throw new Error('缺少要删除的微信小店商品 ID');
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -54,28 +72,8 @@ function leafCategoryId(catIds: string[]): string {
   return catIds.at(-1)?.trim() || '';
 }
 
-async function assertWxProductCategoryPrecheck(
-  input: CreateWxProductDraftPrepareInput,
-  client: WxShopListingClient,
-  logger = createDiagnosticLogger({ domain: 'listing', component: 'WxDraftPrepare' }),
-): Promise<void> {
-  const catId = leafCategoryId(input.catIds);
-  if (!catId) throw new Error('缺少微信小店叶子类目 ID，无法执行发品前校验');
-
-  logger.info('开始执行微信小店发品前类目校验', { catId });
-  const precheck = await client.precheckProductCategory(catId);
-  if (precheck.allPass) {
-    logger.info('微信小店发品前类目校验通过', { catId });
-    return;
-  }
-
-  const reasons = precheck.failReasons.length > 0 ? precheck.failReasons.join('；') : '微信小店未返回具体原因';
-  logger.warn('微信小店发品前类目校验未通过', { catId, reasons });
-  throw new Error(`微信小店类目发品前校验未通过：${reasons}`);
-}
-
 async function resolveExpressTemplateId(
-  input: CreateWxProductDraftPrepareInput,
+  input: CreateWxDraftBoxProductPrepareInput,
   client: WxShopListingClient,
   logger = createDiagnosticLogger({ domain: 'listing', component: 'WxDraftPrepare' }),
 ): Promise<string> {
@@ -91,7 +89,7 @@ async function resolveExpressTemplateId(
 }
 
 async function resolveAfterSaleAddressId(
-  input: CreateWxProductDraftPrepareInput,
+  input: CreateWxDraftBoxProductPrepareInput,
   client: WxShopListingClient,
   logger = createDiagnosticLogger({ domain: 'listing', component: 'WxDraftPrepare' }),
 ): Promise<string> {
@@ -124,7 +122,7 @@ async function resolveAfterSaleAddressId(
 }
 
 async function resolveWxDraftSystemDefaults(
-  input: CreateWxProductDraftPrepareInput,
+  input: CreateWxDraftBoxProductPrepareInput,
   client: WxShopListingClient,
   logger = createDiagnosticLogger({ domain: 'listing', component: 'WxDraftPrepare' }),
 ): Promise<{ expressTemplateId: string; afterSaleAddressId: string; defaultStockNum: number }> {
@@ -142,36 +140,18 @@ async function resolveWxDraftSystemDefaults(
 async function uploadListingImages(
   listing: CollectedProductListing,
   client: WxShopListingClient,
+  dependencies: Pick<WxDraftBoxProductDependencies, 'downloadImage'>,
   logger = createDiagnosticLogger({ domain: 'listing', component: 'WxDraftPrepare' }),
 ): Promise<Map<string, string>> {
-  const uploadedImages = new Map<string, string>();
   const sourceImages = collectWxDraftSourceImages(listing);
   logger.info('开始上传微信小店商品图片', {
     listingId: listing.id,
     imageCount: sourceImages.length,
   });
-
-  for (const [index, imageUrl] of sourceImages.entries()) {
-    try {
-      const uploaded = await client.uploadImageByUrl(imageUrl);
-      uploadedImages.set(imageUrl, uploaded.imgUrl);
-      logger.info('商品图片上传完成', {
-        listingId: listing.id,
-        imageIndex: index + 1,
-        imageCount: sourceImages.length,
-      });
-    } catch (error) {
-      const message = errorMessage(error, '微信小店图片上传失败');
-      logger.error('商品图片上传失败', {
-        listingId: listing.id,
-        imageIndex: index + 1,
-        imageCount: sourceImages.length,
-        error: message,
-      });
-      throw new Error(`第 ${index + 1}/${sourceImages.length} 张商品图片上传失败：${message}`);
-    }
-  }
-  return uploadedImages;
+  return uploadWxDraftSourceImages(listing, client, {
+    logger,
+    downloadImage: dependencies.downloadImage,
+  });
 }
 
 async function defaultGetListing(listingId: string): Promise<CollectedProductListing | null> {
@@ -204,11 +184,11 @@ async function defaultRecordFailed(input: Record<string, unknown>): Promise<unkn
 }
 
 function summarizePreparedRequest(
-  input: CreateWxProductDraftPrepareInput,
+  input: CreateWxDraftBoxProductPrepareInput,
   uploadedImageCount: number,
-  request: WxProductDraftPrepareResult['request'],
+  request: WxProductDraftBoxPreparedRequest,
   warnings: string[],
-): WxProductDraftPrepareResult {
+): WxDraftBoxProductPrepareResult {
   return {
     accountId: input.accountId,
     listingId: input.listingId,
@@ -222,18 +202,18 @@ function summarizePreparedRequest(
       detailImageCount: request.desc_info?.imgs?.length || 0,
       skuCount: request.skus.length,
       attrCount: request.attrs?.length || 0,
-      listing: request.listing === 1,
+      listing: false,
     },
   };
 }
 
 async function resolveWxDraftProductAttributes(
-  input: CreateWxProductDraftPrepareInput,
+  input: CreateWxDraftBoxProductPrepareInput,
   listing: CollectedProductListing,
-  dependencies: Pick<CreateWxProductDraftDependencies, 'getCategoryProductRule' | 'getSettings' | 'completeJson'>,
+  dependencies: Pick<WxDraftBoxProductDependencies, 'getCategoryProductRule' | 'getSettings' | 'completeJson'>,
   logger = createDiagnosticLogger({ domain: 'listing', component: 'WxDraftPrepare' }),
 ): Promise<{
-  attrs: CreateWxProductDraftPrepareInput['attrs'];
+  attrs: CreateWxDraftBoxProductPrepareInput['attrs'];
   warnings: string[];
 }> {
   const catId = leafCategoryId(input.catIds);
@@ -273,10 +253,10 @@ async function resolveWxDraftProductAttributes(
   };
 }
 
-export async function prepareWxProductDraftFromCollectedListing(
-  input: CreateWxProductDraftPrepareInput,
-  dependencies: CreateWxProductDraftDependencies = {},
-): Promise<WxProductDraftPrepareResult> {
+export async function prepareWxDraftBoxProductFromCollectedListing(
+  input: CreateWxDraftBoxProductPrepareInput,
+  dependencies: WxDraftBoxProductDependencies = {},
+): Promise<WxDraftBoxProductPrepareResult> {
   validateInput(input);
   const runId = createPrepareRunId(input);
   const logger = createDiagnosticLogger({
@@ -296,7 +276,7 @@ export async function prepareWxProductDraftFromCollectedListing(
     metadata: {
       listingId: input.listingId,
       catIds: input.catIds.join('/'),
-      autoListing: Boolean(input.autoListing),
+      submitMode: 'draftBox',
     },
   };
 
@@ -315,10 +295,9 @@ export async function prepareWxProductDraftFromCollectedListing(
     logger.info('开始创建微信小店 client', { listingId: input.listingId });
     const getClient = dependencies.getClient || defaultGetClient;
     const client = await getClient(input.accountId);
-    await assertWxProductCategoryPrecheck(input, client, logger);
     const attrResult = await resolveWxDraftProductAttributes(input, listing, dependencies, logger);
     const defaults = await resolveWxDraftSystemDefaults(input, client, logger);
-    const uploadedImages = await uploadListingImages(listing, client, logger);
+    const uploadedImages = await uploadListingImages(listing, client, dependencies, logger);
     logger.info('开始生成微信小店新增商品请求体', {
       listingId: input.listingId,
       uploadedImageCount: uploadedImages.size,
@@ -332,10 +311,9 @@ export async function prepareWxProductDraftFromCollectedListing(
       afterSaleAddressId: defaults.afterSaleAddressId,
       brandId: input.brandId,
       defaultStockNum: defaults.defaultStockNum,
-      autoListing: input.autoListing,
       attrs: attrResult.attrs,
       uploadedImages,
-    });
+    }) as WxProductDraftBoxPreparedRequest;
     const prepared = summarizePreparedRequest(input, uploadedImages.size, addProductRequest, attrResult.warnings);
 
     await recordCompleted({
@@ -371,11 +349,14 @@ export async function prepareWxProductDraftFromCollectedListing(
   }
 }
 
-export async function submitPreparedWxProductDraft(
-  input: SubmitPreparedWxProductDraftInput,
-  dependencies: CreateWxProductDraftDependencies = {},
+export async function createPreparedWxDraftBoxProduct(
+  input: CreatePreparedWxDraftBoxProductInput,
+  dependencies: WxDraftBoxProductDependencies = {},
 ): Promise<WxProductDraftCreationResult> {
   validateInput(input);
+  if (input.request.listing !== 0) {
+    throw new Error('草稿箱创建命令只允许提交 listing=0 的微信商品请求');
+  }
 
   const runId = createRunId(input);
   const recordStarted = dependencies.recordStarted || defaultRecordStarted;
@@ -407,13 +388,13 @@ export async function submitPreparedWxProductDraft(
       listingId: input.listingId,
       productId: created.productId,
       createTime: created.createTime,
-      autoListing: input.autoListing ?? input.request.listing === 1,
+      listing: 0,
       uploadedImageCount: input.uploadedImageCount,
     };
 
     await recordCompleted({
       ...activityBase,
-      title: input.autoListing ? '微信小店商品已创建并提交审核' : '微信小店商品草稿创建完成',
+      title: '微信小店商品草稿创建完成',
       detail: `${input.request.title}，商品 ID：${created.productId}`,
       summary: {
         uploadedImages: input.uploadedImageCount,
@@ -431,16 +412,105 @@ export async function submitPreparedWxProductDraft(
   }
 }
 
-export async function createWxProductDraftFromCollectedListing(
-  input: CreateWxProductDraftInput,
-  dependencies: CreateWxProductDraftDependencies = {},
+export async function createWxDraftBoxProductFromCollectedListing(
+  input: CreateWxDraftBoxProductInput,
+  dependencies: WxDraftBoxProductDependencies = {},
 ): Promise<WxProductDraftCreationResult> {
-  const prepared = await prepareWxProductDraftFromCollectedListing(input, dependencies);
-  return submitPreparedWxProductDraft({
+  const prepared = await prepareWxDraftBoxProductFromCollectedListing(input, dependencies);
+  return createPreparedWxDraftBoxProduct({
     accountId: prepared.accountId,
     listingId: prepared.listingId,
     request: prepared.request,
     uploadedImageCount: prepared.uploadedImageCount,
-    autoListing: input.autoListing,
   }, dependencies);
+}
+
+export async function deleteCreatedWxDraftBoxProduct(
+  input: DeleteCreatedWxDraftBoxProductInput,
+  dependencies: Pick<WxDraftBoxProductDependencies, 'getClient' | 'recordStarted' | 'recordCompleted' | 'recordFailed'> = {},
+): Promise<DeleteCreatedWxDraftBoxProductResult> {
+  validateDeleteInput(input);
+
+  const productId = input.productId.trim();
+  const productTitle = input.productTitle?.trim() || productId;
+  const runId = createDeleteRunId({ ...input, productId });
+  const logger = createDiagnosticLogger({
+    domain: 'listing',
+    component: 'WxDraftCleanup',
+    accountId: input.accountId,
+  });
+  const recordStarted = dependencies.recordStarted || defaultRecordStarted;
+  const recordCompleted = dependencies.recordCompleted || defaultRecordCompleted;
+  const recordFailed = dependencies.recordFailed || defaultRecordFailed;
+  const activityBase = {
+    domain: 'listing' as const,
+    scope: 'account' as const,
+    accountId: input.accountId,
+    trigger: 'manual' as const,
+    runId,
+    metadata: {
+      listingId: input.listingId,
+      productId,
+      submitMode: 'draftBoxCleanup',
+    },
+  };
+
+  await recordStarted({
+    ...activityBase,
+    title: '微信小店测试草稿删除开始',
+    detail: productTitle,
+  });
+
+  try {
+    logger.info('开始删除上货测试创建的微信小店草稿', {
+      listingId: input.listingId,
+      productId,
+    });
+    const getClient = dependencies.getClient || defaultGetClient;
+    const result = await (await getClient(input.accountId)).deleteProduct(productId);
+
+    if (result.errcode === 0) {
+      await recordCompleted({
+        ...activityBase,
+        title: '微信小店测试草稿删除完成',
+        detail: productTitle,
+      });
+      return {
+        accountId: input.accountId,
+        listingId: input.listingId,
+        productId,
+        deleted: true,
+      };
+    }
+
+    const message = result.errmsg || '微信小店删除商品草稿失败';
+    await recordFailed({
+      ...activityBase,
+      title: '微信小店测试草稿删除失败',
+      detail: productTitle,
+      error: { message, code: result.errcode },
+    });
+    return {
+      accountId: input.accountId,
+      listingId: input.listingId,
+      productId,
+      deleted: false,
+      errorCode: result.errcode,
+      error: message,
+    };
+  } catch (error) {
+    const message = errorMessage(error, '微信小店测试草稿删除失败');
+    logger.error('删除上货测试创建的微信小店草稿失败', {
+      listingId: input.listingId,
+      productId,
+      error: message,
+    });
+    await recordFailed({
+      ...activityBase,
+      title: '微信小店测试草稿删除失败',
+      detail: productTitle,
+      error: { message },
+    });
+    throw error;
+  }
 }

@@ -47,10 +47,10 @@ test('product audit task config does not carry account-local failure policy', ()
 test('product listing preview renders collected detail images', () => {
   const page = source('src/pages/product-listing/ProductListingPage.tsx');
 
-  assert.match(page, /title: '图片'/);
-  assert.match(page, /record\.images\.detail\.length/);
+  assert.match(page, /function renderImageGroup/);
+  assert.match(page, /<Image\.PreviewGroup>/);
   assert.match(page, /图文详情/);
-  assert.match(page, /previewListing\.images\.detail\.map/);
+  assert.match(page, /renderImageGroup\(listing\.images\.detail, '商品详情图', true\)/);
 });
 
 test('product detail collection adapter is decomposed behind a small public API', () => {
