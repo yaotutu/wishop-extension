@@ -1,22 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CloudUploadOutlined, DeleteOutlined, EyeOutlined, ImportOutlined, ReloadOutlined, RobotOutlined } from '@ant-design/icons';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { CheckCircleOutlined, ImportOutlined, RobotOutlined } from '@ant-design/icons';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   Button,
   Card,
+  Collapse,
   Descriptions,
-  Drawer,
   Form,
   Image,
   Input,
   message,
-  Modal,
-  Popconfirm,
-  Select,
   Space,
   Steps,
-  Switch,
   Table,
   Tag,
 } from 'antd';
@@ -24,13 +20,22 @@ import type { TableProps } from 'antd';
 import { queryKeys } from '../../query/query-keys';
 import { extensionApi } from '../../shared/extension-api';
 import type {
-  Account,
   CollectedProductListing,
   ProductListingCollectionSession,
   WxProductDraftCreationResult,
   WxProductDraftPrepareResult,
   WxProductDraftSuggestionResult,
 } from '../../shared/types';
+
+type ProductListingWizardStep = 'input' | 'collectionPreview' | 'draftPreview' | 'completed';
+
+interface ProductListingPageProps {
+  accountId: string;
+  accountName?: string;
+}
+
+const DEFAULT_BRAND_ID = '2100000000';
+const DRAFT_BOX_LISTING_VALUE = 0;
 
 const missingFieldLabels: Record<string, string> = {
   title: '标题',
@@ -40,11 +45,25 @@ const missingFieldLabels: Record<string, string> = {
   productParams: '商品参数',
 };
 
+const wizardStepIndex: Record<ProductListingWizardStep, number> = {
+  input: 0,
+  collectionPreview: 1,
+  draftPreview: 2,
+  completed: 3,
+};
+
 const pageStyle: React.CSSProperties = {
   height: '100%',
   display: 'flex',
   flexDirection: 'column',
   gap: 12,
+  minHeight: 0,
+};
+
+const scrollBodyStyle: React.CSSProperties = {
+  flex: 1,
+  minHeight: 0,
+  overflow: 'auto',
 };
 
 const imageGridStyle: React.CSSProperties = {
@@ -59,8 +78,22 @@ const detailImageGridStyle: React.CSSProperties = {
   gap: 8,
 };
 
+const actionBarStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: 12,
+  paddingTop: 12,
+  borderTop: '1px solid #f0f0f0',
+};
+
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleString('zh-CN');
+}
+
+function formatCentPrice(value: number): string {
+  if (!Number.isFinite(value)) return '-';
+  return `¥${(value / 100).toFixed(2)}`;
 }
 
 function skuSummary(listing: CollectedProductListing): string {
@@ -88,18 +121,6 @@ function sourceCategoryText(listing?: Pick<CollectedProductListing, 'category'> 
     || (category.id ? `类目ID ${category.id}` : '-');
 }
 
-interface ProductListingPageProps {
-  accounts: Account[];
-  activeAccountId: string;
-}
-
-interface WxDraftFormValues {
-  accountId: string;
-  catIdsText?: string;
-  brandId?: string;
-  autoListing?: boolean;
-}
-
 function isValidCategoryPathIds(catIds: string[]): boolean {
   return catIds.length >= 3 && catIds.length <= 4;
 }
@@ -109,86 +130,221 @@ function categoryCandidateSourceText(source?: WxProductDraftSuggestionResult['ca
   return '未记录来源';
 }
 
-const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activeAccountId }) => {
+function normalizedCategoryText(suggestion: WxProductDraftSuggestionResult | null): string {
+  if (!suggestion) return '-';
+  return suggestion.categoryPath?.join(' / ') || suggestion.catIds.join(' / ') || '-';
+}
+
+function renderImageGroup(urls: string[], alt: string, detail = false): React.ReactNode {
+  if (urls.length === 0) {
+    return <div style={{ color: '#9ca3af', fontSize: 13, padding: '12px 0' }}>暂无图片</div>;
+  }
+  return (
+    <Image.PreviewGroup>
+      <div style={detail ? detailImageGridStyle : imageGridStyle}>
+        {urls.map((url, index) => (
+          <Image
+            key={`${url}:${index}`}
+            src={url}
+            width="100%"
+            height={detail ? 128 : 72}
+            alt={alt}
+            styles={{ root: { objectFit: 'cover', background: '#f6f8fa', borderRadius: 4 } }}
+          />
+        ))}
+      </div>
+    </Image.PreviewGroup>
+  );
+}
+
+function renderSectionTitle(title: string, extra?: React.ReactNode): React.ReactNode {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+      <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{title}</h3>
+      {extra}
+    </div>
+  );
+}
+
+function renderCategorySuggestion(suggestion: WxProductDraftSuggestionResult | null): React.ReactNode {
+  if (!suggestion) return null;
+  return (
+    <Alert
+      type="info"
+      showIcon
+      title={suggestion.reason}
+      description={(
+        <Space vertical size={8} style={{ width: '100%' }}>
+          <Space size={4} wrap>
+            <Tag color={suggestion.confidence >= 0.7 ? 'green' : 'orange'}>
+              置信度 {Math.round(suggestion.confidence * 100)}%
+            </Tag>
+            <Tag color="blue">类目 ID {suggestion.catIds.join(' / ')}</Tag>
+            <Tag color="cyan">类目 {normalizedCategoryText(suggestion)}</Tag>
+            <Tag color="purple">来源 {categoryCandidateSourceText(suggestion.categoryCandidateSource)}</Tag>
+          </Space>
+          {suggestion.categoryLookup && (
+            <Space size={4} wrap>
+              <Tag>候选 {suggestion.categoryLookup.candidateCount}</Tag>
+              <Tag>范围 静态全量类目</Tag>
+            </Space>
+          )}
+          {suggestion.categoryCandidates && suggestion.categoryCandidates.length > 0 && (
+            <Space size={4} wrap>
+              {suggestion.categoryCandidates.map(candidate => (
+                <Tag key={candidate.catIds.join('/')}>
+                  {candidate.names.join(' / ')}
+                </Tag>
+              ))}
+            </Space>
+          )}
+          {suggestion.warnings.length > 0 && (
+            <Space size={4} wrap>
+              {suggestion.warnings.map(warning => (
+                <Tag key={warning} color="orange">{warning}</Tag>
+              ))}
+            </Space>
+          )}
+        </Space>
+      )}
+    />
+  );
+}
+
+function buildDraftBoxPreparedResult(prepared: WxProductDraftPrepareResult): WxProductDraftPrepareResult {
+  return {
+    ...prepared,
+    request: {
+      ...prepared.request,
+      listing: DRAFT_BOX_LISTING_VALUE,
+    },
+    summary: {
+      ...prepared.summary,
+      listing: false,
+    },
+  };
+}
+
+const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, accountName }) => {
   const [form] = Form.useForm<{ url: string }>();
-  const [draftForm] = Form.useForm<WxDraftFormValues>();
   const queryClient = useQueryClient();
+  const [currentStep, setCurrentStep] = useState<ProductListingWizardStep>('input');
   const [activeSession, setActiveSession] = useState<ProductListingCollectionSession | null>(null);
-  const [previewListing, setPreviewListing] = useState<CollectedProductListing | null>(null);
-  const [draftModalListing, setDraftModalListing] = useState<CollectedProductListing | null>(null);
+  const [collectedListing, setCollectedListing] = useState<CollectedProductListing | null>(null);
   const [draftPrepared, setDraftPrepared] = useState<WxProductDraftPrepareResult | null>(null);
   const [draftSuggestion, setDraftSuggestion] = useState<WxProductDraftSuggestionResult | null>(null);
   const [draftSubmittedResult, setDraftSubmittedResult] = useState<WxProductDraftCreationResult | null>(null);
-  const [fullCategoryStatus, setFullCategoryStatus] = useState<string>('');
+  const [fullCategoryStatus, setFullCategoryStatus] = useState('');
 
-  const listingsQuery = useQuery({
-    queryKey: queryKeys.productListingCollection.list,
-    queryFn: () => extensionApi.productListingCollection.list(),
-  });
+  const activeCollectionUrl = activeSession?.url || '';
+
+  const wizardItems = useMemo<React.ComponentProps<typeof Steps>['items']>(() => [
+    { title: '输入链接' },
+    { title: '采集预览' },
+    { title: '草稿预览' },
+    { title: '创建完成' },
+  ], []);
+
+  const resetWizard = useCallback(() => {
+    form.resetFields();
+    setCurrentStep('input');
+    setActiveSession(null);
+    setCollectedListing(null);
+    setDraftPrepared(null);
+    setDraftSuggestion(null);
+    setDraftSubmittedResult(null);
+    setFullCategoryStatus('');
+  }, [form]);
+
+  // 左侧账号切换后必须清空当前向导，避免把上一个账号准备好的草稿请求提交到新账号下。
+  useEffect(() => {
+    resetWizard();
+  }, [accountId, resetWizard]);
 
   const collectMutation = useMutation({
     mutationFn: (url: string) => extensionApi.productListingCollection.open({ url }),
     onSuccess: session => {
       setActiveSession(session);
+      setCurrentStep('input');
+      setCollectedListing(null);
+      setDraftPrepared(null);
+      setDraftSuggestion(null);
+      setDraftSubmittedResult(null);
+      setFullCategoryStatus('');
       message.success('已打开淘宝工作页采集商品');
+    },
+    onError: error => {
+      const detail = error instanceof Error ? error.message : '商品采集启动失败';
+      message.error(detail);
     },
   });
 
-  const removeMutation = useMutation({
-    mutationFn: (listingId: string) => extensionApi.productListingCollection.remove(listingId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.productListingCollection.list });
-      setPreviewListing(null);
-      message.success('采集记录已删除');
+  const categoryOnlyMutation = useMutation({
+    onMutate: () => {
+      setFullCategoryStatus('正在执行类目转换诊断。');
+    },
+    mutationFn: async () => {
+      if (!collectedListing) throw new Error('请先完成商品采集');
+      return extensionApi.productListingCollection.suggestWxCategoryFromFullList({
+        accountId,
+        listingId: collectedListing.id,
+      });
+    },
+    onSuccess: suggestion => {
+      setDraftSuggestion(suggestion);
+      setFullCategoryStatus(`类目转换结果：${normalizedCategoryText(suggestion)}`);
+      message.success('类目转换完成');
+    },
+    onError: error => {
+      const detail = error instanceof Error ? error.message : '类目转换失败';
+      setFullCategoryStatus(`失败：${detail}`);
+      message.error(detail);
     },
   });
 
   /**
-   * 上货主流程只保留这一条生成入口：
-   * 1. 每次都让 AI 从静态全量微信叶子类目里选择类目，避免手填类目和 AI 路径混用；
-   * 2. 后台读取本地类目发品规则，让 AI 按必填规则补齐商品参数并做本地校验；
-   * 3. 准备阶段会上传商品图片到微信小店，但不会创建草稿商品，真正创建仍由“提交草稿”单独触发。
+   * “下一步”是正式上货路径：
+   * 先让后台按当前账号做微信类目转换，再准备微信小店新增商品请求体。
+   * 上货管理只负责创建草稿箱商品，因此这里和提交阶段都强制 autoListing=false。
    */
   const generateDraftDataMutation = useMutation({
     onMutate: () => {
-      setFullCategoryStatus('正在选择微信类目并生成上架数据，图片会同步上传到微信小店。');
+      setFullCategoryStatus('正在转换微信类目并生成草稿箱数据，图片会同步上传到微信小店。');
     },
     mutationFn: async () => {
-      if (!draftModalListing) throw new Error('请选择要处理的采集商品');
-      const values = await draftForm.validateFields();
+      if (!collectedListing) throw new Error('请先完成商品采集');
       const suggestion = await extensionApi.productListingCollection.suggestWxCategoryFromFullList({
-        accountId: values.accountId,
-        listingId: draftModalListing.id,
+        accountId,
+        listingId: collectedListing.id,
       });
       const catIds = suggestion.catIds;
 
       if (!isValidCategoryPathIds(catIds)) {
         throw new Error('AI 返回的微信小店类目路径不完整，请重新生成');
       }
+
       const prepared = await extensionApi.productListingCollection.prepareWxDraft({
-        accountId: values.accountId,
-        listingId: draftModalListing.id,
+        accountId,
+        listingId: collectedListing.id,
         catIds,
-        brandId: values.brandId?.trim() || undefined,
-        autoListing: Boolean(values.autoListing),
+        brandId: DEFAULT_BRAND_ID,
+        autoListing: false,
       });
-      return { suggestion, prepared, catIds };
+      return { suggestion, prepared: buildDraftBoxPreparedResult(prepared), catIds };
     },
     onSuccess: ({ suggestion, prepared, catIds }) => {
       setDraftSuggestion(suggestion);
-      draftForm.setFieldsValue({
-        catIdsText: suggestion.catIds.join(','),
-      });
       setDraftPrepared(prepared);
       setDraftSubmittedResult(null);
-      const categoryText = suggestion?.categoryPath?.join(' / ') || catIds.join(' / ');
+      setCurrentStep('draftPreview');
+      const categoryText = suggestion.categoryPath?.join(' / ') || catIds.join(' / ');
       setFullCategoryStatus(prepared.warnings.length > 0
         ? `已生成：${categoryText}，${prepared.warnings.length} 条商品参数复核提示。`
         : `已生成：${categoryText}`);
-      message.success('上架数据已生成，可以提交草稿');
+      message.success('草稿箱数据已生成');
     },
     onError: error => {
-      const detail = error instanceof Error ? error.message : '上架数据生成失败';
+      const detail = error instanceof Error ? error.message : '草稿箱数据生成失败';
       setFullCategoryStatus(`失败：${detail}`);
       message.error(detail);
     },
@@ -196,17 +352,21 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
 
   const submitPreparedDraftMutation = useMutation({
     mutationFn: () => {
-      if (!draftPrepared) throw new Error('请先生成上架数据');
+      if (!draftPrepared) throw new Error('请先生成草稿箱数据');
       return extensionApi.productListingCollection.submitPreparedWxDraft({
         accountId: draftPrepared.accountId,
         listingId: draftPrepared.listingId,
-        request: draftPrepared.request,
+        request: {
+          ...draftPrepared.request,
+          listing: DRAFT_BOX_LISTING_VALUE,
+        },
         uploadedImageCount: draftPrepared.uploadedImageCount,
-        autoListing: draftPrepared.request.listing === 1,
+        autoListing: false,
       });
     },
     onSuccess: result => {
       setDraftSubmittedResult(result);
+      setCurrentStep('completed');
       message.success(`微信小店草稿已创建：${result.productId}`);
     },
     onError: error => {
@@ -217,19 +377,28 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
 
   useEffect(() => {
     const cleanupCompleted = extensionApi.productListingCollection.onCompleted(listing => {
-      setActiveSession(null);
-      setPreviewListing(listing);
       queryClient.setQueryData<CollectedProductListing[]>(
         queryKeys.productListingCollection.list,
         current => [listing, ...(current || []).filter(item => item.id !== listing.id)],
       );
+
+      if (activeCollectionUrl && listing.sourceUrl !== activeCollectionUrl) return;
+      setActiveSession(null);
+      setCollectedListing(listing);
+      setCurrentStep('collectionPreview');
+      setDraftPrepared(null);
+      setDraftSuggestion(null);
+      setDraftSubmittedResult(null);
+      setFullCategoryStatus('');
       message.success('商品采集完成');
     });
     const cleanupFailed = extensionApi.productListingCollection.onFailed(payload => {
+      if (activeCollectionUrl && payload.url !== activeCollectionUrl) return;
       setActiveSession(null);
       message.error(payload.error || '商品采集失败');
     });
     const cleanupChallenge = extensionApi.productListingCollection.onChallenge(payload => {
+      if (activeCollectionUrl && payload.url !== activeCollectionUrl) return;
       message.warning(payload.reason || '淘宝工作页需要登录或安全验证');
     });
     return () => {
@@ -237,161 +406,390 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
       cleanupFailed();
       cleanupChallenge();
     };
-  }, [queryClient]);
-
-  const openDraftModal = useCallback((listing: CollectedProductListing) => {
-    const defaultAccountId = activeAccountId || accounts[0]?.id || '';
-    setDraftModalListing(listing);
-    setDraftPrepared(null);
-    setDraftSuggestion(null);
-    setDraftSubmittedResult(null);
-    setFullCategoryStatus('');
-    draftForm.setFieldsValue({
-      accountId: defaultAccountId,
-      catIdsText: '',
-      brandId: '2100000000',
-      autoListing: false,
-    });
-  }, [accounts, activeAccountId, draftForm]);
-
-  const closeDraftModal = () => {
-    setDraftModalListing(null);
-    setDraftPrepared(null);
-    setDraftSuggestion(null);
-    setDraftSubmittedResult(null);
-    setFullCategoryStatus('');
-    draftForm.resetFields();
-  };
-
-  const resetPreparedDraft = (changedValues?: Partial<WxDraftFormValues>) => {
-    setDraftPrepared(null);
-    setDraftSubmittedResult(null);
-    setFullCategoryStatus('');
-  };
-
-  const draftStepItems: React.ComponentProps<typeof Steps>['items'] = [
-    {
-      title: '采集商品',
-      description: draftModalListing ? '已完成' : '等待采集',
-      status: draftModalListing ? 'finish' : 'wait',
-    },
-    {
-      title: '生成上架数据',
-      description: draftPrepared ? '请求体已生成' : '待生成',
-      status: generateDraftDataMutation.isPending ? 'process' : draftPrepared ? 'finish' : 'wait',
-    },
-    {
-      title: '提交草稿',
-      description: draftSubmittedResult ? draftSubmittedResult.productId : '待提交',
-      status: submitPreparedDraftMutation.isPending ? 'process' : draftSubmittedResult ? 'finish' : 'wait',
-    },
-  ];
-
-  const columns = useMemo<TableProps<CollectedProductListing>['columns']>(() => [
-    {
-      title: '商品',
-      dataIndex: 'title',
-      key: 'title',
-      ellipsis: true,
-      render: (_: string, record) => (
-        <Space size={10}>
-          <Image
-            src={record.images.main[0]}
-            width={48}
-            height={48}
-            alt={record.title}
-            preview={false}
-            styles={{ root: { objectFit: 'cover', borderRadius: 4, background: '#f6f8fa' } }}
-          />
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 420 }}>
-              {record.title || record.identity.itemId}
-            </div>
-            <div style={{ color: '#6b7280', fontSize: 12 }}>
-              {record.shop.name || '-'} · {record.identity.itemId}
-            </div>
-          </div>
-        </Space>
-      ),
-    },
-    {
-      title: '价格',
-      key: 'priceRangeText',
-      width: 110,
-      render: (_: unknown, record) => record.price.rangeText || '-',
-    },
-    {
-      title: '图片',
-      key: 'images',
-      width: 120,
-      render: (_: unknown, record) => (
-        <div>
-          <div>主图 {record.images.main.length}</div>
-          <div style={{ color: '#6b7280', fontSize: 12 }}>详情 {record.images.detail.length}</div>
-        </div>
-      ),
-    },
-    {
-      title: 'SKU',
-      key: 'sku',
-      width: 180,
-      render: (_: unknown, record) => (
-        <div>
-          <div>{record.sku.matrix.length} 个 SKU</div>
-          <div style={{ color: '#6b7280', fontSize: 12 }}>{skuSummary(record)}</div>
-        </div>
-      ),
-    },
-    {
-      title: '状态',
-      key: 'status',
-      width: 180,
-      render: (_: unknown, record) => statusTags(record),
-    },
-    {
-      title: '更新时间',
-      dataIndex: 'updatedAt',
-      key: 'updatedAt',
-      width: 180,
-      render: (value: number) => formatTime(value),
-    },
-    {
-      title: '操作',
-      key: 'action',
-      width: 240,
-      render: (_: unknown, record) => (
-        <Space size={4}>
-          <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => setPreviewListing(record)}>
-            查看
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            icon={<CloudUploadOutlined />}
-            disabled={accounts.length === 0}
-            onClick={() => openDraftModal(record)}
-          >
-            分步上架
-          </Button>
-          <Popconfirm
-            title="删除采集记录？"
-            description="只删除本地采集数据，不影响淘宝商品。"
-            okText="删除"
-            cancelText="取消"
-            okButtonProps={{ danger: true }}
-            onConfirm={() => removeMutation.mutate(record.id)}
-          >
-            <Button type="link" size="small" danger icon={<DeleteOutlined />}>
-              删除
-            </Button>
-          </Popconfirm>
-        </Space>
-      ),
-    },
-  ], [accounts.length, openDraftModal, removeMutation]);
+  }, [activeCollectionUrl, queryClient]);
 
   const handleCollect = async (values: { url: string }) => {
-    await collectMutation.mutateAsync(values.url.trim());
+    const url = values.url.trim();
+    setCollectedListing(null);
+    setDraftPrepared(null);
+    setDraftSuggestion(null);
+    setDraftSubmittedResult(null);
+    setFullCategoryStatus('');
+    await collectMutation.mutateAsync(url);
+  };
+
+  const renderCollectionPreview = (listing: CollectedProductListing): React.ReactNode => {
+    const paramColumns: TableProps<CollectedProductListing['params'][number]>['columns'] = [
+      { title: '分组', dataIndex: 'group', width: 120 },
+      { title: '参数', dataIndex: 'name', width: 220 },
+      { title: '值', dataIndex: 'value' },
+    ];
+    const skuColumns: TableProps<CollectedProductListing['sku']['matrix'][number]>['columns'] = [
+      {
+        title: '规格',
+        key: 'specs',
+        render: (_: unknown, record) => record.specs.map(spec => `${spec.name}:${spec.value}`).join(' / '),
+      },
+      { title: '价格', dataIndex: 'priceText', width: 120 },
+      { title: '库存', dataIndex: 'stockText', width: 120 },
+      { title: '发货', dataIndex: 'logisticsTime', width: 220 },
+    ];
+
+    return (
+      <Space vertical size={16} style={{ width: '100%' }}>
+        <Descriptions
+          size="small"
+          bordered
+          column={2}
+          items={[
+            { label: '商品 ID', children: listing.identity.itemId },
+            { label: '平台', children: listing.identity.platform },
+            { label: '店铺', children: listing.shop.name || '-' },
+            { label: '原类目', children: sourceCategoryText(listing) },
+            { label: '价格', children: listing.price.rangeText || '-' },
+            { label: '销量', children: listing.sales.text || '-' },
+            { label: '发货', children: listing.delivery.text || '-' },
+            { label: 'SKU', children: `${listing.sku.matrix.length} 个 SKU / ${skuSummary(listing)}` },
+            { label: '详情来源', children: listing.detail.source },
+            { label: '采集时间', children: formatTime(listing.updatedAt) },
+            { label: '状态', children: statusTags(listing), span: 2 },
+          ]}
+        />
+
+        <div>
+          {renderSectionTitle('主图', <Tag>{listing.images.main.length} 张</Tag>)}
+          {renderImageGroup(listing.images.main, '商品主图')}
+        </div>
+
+        <div>
+          {renderSectionTitle('图文详情', <Tag>{listing.images.detail.length} 张</Tag>)}
+          {renderImageGroup(listing.images.detail, '商品详情图', true)}
+        </div>
+
+        <div>
+          {renderSectionTitle('商品参数')}
+          <Table
+            rowKey={record => `${record.group}:${record.name}`}
+            size="small"
+            pagination={false}
+            dataSource={listing.params}
+            columns={paramColumns}
+          />
+        </div>
+
+        <div>
+          {renderSectionTitle('SKU 矩阵')}
+          <Table
+            rowKey="id"
+            size="small"
+            pagination={{ pageSize: 8, showSizeChanger: false }}
+            dataSource={listing.sku.matrix}
+            columns={skuColumns}
+            scroll={{ x: 720 }}
+          />
+        </div>
+
+        {renderCategorySuggestion(draftSuggestion)}
+
+        {fullCategoryStatus && (
+          <Alert
+            type={categoryOnlyMutation.isError || generateDraftDataMutation.isError ? 'error' : 'info'}
+            showIcon
+            title="处理状态"
+            description={fullCategoryStatus}
+          />
+        )}
+
+        <Collapse
+          size="small"
+          items={[
+            {
+              key: 'collection-json',
+              label: '采集原始数据',
+              children: (
+                <Input.TextArea
+                  readOnly
+                  value={JSON.stringify(listing, null, 2)}
+                  autoSize={{ minRows: 10, maxRows: 24 }}
+                />
+              ),
+            },
+          ]}
+        />
+      </Space>
+    );
+  };
+
+  const renderDraftPreview = (prepared: WxProductDraftPrepareResult): React.ReactNode => {
+    const request = prepared.request;
+    const attrRows = (request.attrs || []).map((attr, index) => ({ ...attr, key: `${attr.attr_key}:${index}` }));
+    const skuRows = request.skus.map((sku, index) => ({ ...sku, key: sku.sku_code || `${index}` }));
+    const attrColumns: TableProps<typeof attrRows[number]>['columns'] = [
+      { title: '属性名', dataIndex: 'attr_key', width: 220 },
+      { title: '属性值', dataIndex: 'attr_value' },
+    ];
+    const skuColumns: TableProps<typeof skuRows[number]>['columns'] = [
+      {
+        title: '规格',
+        key: 'sku_attrs',
+        render: (_: unknown, record) => record.sku_attrs.map(attr => `${attr.attr_key}:${attr.attr_value}`).join(' / ') || '-',
+      },
+      {
+        title: '价格',
+        dataIndex: 'sale_price',
+        width: 120,
+        render: (value: number) => formatCentPrice(value),
+      },
+      { title: '库存', dataIndex: 'stock_num', width: 100 },
+      { title: 'SKU 编码', dataIndex: 'sku_code', width: 160, render: (value?: string) => value || '-' },
+      {
+        title: 'SKU 图',
+        dataIndex: 'thumb_img',
+        width: 88,
+        render: (value: string) => value ? (
+          <Image
+            src={value}
+            width={48}
+            height={48}
+            alt="SKU 图"
+            preview={false}
+            styles={{ root: { objectFit: 'cover', background: '#f6f8fa', borderRadius: 4 } }}
+          />
+        ) : '-',
+      },
+      {
+        title: '库存类型',
+        key: 'stock_type',
+        width: 120,
+        render: (_: unknown, record) => `类型 ${record.sku_deliver_info.stock_type}`,
+      },
+    ];
+
+    return (
+      <Space vertical size={16} style={{ width: '100%' }}>
+        {renderCategorySuggestion(draftSuggestion)}
+
+        {prepared.warnings.length > 0 && (
+          <Alert
+            type="warning"
+            showIcon
+            title="商品参数已按微信类目规则补齐"
+            description={(
+              <Space size={4} wrap>
+                {prepared.warnings.map(warning => (
+                  <Tag key={warning} color="orange">{warning}</Tag>
+                ))}
+              </Space>
+            )}
+          />
+        )}
+
+        <Descriptions
+          size="small"
+          bordered
+          column={2}
+          items={[
+            { label: '商品标题', children: request.title, span: 2 },
+            { label: '外部商品 ID', children: request.out_product_id },
+            { label: '品牌 ID', children: request.brand_id || '-' },
+            { label: '微信类目', children: normalizedCategoryText(draftSuggestion), span: 2 },
+            { label: '微信类目 ID', children: request.cats_v2.map(cat => cat.cat_id).join(' / ') || '-' },
+            { label: '创建位置', children: <Tag color="blue">草稿箱</Tag> },
+            { label: '主图', children: `${request.head_imgs.length} 张` },
+            { label: '详情图', children: `${request.desc_info?.imgs?.length || 0} 张` },
+            { label: 'SKU', children: `${request.skus.length} 个` },
+            { label: '商品属性', children: `${request.attrs?.length || 0} 个` },
+            { label: '已上传图片', children: prepared.uploadedImageCount },
+            { label: '准备时间', children: formatTime(prepared.preparedAt) },
+          ]}
+        />
+
+        <Descriptions
+          size="small"
+          bordered
+          column={2}
+          items={[
+            { label: '发货方式', children: request.deliver_method },
+            { label: '发货账号类型', children: request.deliver_acct_type.join(' / ') || '-' },
+            { label: '运费模板', children: request.express_info?.template_id || '-' },
+            { label: '售后地址', children: request.after_sale_info?.after_sale_address_id || '-' },
+            { label: '货到付款', children: request.extra_service.is_open_cod },
+            { label: '七天无理由', children: request.extra_service.seven_day_return },
+            { label: '运费险', children: request.extra_service.freight_insurance },
+            { label: '提交标记', children: request.listing },
+          ]}
+        />
+
+        <div>
+          {renderSectionTitle('微信主图', <Tag>{request.head_imgs.length} 张</Tag>)}
+          {renderImageGroup(request.head_imgs, '微信商品主图')}
+        </div>
+
+        <div>
+          {renderSectionTitle('微信图文详情', <Tag>{request.desc_info?.imgs?.length || 0} 张</Tag>)}
+          {renderImageGroup(request.desc_info?.imgs || [], '微信商品详情图', true)}
+        </div>
+
+        <div>
+          {renderSectionTitle('商品属性')}
+          <Table
+            rowKey="key"
+            size="small"
+            pagination={false}
+            dataSource={attrRows}
+            columns={attrColumns}
+          />
+        </div>
+
+        <div>
+          {renderSectionTitle('SKU 列表')}
+          <Table
+            rowKey="key"
+            size="small"
+            pagination={{ pageSize: 8, showSizeChanger: false }}
+            dataSource={skuRows}
+            columns={skuColumns}
+            scroll={{ x: 900 }}
+          />
+        </div>
+
+        <Collapse
+          size="small"
+          items={[
+            {
+              key: 'draft-json',
+              label: '最终提交请求体',
+              children: (
+                <Input.TextArea
+                  readOnly
+                  value={JSON.stringify(request, null, 2)}
+                  autoSize={{ minRows: 10, maxRows: 24 }}
+                />
+              ),
+            },
+          ]}
+        />
+      </Space>
+    );
+  };
+
+  const renderInputStep = (): React.ReactNode => (
+    <Space vertical size={16} style={{ width: '100%' }}>
+      <Alert
+        type="info"
+        showIcon
+        title={`当前账号：${accountName || accountId}`}
+        description="当前页面的类目转换、图片上传和草稿创建都会使用左侧选中的账号。"
+      />
+      <Form form={form} layout="vertical" onFinish={handleCollect}>
+        <Form.Item
+          name="url"
+          label="淘宝/天猫商品链接"
+          rules={[{ required: true, message: '请输入淘宝或天猫商品链接' }]}
+        >
+          <Input
+            allowClear
+            placeholder="https://item.taobao.com/item.htm?id=..."
+            disabled={collectMutation.isPending}
+          />
+        </Form.Item>
+        <Button
+          type="primary"
+          htmlType="submit"
+          icon={<ImportOutlined />}
+          loading={collectMutation.isPending}
+        >
+          开始采集
+        </Button>
+      </Form>
+      {activeSession && (
+        <Alert
+          type="info"
+          showIcon
+          title="采集任务已提交"
+          description={`当前任务：${activeSession.status} · ${activeSession.url}`}
+        />
+      )}
+    </Space>
+  );
+
+  const renderStepContent = (): React.ReactNode => {
+    if (currentStep === 'input') return renderInputStep();
+
+    if (currentStep === 'collectionPreview') {
+      if (!collectedListing) {
+        return <Alert type="warning" showIcon title="暂无采集数据" />;
+      }
+      return (
+        <Space vertical size={16} style={{ width: '100%' }}>
+          {renderCollectionPreview(collectedListing)}
+          <div style={actionBarStyle}>
+            <Button onClick={resetWizard}>重新采集</Button>
+            <Space>
+              <Button
+                icon={<RobotOutlined />}
+                loading={categoryOnlyMutation.isPending}
+                disabled={generateDraftDataMutation.isPending}
+                onClick={() => categoryOnlyMutation.mutate()}
+              >
+                类目转换
+              </Button>
+              <Button
+                type="primary"
+                loading={generateDraftDataMutation.isPending}
+                disabled={categoryOnlyMutation.isPending}
+                onClick={() => generateDraftDataMutation.mutate()}
+              >
+                下一步
+              </Button>
+            </Space>
+          </div>
+        </Space>
+      );
+    }
+
+    if (currentStep === 'draftPreview') {
+      if (!draftPrepared) {
+        return <Alert type="warning" showIcon title="暂无草稿箱数据" />;
+      }
+      return (
+        <Space vertical size={16} style={{ width: '100%' }}>
+          {renderDraftPreview(draftPrepared)}
+          <div style={actionBarStyle}>
+            <Button onClick={() => setCurrentStep('collectionPreview')}>上一步</Button>
+            <Button
+              type="primary"
+              loading={submitPreparedDraftMutation.isPending}
+              onClick={() => submitPreparedDraftMutation.mutate()}
+            >
+              创建草稿
+            </Button>
+          </div>
+        </Space>
+      );
+    }
+
+    if (!draftSubmittedResult) {
+      return <Alert type="warning" showIcon title="暂无创建结果" />;
+    }
+    return (
+      <Space vertical size={16} style={{ width: '100%' }}>
+        <Alert
+          type="success"
+          showIcon
+          icon={<CheckCircleOutlined />}
+          title="微信小店草稿创建完成"
+          description={(
+            <Space size={8} wrap>
+              <Tag color="blue">商品 ID {draftSubmittedResult.productId}</Tag>
+              <Tag>已上传图片 {draftSubmittedResult.uploadedImageCount}</Tag>
+              <Tag>草稿箱</Tag>
+            </Space>
+          )}
+        />
+        <Button type="primary" onClick={resetWizard}>继续上货</Button>
+      </Space>
+    );
   };
 
   return (
@@ -399,357 +797,21 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accounts, activ
       <div>
         <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>上货管理</h2>
         <p style={{ margin: '8px 0 0', color: '#666', fontSize: 13 }}>
-          从淘宝商品详情页采集标题、图片、参数和 SKU，先保存为本地上货数据。
+          {accountName || accountId}
         </p>
       </div>
 
-      <Card size="small" title="商品采集">
-        <Form form={form} layout="inline" onFinish={handleCollect} style={{ gap: 8 }}>
-          <Form.Item
-            name="url"
-            style={{ flex: 1, minWidth: 360 }}
-            rules={[{ required: true, message: '请输入淘宝或天猫商品链接' }]}
-          >
-            <Input
-              allowClear
-              placeholder="https://item.taobao.com/item.htm?id=..."
-              disabled={collectMutation.isPending}
-            />
-          </Form.Item>
-          <Form.Item>
-            <Button
-              type="primary"
-              htmlType="submit"
-              icon={<ImportOutlined />}
-              loading={collectMutation.isPending}
-            >
-              采集商品
-            </Button>
-          </Form.Item>
-          <Button
-            icon={<ReloadOutlined />}
-            onClick={() => listingsQuery.refetch()}
-            loading={listingsQuery.isFetching}
-          >
-            刷新
-          </Button>
-        </Form>
-        {activeSession && (
-          <div style={{ marginTop: 10, color: '#6b7280', fontSize: 13 }}>
-            当前任务：{activeSession.status} · {activeSession.url}
-          </div>
-        )}
-      </Card>
+      <Steps
+        size="small"
+        current={wizardStepIndex[currentStep]}
+        items={wizardItems}
+      />
 
-      <Card size="small" title="本地采集商品" style={{ flex: 1, minHeight: 0 }}>
-        <Table
-          rowKey="id"
-          size="small"
-          columns={columns}
-          dataSource={listingsQuery.data || []}
-          loading={listingsQuery.isLoading}
-          pagination={{ pageSize: 10, showSizeChanger: false }}
-          scroll={{ x: 980 }}
-        />
-      </Card>
-
-      <Drawer
-        title={previewListing?.title || '采集详情'}
-        open={Boolean(previewListing)}
-        size={880}
-        destroyOnHidden
-        onClose={() => setPreviewListing(null)}
-      >
-        {previewListing && (
-          <Space vertical size={16} style={{ width: '100%' }}>
-            <Descriptions
-              size="small"
-              bordered
-              column={2}
-              items={[
-                { label: '商品 ID', children: previewListing.identity.itemId },
-                { label: '平台', children: previewListing.identity.platform },
-                { label: '店铺', children: previewListing.shop.name || '-' },
-                {
-                  label: '原类目',
-                  children: sourceCategoryText(previewListing),
-                },
-                { label: '价格', children: previewListing.price.rangeText || '-' },
-                { label: '销量', children: previewListing.sales.text || '-' },
-                { label: '发货', children: previewListing.delivery.text || '-' },
-                { label: '详情来源', children: previewListing.detail.source },
-                { label: '图片资产', children: `${previewListing.images.assets.length} 个` },
-              ]}
-            />
-            <div>
-              <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>主图</h3>
-              <Image.PreviewGroup>
-                <div style={imageGridStyle}>
-                  {previewListing.images.main.map(url => (
-                    <Image key={url} src={url} width="100%" height={72} alt="商品主图" styles={{ root: { objectFit: 'cover' } }} />
-                  ))}
-                </div>
-              </Image.PreviewGroup>
-            </div>
-            <div>
-              <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>
-                图文详情
-                <span style={{ marginLeft: 8, color: '#6b7280', fontSize: 12, fontWeight: 400 }}>
-                  {previewListing.images.detail.length} 张
-                </span>
-              </h3>
-              {previewListing.images.detail.length > 0 ? (
-                <Image.PreviewGroup>
-                  <div style={detailImageGridStyle}>
-                    {previewListing.images.detail.map((url, index) => (
-                      <Image
-                        key={`${url}:${index}`}
-                        src={url}
-                        width="100%"
-                        height={128}
-                        alt="商品详情图"
-                        styles={{ root: { objectFit: 'cover', background: '#f6f8fa' } }}
-                      />
-                    ))}
-                  </div>
-                </Image.PreviewGroup>
-              ) : (
-                <div style={{ color: '#9ca3af', fontSize: 13, padding: '12px 0' }}>
-                  暂无详情图
-                </div>
-              )}
-            </div>
-            <div>
-              <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>商品参数</h3>
-              <Table
-                rowKey={record => `${record.group}:${record.name}`}
-                size="small"
-                pagination={false}
-                dataSource={previewListing.params}
-                columns={[
-                  { title: '分组', dataIndex: 'group', width: 100 },
-                  { title: '参数', dataIndex: 'name', width: 220 },
-                  { title: '值', dataIndex: 'value' },
-                ]}
-              />
-            </div>
-            <div>
-              <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>SKU 矩阵</h3>
-              <Table
-                rowKey="id"
-                size="small"
-                pagination={{ pageSize: 8, showSizeChanger: false }}
-                dataSource={previewListing.sku.matrix}
-                columns={[
-                  {
-                    title: '规格',
-                    key: 'specs',
-                    render: (_: unknown, record) => record.specs.map(spec => `${spec.name}:${spec.value}`).join(' / '),
-                  },
-                  { title: '价格', dataIndex: 'priceText', width: 120 },
-                  { title: '库存', dataIndex: 'stockText', width: 120 },
-                  { title: '发货', dataIndex: 'logisticsTime', width: 220 },
-                ]}
-              />
-            </div>
-            <div>
-              <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>采集原始数据</h3>
-              <Input.TextArea
-                readOnly
-                value={JSON.stringify(previewListing, null, 2)}
-                autoSize={{ minRows: 10, maxRows: 24 }}
-              />
-            </div>
-          </Space>
-        )}
-      </Drawer>
-
-      <Modal
-        title="分步上架到微信小店草稿"
-        open={Boolean(draftModalListing)}
-        destroyOnHidden
-        width={760}
-        footer={[
-          <Button key="close" onClick={closeDraftModal}>
-            关闭
-          </Button>,
-          <Button
-            key="generate"
-            icon={<RobotOutlined />}
-            loading={generateDraftDataMutation.isPending}
-            disabled={submitPreparedDraftMutation.isPending}
-            onClick={() => generateDraftDataMutation.mutate()}
-          >
-            生成上架数据
-          </Button>,
-          <Button
-            key="submit"
-            type="primary"
-            disabled={!draftPrepared || Boolean(draftSubmittedResult)}
-            loading={submitPreparedDraftMutation.isPending}
-            onClick={() => submitPreparedDraftMutation.mutate()}
-          >
-            提交草稿
-          </Button>,
-        ]}
-        onCancel={closeDraftModal}
-      >
-        <Steps
-          size="small"
-          current={draftSubmittedResult ? 2 : draftPrepared ? 1 : 0}
-          items={draftStepItems}
-          style={{ marginBottom: 20 }}
-        />
-        <Form
-          form={draftForm}
-          layout="vertical"
-          preserve={false}
-          onValuesChange={resetPreparedDraft}
-        >
-          <Form.Item
-            name="accountId"
-            label="微信小店账号"
-            rules={[{ required: true, message: '请选择微信小店账号' }]}
-          >
-            <Select
-              placeholder="选择账号"
-              options={accounts.map(account => ({ label: account.name, value: account.id }))}
-            />
-          </Form.Item>
-          <Descriptions
-            size="small"
-            column={1}
-            style={{ marginBottom: 16 }}
-            items={[
-              {
-                label: '原商品类目',
-                children: sourceCategoryText(draftModalListing) === '-'
-                  ? '采集结果未识别到类目名称'
-                  : sourceCategoryText(draftModalListing),
-              },
-            ]}
-          />
-          {fullCategoryStatus && (
-            <Alert
-              type={generateDraftDataMutation.isError ? 'error' : generateDraftDataMutation.isSuccess ? 'success' : 'info'}
-              showIcon
-              style={{ marginBottom: 16 }}
-              title="上架数据生成状态"
-              description={fullCategoryStatus}
-            />
-          )}
-          <Form.Item
-            name="catIdsText"
-            label="微信小店类目路径 ID（AI 生成）"
-            extra="每次生成上架数据都会从静态微信叶子类目全量缓存中重新选择类目。"
-          >
-            <Input disabled placeholder="生成后展示类目路径 ID" />
-          </Form.Item>
-          {draftSuggestion && (
-            <Alert
-              type="info"
-              showIcon
-              style={{ marginBottom: 16 }}
-              title={draftSuggestion.reason}
-              description={(
-                <Space vertical size={8} style={{ width: '100%' }}>
-                  <Tag color={draftSuggestion.confidence >= 0.7 ? 'green' : 'orange'}>
-                    置信度 {Math.round(draftSuggestion.confidence * 100)}%
-                  </Tag>
-                  <Space size={4} wrap>
-                    <Tag color="blue">类目 ID {draftSuggestion.catIds.join(' / ')}</Tag>
-                    {draftSuggestion.categoryPath && (
-                      <Tag color="cyan">类目 {draftSuggestion.categoryPath.join(' / ')}</Tag>
-                    )}
-                    <Tag color="purple">
-                      来源 {categoryCandidateSourceText(draftSuggestion.categoryCandidateSource)}
-                    </Tag>
-                  </Space>
-                  {draftSuggestion.categoryLookup && (
-                    <Space size={4} wrap>
-                      <Tag>候选 {draftSuggestion.categoryLookup.candidateCount}</Tag>
-                      <Tag>范围 静态全量类目</Tag>
-                    </Space>
-                  )}
-                  {draftSuggestion.categoryCandidates && draftSuggestion.categoryCandidates.length > 0 && (
-                    <Space size={4} wrap>
-                      {draftSuggestion.categoryCandidates.map(candidate => (
-                        <Tag key={candidate.catIds.join('/')}>
-                          {candidate.names.join(' / ')}
-                        </Tag>
-                      ))}
-                    </Space>
-                  )}
-                  {draftSuggestion.warnings.length > 0 && (
-                    <Space size={4} wrap>
-                      {draftSuggestion.warnings.map(warning => (
-                        <Tag key={warning} color="orange">{warning}</Tag>
-                      ))}
-                    </Space>
-                  )}
-                </Space>
-              )}
-            />
-          )}
-          {draftPrepared && (
-            <Alert
-              type="success"
-              showIcon
-              style={{ marginBottom: 16 }}
-              title="上架数据已生成"
-              description={(
-                <Space size={4} wrap>
-                  <Tag>主图 {draftPrepared.summary.headImageCount}</Tag>
-                  <Tag>详情图 {draftPrepared.summary.detailImageCount}</Tag>
-                  <Tag>SKU {draftPrepared.summary.skuCount}</Tag>
-                  <Tag>属性 {draftPrepared.summary.attrCount}</Tag>
-                  <Tag>已上传图片 {draftPrepared.uploadedImageCount}</Tag>
-                  <Tag color={draftPrepared.summary.listing ? 'blue' : 'default'}>
-                    {draftPrepared.summary.listing ? '创建后提审' : '草稿箱'}
-                  </Tag>
-                  {draftPrepared.warnings.length > 0 && (
-                    <Tag color="orange">参数复核 {draftPrepared.warnings.length}</Tag>
-                  )}
-                </Space>
-              )}
-            />
-          )}
-          {draftPrepared?.warnings.length ? (
-            <Alert
-              type="warning"
-              showIcon
-              style={{ marginBottom: 16 }}
-              title="商品参数已按微信类目规则补齐"
-              description={(
-                <Space size={4} wrap>
-                  {draftPrepared.warnings.map(warning => (
-                    <Tag key={warning} color="orange">{warning}</Tag>
-                  ))}
-                </Space>
-              )}
-            />
-          ) : null}
-          {draftSubmittedResult && (
-            <Alert
-              type="success"
-              showIcon
-              style={{ marginBottom: 16 }}
-              title="微信小店草稿提交完成"
-              description={`商品 ID：${draftSubmittedResult.productId}`}
-            />
-          )}
-          <Form.Item name="brandId" label="品牌 ID" extra="默认 2100000000 表示无品牌。">
-            <Input allowClear placeholder="2100000000" />
-          </Form.Item>
-          <Form.Item
-            name="autoListing"
-            label="创建后提交审核"
-            valuePropName="checked"
-          >
-            <Switch />
-          </Form.Item>
-        </Form>
-      </Modal>
+      <div style={scrollBodyStyle}>
+        <Card size="small">
+          {renderStepContent()}
+        </Card>
+      </div>
     </div>
   );
 };

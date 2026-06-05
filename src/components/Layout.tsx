@@ -26,7 +26,7 @@ const ProductAuditPage = lazy(() => import('../pages/common-functions/ProductAud
 const ScheduledJobsPage = lazy(() => import('../pages/scheduled-jobs/ScheduledJobsPage'));
 const ViolationPage = lazy(() => import('../pages/violation/ViolationPage'));
 
-const ACCOUNT_MODULES = new Set<string>(['orders', 'commonFunctions', 'violation']);
+const ACCOUNT_MODULES = new Set<string>(['orders', 'productListing', 'commonFunctions', 'violation']);
 
 const MODULES: { key: DashboardModuleType; label: string }[] = [
   { key: 'orders', label: '订单管理' },
@@ -169,6 +169,7 @@ const AccountModuleContent: React.FC<{
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {activeModule === 'orders' && <OrdersPage scope={orderScope} accounts={accounts} />}
+      {activeModule === 'productListing' && <ProductListingPage accountId={activeAccount.id} accountName={activeAccount.name} />}
       {activeModule === 'commonFunctions' && <ProductAuditPage accountId={activeAccount.id} accounts={accounts} scope="account" />}
       {activeModule === 'violation' && <ViolationPage accountId={activeAccount.id} />}
     </div>
@@ -269,11 +270,6 @@ const Layout: React.FC = () => {
               {activeModule === 'scheduledJobs' && (
                 <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                   <ScheduledJobsPage accounts={accounts} />
-                </div>
-              )}
-              {activeModule === 'productListing' && (
-                <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                  <ProductListingPage accounts={accounts} activeAccountId={activeAccountId} />
                 </div>
               )}
               {activeModule === 'settings' && (
