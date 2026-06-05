@@ -19,6 +19,7 @@ const DEFAULT_WX_STOCK_NUM = 999;
 const DEFAULT_BRAND_ID = '2100000000';
 const WX_CATEGORY_MIN_DEPTH = 3;
 const WX_CATEGORY_MAX_DEPTH = 4;
+const EMOJI_CHARACTER_PATTERN = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}\u{20E3}]/gu;
 
 export interface ProductListingWxDraftMappingOptions {
   catIds: string[];
@@ -32,6 +33,10 @@ export interface ProductListingWxDraftMappingOptions {
 
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
+}
+
+function normalizeWxText(value: string): string {
+  return normalizeText(value.replace(EMOJI_CHARACTER_PATTERN, ''));
 }
 
 function truncateText(value: string, maxLength: number): string {
@@ -167,8 +172,8 @@ function skuStockNum(sku: TaobaoProductSkuMatrixItem, defaultStockNum: number): 
 function skuAttrs(sku: TaobaoProductSkuMatrixItem): WxShopAddProductAttr[] {
   return sku.specs
     .map(spec => ({
-      attr_key: normalizeText(spec.name),
-      attr_value: normalizeText(spec.value),
+      attr_key: normalizeWxText(spec.name),
+      attr_value: normalizeWxText(spec.value),
     }))
     .filter(attr => attr.attr_key && attr.attr_value);
 }
@@ -245,6 +250,7 @@ export function mapCollectedListingToWxAddProductRequest(
   const defaultStockNum = normalizeDefaultStock(options.defaultStockNum);
   const headImgs = resolveMainImages(listing, options.uploadedImages);
   const detailImgs = resolveDetailImages(listing, options.uploadedImages);
+  const resolvedDetailImgs = detailImgs.length > 0 ? detailImgs : [headImgs[0]];
   const attrs = buildOverrideAttrs(options.attrs) ?? buildAttrs(listing);
   const request: WxShopAddProductRequest = {
     out_product_id: sanitizeCode(`wishop-${listing.identity.platform}-${listing.identity.itemId}`, listing.identity.itemId),
@@ -254,7 +260,7 @@ export function mapCollectedListingToWxAddProductRequest(
     deliver_method: 0,
     deliver_acct_type: [],
     desc_info: {
-      imgs: detailImgs,
+      imgs: resolvedDetailImgs,
       desc: title,
     },
     cats: [],
@@ -272,8 +278,5 @@ export function mapCollectedListingToWxAddProductRequest(
     after_sale_info: { after_sale_address_id: afterSaleAddressId },
   };
 
-  if (detailImgs.length === 0) {
-    request.desc_info = { desc: title };
-  }
   return request;
 }

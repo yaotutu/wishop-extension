@@ -177,6 +177,53 @@ test('builds one default SKU when the collected listing has no SKU matrix', () =
   }]);
 });
 
+test('uses the first uploaded main image as detail fallback when collected detail images are empty', () => {
+  const listing = sampleListing({
+    images: { ...sampleListing().images, detail: [] },
+    detail: { text: '', source: 'none', images: [] },
+  });
+  const imageMap = new Map(collectWxDraftSourceImages(listing).map((url, index) => [url, `https://mmecimage.cn/p/uploaded-${index}.jpg`]));
+
+  const request = mapCollectedListingToWxAddProductRequest(listing, {
+    catIds: ['10000111', '10000113', '6091'],
+    expressTemplateId: '47428464001',
+    afterSaleAddressId: '123456',
+    uploadedImages: imageMap,
+  });
+
+  assert.deepEqual(request.desc_info?.imgs, ['https://mmecimage.cn/p/uploaded-0.jpg']);
+});
+
+test('removes emoji characters from WeChat SKU attribute values', () => {
+  const listing = sampleListing({
+    sku: {
+      ...sampleListing().sku,
+      matrix: [
+        {
+          ...sampleListing().sku.matrix[0],
+          specs: [
+            { pid: '1627207', vid: '28341', name: '颜色分类🎮', value: '透明🔥【电竞级】😊' },
+            { pid: '122216431', vid: '32298', name: '长度', value: '1m⚡' },
+          ],
+        },
+      ],
+    },
+  });
+  const imageMap = new Map(collectWxDraftSourceImages(listing).map((url, index) => [url, `https://mmecimage.cn/p/uploaded-${index}.jpg`]));
+
+  const request = mapCollectedListingToWxAddProductRequest(listing, {
+    catIds: ['10000111', '10000113', '6091'],
+    expressTemplateId: '47428464001',
+    afterSaleAddressId: '123456',
+    uploadedImages: imageMap,
+  });
+
+  assert.deepEqual(request.skus[0].sku_attrs, [
+    { attr_key: '颜色分类', attr_value: '透明【电竞级】' },
+    { attr_key: '长度', attr_value: '1m' },
+  ]);
+});
+
 test('uses AI-normalized attributes when they are supplied for the WeChat draft', () => {
   const listing = sampleListing();
   const imageMap = new Map(collectWxDraftSourceImages(listing).map((url, index) => [url, `https://mmecimage.cn/p/uploaded-${index}.jpg`]));
