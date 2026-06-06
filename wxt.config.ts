@@ -8,7 +8,7 @@ const HOST_PERMISSIONS = [
   // 淘宝/Tmall：订单去发货、采购单读取和退款申请时注入工作页工具栏。
   'https://*.taobao.com/*',
   'https://*.tmall.com/*',
-  // 淘宝商品图片 CDN：上货时先由插件校验可用图片候选 URL，再交给微信小店图片上传接口处理。
+  // 淘宝商品图片 CDN：复制商品时先由插件校验可用图片候选 URL，再交给微信小店图片上传接口处理。
   'https://*.alicdn.com/*',
   'https://*.taobaocdn.com/*',
   'https://*.tbcdn.cn/*',

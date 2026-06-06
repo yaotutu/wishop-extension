@@ -11,7 +11,7 @@ import {
   wxCategoryProductRuleCacheItemToProductRule,
 } from '../src/background/services/wx-category-product-rule-cache-service.ts';
 import type { WxShopCategoryProductRule, WxShopListingClient } from '../src/background/wxshop/listing/types.ts';
-import type { RuntimeCategoryPath } from '../src/background/services/product-listing-category-shortlist.ts';
+import type { RuntimeCategoryPath } from '../src/background/services/product-copy-category-shortlist.ts';
 
 const CATEGORY_PATHS: RuntimeCategoryPath[] = [
   {

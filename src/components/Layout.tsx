@@ -21,17 +21,17 @@ const { Header, Sider, Content } = AntLayout;
 const StoreManagement = lazy(() => import('../pages/store-management/StoreManagement'));
 const SettingsPage = lazy(() => import('../pages/settings/SettingsPage'));
 const OrdersPage = lazy(() => import('../pages/orders/OrdersPage'));
-const ProductListingPage = lazy(() => import('../pages/product-listing/ProductListingPage'));
+const ProductCopyPage = lazy(() => import('../pages/product-copy/ProductCopyPage'));
 const ProductAuditPage = lazy(() => import('../pages/common-functions/ProductAuditPage'));
 const ScheduledJobsPage = lazy(() => import('../pages/scheduled-jobs/ScheduledJobsPage'));
 const ViolationPage = lazy(() => import('../pages/violation/ViolationPage'));
 
-const ACCOUNT_MODULES = new Set<string>(['orders', 'productListing', 'commonFunctions', 'violation']);
+const ACCOUNT_MODULES = new Set<string>(['orders', 'productCopy', 'commonFunctions', 'violation']);
 
 const MODULES: { key: DashboardModuleType; label: string }[] = [
   { key: 'orders', label: '订单管理' },
   { key: 'storeManagement', label: '店铺管理' },
-  { key: 'productListing', label: '上货管理' },
+  { key: 'productCopy', label: '复制商品' },
   { key: 'commonFunctions', label: '商品提审' },
   { key: 'scheduledJobs', label: '调度任务' },
   { key: 'violation', label: '违规词检测' },
@@ -169,7 +169,7 @@ const AccountModuleContent: React.FC<{
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {activeModule === 'orders' && <OrdersPage scope={orderScope} accounts={accounts} />}
-      {activeModule === 'productListing' && <ProductListingPage accountId={activeAccount.id} accountName={activeAccount.name} />}
+      {activeModule === 'productCopy' && <ProductCopyPage accountId={activeAccount.id} accountName={activeAccount.name} />}
       {activeModule === 'commonFunctions' && <ProductAuditPage accountId={activeAccount.id} accounts={accounts} scope="account" />}
       {activeModule === 'violation' && <ViolationPage accountId={activeAccount.id} />}
     </div>

@@ -4,7 +4,7 @@
 
 **Goal:** Rebuild Taobao product collection as a broad page snapshot that stores rich product facts, image assets, detail content, SKU identifiers, sanitized page model data, and collection diagnostics.
 
-**Architecture:** Keep the existing WXT content-script flow and background session queue. Expand shared collection types, collect richer data in the MAIN world script, normalize it in the product detail adapter, clear old collected listing records during storage migration, and update UI/mapper/tests to consume the new structure directly.
+**Architecture:** Keep the existing WXT content-script flow and background session queue. Expand shared collection types, collect richer data in the MAIN world script, normalize it in the product detail adapter, clear old product copy records during storage migration, and update UI/mapper/tests to consume the new structure directly.
 
 **Tech Stack:** WXT, TypeScript, React, Dexie, node:test.
 
@@ -18,7 +18,7 @@
 
 - [ ] Add explicit image asset, detail content, SKU property, raw model, and diagnostics types to `src/shared/types.ts`.
 - [ ] Replace flat `TaobaoProductSnapshot` fields with grouped `identity`, `shop`, `category`, `price`, `images`, `detail`, `sku`, `rawModel`, and `diagnostics` fields.
-- [ ] Update `CollectedProductListing` to use the new snapshot shape and keep `id`, `missingFields`, and `updatedAt`.
+- [ ] Update `ProductCopyRecord` to use the new snapshot shape and keep `id`, `missingFields`, and `updatedAt`.
 
 ### Task 2: Make Adapter Tests Fail For Rich Snapshot Data
 
@@ -38,7 +38,7 @@ Expected: FAIL because the new snapshot fields are not implemented yet.
 
 **Files:**
 - Modify: `src/content/taobao/adapters/product-detail-collection-adapter.ts`
-- Modify: `src/content/taobao/runtime/product-listing-collection-workflow.ts`
+- Modify: `src/content/taobao/runtime/product-copy-workflow.ts`
 
 - [ ] Extend adapter input to accept detail content and image asset candidates.
 - [ ] Build rich snapshot groups from the sanitized page model.
@@ -63,29 +63,29 @@ Expected: PASS.
 Run: `node --test tests/taobao-product-collection-adapter.test.ts tests/detail-image-stability.test.ts`
 Expected: PASS.
 
-### Task 5: Clear Old Collected Listings
+### Task 5: Clear Old Product Copy Records
 
 **Files:**
 - Modify: `src/background/store/core.ts`
 - Modify: `src/background/store/migrations.ts`
-- Test: `tests/collected-product-listing-repository.test.ts`
+- Test: `tests/product-copy-record-repository.test.ts`
 
 - [ ] Increment `CURRENT_STORAGE_VERSION`.
-- [ ] Add a migration that clears `extensionDb.collectedProductListings`.
-- [ ] Add or update a test proving old collected listings are removed.
+- [ ] Add a migration that clears `extensionDb.productCopyRecords`.
+- [ ] Add or update a test proving old product copy records are removed.
 
-Run: `node --test tests/collected-product-listing-repository.test.ts`
+Run: `node --test tests/product-copy-record-repository.test.ts`
 Expected: PASS.
 
 ### Task 6: Update Consumers For New Snapshot Shape
 
 **Files:**
-- Modify: `src/background/services/product-listing-collection-service.ts`
-- Modify: `src/background/services/product-listing-wx-draft-mapper.ts`
-- Modify: `src/background/services/product-listing-ai-draft-service.ts`
+- Modify: `src/background/services/product-copy-session-service.ts`
+- Modify: `src/background/services/product-copy-wx-draft-mapper.ts`
+- Modify: `src/background/services/product-copy-ai-draft-service.ts`
 - Modify: `src/background/services/taobao-itemcat-lookup.ts`
-- Modify: `src/background/services/product-listing-category-lookup.ts`
-- Modify: `src/pages/product-listing/ProductListingPage.tsx`
+- Modify: `src/background/services/product-copy-category-lookup.ts`
+- Modify: `src/pages/product-copy/ProductCopyPage.tsx`
 - Modify: related tests under `tests/`
 
 - [ ] Update missing-field checks for grouped fields.
@@ -102,6 +102,6 @@ Expected: PASS.
 **Files:**
 - All modified files.
 
-- [ ] Run focused tests: `node --test tests/taobao-product-collection-adapter.test.ts tests/detail-image-stability.test.ts tests/collected-product-listing-repository.test.ts tests/product-listing-wx-draft-mapper.test.ts tests/product-listing-wx-draft-service.test.ts tests/product-listing-ai-draft-service.test.ts tests/taobao-itemcat-lookup.test.ts tests/product-listing-category-lookup.test.ts`
+- [ ] Run focused tests: `node --test tests/taobao-product-collection-adapter.test.ts tests/detail-image-stability.test.ts tests/product-copy-record-repository.test.ts tests/product-copy-wx-draft-mapper.test.ts tests/product-copy-wx-draft-service.test.ts tests/product-copy-ai-draft-service.test.ts tests/taobao-itemcat-lookup.test.ts tests/product-copy-category-lookup.test.ts`
 - [ ] Run `npm run compile`.
 - [ ] If background/runtime files changed, run `npm run build`.

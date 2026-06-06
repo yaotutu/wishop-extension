@@ -1,9 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
 import type {
-  CollectedProductListing,
-  CreateProductListingCollectionSessionInput,
-  ProductListingCollectionSession,
-  ProductListingCollectionSessionStatus,
+  ProductCopyRecord,
+  CreateProductCopySessionInput,
+  ProductCopySession,
+  ProductCopySessionStatus,
   TaobaoProductSnapshot,
   TaobaoSecurityChallengeSnapshot,
 } from '../../shared/types.ts';
@@ -15,15 +15,15 @@ import {
   recordActivityWaitingUser,
 } from '../activity-logs/activity-log-service.ts';
 import {
-  listCollectedProductListings,
-  removeCollectedProductListing,
-  saveCollectedProductListing,
-} from '../store/collected-product-listing-repository.ts';
+  listProductCopyRecords,
+  removeProductCopyRecord,
+  saveProductCopyRecord,
+} from '../store/product-copy-record-repository.ts';
 import { activateTaobaoWorkTab, openTaobaoWorkTab } from '../taobao-workspace/work-tab-service.ts';
 import { enrichTaobaoProductSnapshotWithItemcat } from './taobao-itemcat-lookup.ts';
 
 const SESSION_TTL_MS = 30 * 60 * 1000;
-const sessions = new Map<string, ProductListingCollectionSession>();
+const sessions = new Map<string, ProductCopySession>();
 const sessionIdByTabId = new Map<number, string>();
 const queuedSessionIds: string[] = [];
 let activeSessionId: string | undefined;
@@ -53,7 +53,7 @@ function normalizeTaobaoProductUrl(rawUrl: string): string {
   return normalized.toString();
 }
 
-function emitProductListingCollectionEvent(event: string, payload: unknown): void {
+function emitProductCopyEvent(event: string, payload: unknown): void {
   chrome.runtime.sendMessage({ type: 'event', event, payload }).catch(() => {});
 }
 
@@ -70,16 +70,16 @@ function pruneExpiredSessions(): void {
   }
 }
 
-function getFreshSession(sessionId: string): ProductListingCollectionSession | undefined {
+function getFreshSession(sessionId: string): ProductCopySession | undefined {
   pruneExpiredSessions();
   return sessions.get(sessionId);
 }
 
-function isTerminalSession(session: ProductListingCollectionSession): boolean {
+function isTerminalSession(session: ProductCopySession): boolean {
   return session.status === 'completed' || session.status === 'failed';
 }
 
-function hasActiveCollectionSession(): boolean {
+function hasActiveProductCopySession(): boolean {
   if (!activeSessionId) return false;
   const active = getFreshSession(activeSessionId);
   if (active && !isTerminalSession(active)) return true;
@@ -87,15 +87,15 @@ function hasActiveCollectionSession(): boolean {
   return false;
 }
 
-function collectionLogBase(session: ProductListingCollectionSession) {
+function productCopyLogBase(session: ProductCopySession) {
   return {
-    domain: 'listing' as const,
+    domain: 'productCopy' as const,
     scope: 'global' as const,
     trigger: 'background' as const,
     runId: session.id,
     metadata: {
       url: session.url,
-      source: 'productListingCollection',
+      source: 'productCopy',
     },
   };
 }
@@ -110,7 +110,7 @@ function missingFields(snapshot: TaobaoProductSnapshot): string[] {
   return missing;
 }
 
-function toCollectedListing(snapshot: TaobaoProductSnapshot, existing?: CollectedProductListing | null): CollectedProductListing {
+function toProductCopyRecord(snapshot: TaobaoProductSnapshot, existing?: ProductCopyRecord | null): ProductCopyRecord {
   const timestamp = now();
   return {
     ...snapshot,
@@ -122,33 +122,33 @@ function toCollectedListing(snapshot: TaobaoProductSnapshot, existing?: Collecte
   };
 }
 
-async function startCollectionSession(sessionId: string): Promise<ProductListingCollectionSession> {
+async function startProductCopySession(sessionId: string): Promise<ProductCopySession> {
   const session = getFreshSession(sessionId);
   if (!session) throw new Error('商品采集会话已过期，请重新采集');
   activeSessionId = sessionId;
   try {
     const tab = await openTaobaoWorkTab(session.url);
     if (!tab.id) throw new Error('无法创建淘宝商品工作页');
-    return bindProductListingCollectionSessionToTab(session.id, tab.id);
+    return bindProductCopySessionToTab(session.id, tab.id);
   } catch (error) {
     activeSessionId = undefined;
     const message = error instanceof Error ? error.message : '打开淘宝商品工作页失败';
-    await failProductListingCollectionSession(sessionId, message);
+    await failProductCopySession(sessionId, message);
     throw error;
   }
 }
 
 async function startNextQueuedSession(): Promise<void> {
-  if (startingNextSession || hasActiveCollectionSession()) return;
+  if (startingNextSession || hasActiveProductCopySession()) return;
   startingNextSession = true;
   try {
-    while (!hasActiveCollectionSession() && queuedSessionIds.length > 0) {
+    while (!hasActiveProductCopySession() && queuedSessionIds.length > 0) {
       const sessionId = queuedSessionIds.shift();
       if (!sessionId) continue;
       const session = getFreshSession(sessionId);
       if (!session || isTerminalSession(session)) continue;
       try {
-        await startCollectionSession(sessionId);
+        await startProductCopySession(sessionId);
       } catch {
         // 单个采集任务失败后继续处理队列，失败事件由 fail 方法负责通知 UI。
       }
@@ -158,16 +158,16 @@ async function startNextQueuedSession(): Promise<void> {
   }
 }
 
-export async function openProductListingCollectionSession(
-  input: CreateProductListingCollectionSessionInput,
-): Promise<ProductListingCollectionSession> {
+export async function openProductCopySession(
+  input: CreateProductCopySessionInput,
+): Promise<ProductCopySession> {
   const url = normalizeTaobaoProductUrl(input.url);
   pruneExpiredSessions();
   const existing = Array.from(sessions.values()).find(session => !isTerminalSession(session) && session.url === url);
   if (existing) return existing;
 
   const timestamp = now();
-  const session: ProductListingCollectionSession = {
+  const session: ProductCopySession = {
     id: uuidv4(),
     url,
     status: 'created',
@@ -177,29 +177,29 @@ export async function openProductListingCollectionSession(
   };
   sessions.set(session.id, session);
   void recordActivityStarted({
-    ...collectionLogBase(session),
+    ...productCopyLogBase(session),
     title: '淘宝商品采集任务已创建',
     detail: `商品链接：${url}`,
   });
 
-  if (hasActiveCollectionSession()) {
-    const queued: ProductListingCollectionSession = { ...session, status: 'queued', updatedAt: now() };
+  if (hasActiveProductCopySession()) {
+    const queued: ProductCopySession = { ...session, status: 'queued', updatedAt: now() };
     sessions.set(session.id, queued);
     queuedSessionIds.push(session.id);
     void recordActivityQueued({
-      ...collectionLogBase(queued),
+      ...productCopyLogBase(queued),
       title: '淘宝商品采集已排队',
       detail: '淘宝工作页正在处理其他任务，当前商品会自动排队采集。',
     });
     return queued;
   }
-  return startCollectionSession(session.id);
+  return startProductCopySession(session.id);
 }
 
-export async function bindProductListingCollectionSessionToTab(
+export async function bindProductCopySessionToTab(
   sessionId: string,
   tabId: number,
-): Promise<ProductListingCollectionSession> {
+): Promise<ProductCopySession> {
   const session = getFreshSession(sessionId);
   if (!session) throw new Error('商品采集会话已过期，请重新采集');
   const next = { ...session, tabId, status: 'opened' as const, updatedAt: now() };
@@ -208,17 +208,17 @@ export async function bindProductListingCollectionSessionToTab(
   return next;
 }
 
-export async function getProductListingCollectionSessionByTab(tabId: number): Promise<ProductListingCollectionSession | null> {
+export async function getProductCopySessionByTab(tabId: number): Promise<ProductCopySession | null> {
   const sessionId = sessionIdByTabId.get(tabId);
   if (!sessionId) return null;
   return getFreshSession(sessionId) || null;
 }
 
-export async function updateProductListingCollectionSessionStatus(
+export async function updateProductCopySessionStatus(
   sessionId: string,
-  status: ProductListingCollectionSessionStatus,
+  status: ProductCopySessionStatus,
   lastError?: string,
-): Promise<ProductListingCollectionSession> {
+): Promise<ProductCopySession> {
   const session = getFreshSession(sessionId);
   if (!session) throw new Error('商品采集会话已过期，请重新采集');
   const next = { ...session, status, lastError, updatedAt: now() };
@@ -226,13 +226,13 @@ export async function updateProductListingCollectionSessionStatus(
   return next;
 }
 
-export async function reportProductListingCollectionChallenge(
+export async function reportProductCopyChallenge(
   sessionId: string,
   snapshot: TaobaoSecurityChallengeSnapshot,
-): Promise<ProductListingCollectionSession> {
+): Promise<ProductCopySession> {
   const session = getFreshSession(sessionId);
   if (!session) throw new Error('商品采集会话已过期，请重新采集');
-  const next: ProductListingCollectionSession = {
+  const next: ProductCopySession = {
     ...session,
     status: 'waiting-user-verification',
     challenge: snapshot,
@@ -241,7 +241,7 @@ export async function reportProductListingCollectionChallenge(
   };
   sessions.set(sessionId, next);
   void recordActivityWaitingUser({
-    ...collectionLogBase(next),
+    ...productCopyLogBase(next),
     title: '淘宝商品采集需要用户处理验证',
     detail: next.lastError,
     notification: {
@@ -249,7 +249,7 @@ export async function reportProductListingCollectionChallenge(
       urgency: 'important',
     },
   });
-  emitProductListingCollectionEvent('productListingCollection:challenge', {
+  emitProductCopyEvent('productCopy:challenge', {
     url: next.url,
     reason: next.lastError,
   });
@@ -257,10 +257,10 @@ export async function reportProductListingCollectionChallenge(
   return next;
 }
 
-export async function resolveProductListingCollectionChallenge(sessionId: string): Promise<ProductListingCollectionSession> {
+export async function resolveProductCopyChallenge(sessionId: string): Promise<ProductCopySession> {
   const session = getFreshSession(sessionId);
   if (!session) throw new Error('商品采集会话已过期，请重新采集');
-  const next: ProductListingCollectionSession = {
+  const next: ProductCopySession = {
     ...session,
     status: 'page-ready',
     challenge: undefined,
@@ -271,45 +271,45 @@ export async function resolveProductListingCollectionChallenge(sessionId: string
   return next;
 }
 
-export async function completeProductListingCollectionSession(
+export async function completeProductCopySession(
   sessionId: string,
   snapshot: TaobaoProductSnapshot,
-): Promise<CollectedProductListing> {
+): Promise<ProductCopyRecord> {
   const session = getFreshSession(sessionId);
   if (!session) throw new Error('商品采集会话已过期，请重新采集');
   const enrichedSnapshot = await enrichTaobaoProductSnapshotWithItemcat(snapshot);
-  const listing = await saveCollectedProductListing(toCollectedListing(enrichedSnapshot));
+  const listing = await saveProductCopyRecord(toProductCopyRecord(enrichedSnapshot));
   const next = {
     ...session,
     status: 'completed' as const,
-    listingId: listing.id,
+    copyId: listing.id,
     challenge: undefined,
     updatedAt: now(),
   };
   sessions.set(sessionId, next);
   if (activeSessionId === sessionId) activeSessionId = undefined;
   void recordActivityCompleted({
-    ...collectionLogBase(next),
+    ...productCopyLogBase(next),
     title: '淘宝商品采集完成',
     detail: `${listing.title || listing.identity.itemId}，SKU ${listing.sku.matrix.length} 个，参数 ${listing.params.length} 项`,
   });
-  emitProductListingCollectionEvent('productListingCollection:completed', listing);
+  emitProductCopyEvent('productCopy:completed', listing);
   void startNextQueuedSession().catch(() => {});
   return listing;
 }
 
-export async function failProductListingCollectionSession(
+export async function failProductCopySession(
   sessionId: string,
   error: string,
-): Promise<ProductListingCollectionSession> {
-  const session = await updateProductListingCollectionSessionStatus(sessionId, 'failed', error);
+): Promise<ProductCopySession> {
+  const session = await updateProductCopySessionStatus(sessionId, 'failed', error);
   if (activeSessionId === sessionId) activeSessionId = undefined;
   void recordActivityFailed({
-    ...collectionLogBase(session),
+    ...productCopyLogBase(session),
     title: '淘宝商品采集失败',
     error: { message: error },
   });
-  emitProductListingCollectionEvent('productListingCollection:failed', {
+  emitProductCopyEvent('productCopy:failed', {
     url: session.url,
     error,
   });
@@ -317,7 +317,7 @@ export async function failProductListingCollectionSession(
   return session;
 }
 
-export function installProductListingCollectionTabCleanup(): void {
+export function installProductCopyTabCleanup(): void {
   chrome.tabs.onRemoved.addListener((tabId) => {
     const sessionId = sessionIdByTabId.get(tabId);
     if (!sessionId) return;
@@ -325,7 +325,7 @@ export function installProductListingCollectionTabCleanup(): void {
     const session = sessions.get(sessionId);
     if (!session || isTerminalSession(session)) return;
     if (activeSessionId === sessionId) activeSessionId = undefined;
-    const next: ProductListingCollectionSession = {
+    const next: ProductCopySession = {
       ...session,
       tabId: undefined,
       status: 'failed',
@@ -334,11 +334,11 @@ export function installProductListingCollectionTabCleanup(): void {
     };
     sessions.set(sessionId, next);
     void recordActivityFailed({
-      ...collectionLogBase(next),
+      ...productCopyLogBase(next),
       title: '淘宝商品采集失败',
       error: { message: next.lastError || '淘宝商品工作页已关闭' },
     });
-    emitProductListingCollectionEvent('productListingCollection:failed', {
+    emitProductCopyEvent('productCopy:failed', {
       url: session.url,
       error: next.lastError,
     });
@@ -346,7 +346,7 @@ export function installProductListingCollectionTabCleanup(): void {
   });
 }
 
-export const productListingCollectionStore = {
-  list: listCollectedProductListings,
-  remove: removeCollectedProductListing,
+export const productCopyRecordStore = {
+  list: listProductCopyRecords,
+  remove: removeProductCopyRecord,
 };

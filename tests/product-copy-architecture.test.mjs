@@ -15,15 +15,15 @@ test('Taobao content entrypoint is named for shared Taobao workflows', () => {
   assert.match(source('entrypoints/taobao.content.tsx'), /defineContentScript\(/);
 });
 
-test('product listing has an independent dashboard module boundary', () => {
+test('product copy has an independent dashboard module boundary', () => {
   const layout = source('src/components/Layout.tsx');
   const preferences = source('src/stores/dashboard-ui-preferences-store.ts');
 
-  assert.equal(existsSync(resolve(root, 'src/pages/product-listing/ProductListingPage.tsx')), true);
-  assert.match(layout, /lazy\(\(\) => import\('\.\.\/pages\/product-listing\/ProductListingPage'\)\)/);
-  assert.match(layout, /\{ key: 'productListing', label: '上货管理' \}/);
-  assert.match(layout, /activeModule === 'productListing'/);
-  assert.match(preferences, /'productListing'/);
+  assert.equal(existsSync(resolve(root, 'src/pages/product-copy/ProductCopyPage.tsx')), true);
+  assert.match(layout, /lazy\(\(\) => import\('\.\.\/pages\/product-copy\/ProductCopyPage'\)\)/);
+  assert.match(layout, /\{ key: 'productCopy', label: '复制商品' \}/);
+  assert.match(layout, /activeModule === 'productCopy'/);
+  assert.match(preferences, /'productCopy'/);
   assert.match(layout, /activeModule === 'commonFunctions' && <ProductAuditPage/);
 });
 
@@ -44,8 +44,8 @@ test('product audit task config does not carry account-local failure policy', ()
   assert.match(types, /export interface ProductAuditFailurePolicy/);
 });
 
-test('product listing preview renders collected detail images', () => {
-  const page = source('src/pages/product-listing/ProductListingPage.tsx');
+test('product copy preview renders detail images', () => {
+  const page = source('src/pages/product-copy/ProductCopyPage.tsx');
 
   assert.match(page, /function renderImageGroup/);
   assert.match(page, /<Image\.PreviewGroup>/);

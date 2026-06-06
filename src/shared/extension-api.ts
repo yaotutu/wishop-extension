@@ -1,9 +1,9 @@
 import type {
   Account,
-  CollectedProductListing,
+  ProductCopyRecord,
   Config,
   CreatePreparedWxDraftBoxProductInput,
-  CreateProductListingCollectionSessionInput,
+  CreateProductCopySessionInput,
   CreateWxDraftBoxProductInput,
   CreateWxDraftBoxProductPrepareInput,
   CreateWxProductDraftSuggestionInput,
@@ -35,7 +35,7 @@ import type {
   ProductSourceBinding,
   ProductSourceItem,
   ProductQrcodeResult,
-  ProductListingCollectionSession,
+  ProductCopySession,
   ProductAuditCategoryPrecheckInput,
   ProductAuditCategoryPrecheckResult,
   ProductAuditFailurePolicy,
@@ -206,41 +206,41 @@ export const extensionApi = {
   products: {
     getQrcode: (accountId: string, productId: string): Promise<ProductQrcodeResult> => invoke('products:getQrcode', accountId, productId),
   },
-  productListingCollection: {
-    list: (): Promise<CollectedProductListing[]> => invoke('productListingCollection:list'),
-    remove: (listingId: string): Promise<void> => invoke('productListingCollection:remove', listingId),
-    open: (input: CreateProductListingCollectionSessionInput): Promise<ProductListingCollectionSession> =>
-      invoke('productListingCollection:open', input),
-    getCurrentTabSession: (): Promise<ProductListingCollectionSession | null> =>
-      invoke('productListingCollection:getCurrentTabSession'),
-    markPageReady: (sessionId: string): Promise<ProductListingCollectionSession> =>
-      invoke('productListingCollection:markPageReady', sessionId),
+  productCopy: {
+    list: (): Promise<ProductCopyRecord[]> => invoke('productCopy:list'),
+    remove: (copyId: string): Promise<void> => invoke('productCopy:remove', copyId),
+    open: (input: CreateProductCopySessionInput): Promise<ProductCopySession> =>
+      invoke('productCopy:open', input),
+    getCurrentTabSession: (): Promise<ProductCopySession | null> =>
+      invoke('productCopy:getCurrentTabSession'),
+    markPageReady: (sessionId: string): Promise<ProductCopySession> =>
+      invoke('productCopy:markPageReady', sessionId),
     reportChallenge: (
       sessionId: string,
       snapshot: TaobaoSecurityChallengeSnapshot,
-    ): Promise<ProductListingCollectionSession> => invoke('productListingCollection:reportChallenge', sessionId, snapshot),
-    resolveChallenge: (sessionId: string): Promise<ProductListingCollectionSession> =>
-      invoke('productListingCollection:resolveChallenge', sessionId),
-    complete: (sessionId: string, snapshot: TaobaoProductSnapshot): Promise<CollectedProductListing> =>
-      invoke('productListingCollection:complete', sessionId, snapshot),
-    fail: (sessionId: string, error: string): Promise<ProductListingCollectionSession> =>
-      invoke('productListingCollection:fail', sessionId, error),
+    ): Promise<ProductCopySession> => invoke('productCopy:reportChallenge', sessionId, snapshot),
+    resolveChallenge: (sessionId: string): Promise<ProductCopySession> =>
+      invoke('productCopy:resolveChallenge', sessionId),
+    complete: (sessionId: string, snapshot: TaobaoProductSnapshot): Promise<ProductCopyRecord> =>
+      invoke('productCopy:complete', sessionId, snapshot),
+    fail: (sessionId: string, error: string): Promise<ProductCopySession> =>
+      invoke('productCopy:fail', sessionId, error),
     suggestWxCategoryFromFullList: (input: CreateWxProductDraftSuggestionInput): Promise<WxProductDraftSuggestionResult> =>
-      invoke('productListingCollection:suggestWxCategoryFromFullList', input),
+      invoke('productCopy:suggestWxCategoryFromFullList', input),
     prepareWxDraftBoxProduct: (input: CreateWxDraftBoxProductPrepareInput): Promise<WxDraftBoxProductPrepareResult> =>
-      invoke('productListingCollection:prepareWxDraftBoxProduct', input),
+      invoke('productCopy:prepareWxDraftBoxProduct', input),
     createPreparedWxDraftBoxProduct: (input: CreatePreparedWxDraftBoxProductInput): Promise<WxProductDraftCreationResult> =>
-      invoke('productListingCollection:createPreparedWxDraftBoxProduct', input),
+      invoke('productCopy:createPreparedWxDraftBoxProduct', input),
     createWxDraftBoxProduct: (input: CreateWxDraftBoxProductInput): Promise<WxProductDraftCreationResult> =>
-      invoke('productListingCollection:createWxDraftBoxProduct', input),
+      invoke('productCopy:createWxDraftBoxProduct', input),
     deleteCreatedWxDraftBoxProduct: (input: DeleteCreatedWxDraftBoxProductInput): Promise<DeleteCreatedWxDraftBoxProductResult> =>
-      invoke('productListingCollection:deleteCreatedWxDraftBoxProduct', input),
-    onCompleted: (callback: (listing: CollectedProductListing) => void) =>
-      onRuntimeEvent('productListingCollection:completed', callback),
+      invoke('productCopy:deleteCreatedWxDraftBoxProduct', input),
+    onCompleted: (callback: (listing: ProductCopyRecord) => void) =>
+      onRuntimeEvent('productCopy:completed', callback),
     onFailed: (callback: (payload: { url: string; error: string }) => void) =>
-      onRuntimeEvent('productListingCollection:failed', callback),
+      onRuntimeEvent('productCopy:failed', callback),
     onChallenge: (callback: (payload: { url: string; reason: string }) => void) =>
-      onRuntimeEvent('productListingCollection:challenge', callback),
+      onRuntimeEvent('productCopy:challenge', callback),
   },
   wxCategoryData: {
     downloadProductRules: (input: SyncWxCategoryProductRulesInput): Promise<SyncWxCategoryProductRulesResult> =>

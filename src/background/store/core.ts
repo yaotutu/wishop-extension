@@ -30,7 +30,7 @@ export interface StoredWxAccessToken {
   updatedAt: number;
 }
 
-export const CURRENT_STORAGE_VERSION = 11;
+export const CURRENT_STORAGE_VERSION = 12;
 
 export const DEFAULT_PRODUCT_AUDIT_CONFIG: ProductAuditTaskConfig = {
   submitUnauditedDrafts: true,

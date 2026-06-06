@@ -3,10 +3,10 @@ import type { NotificationEntry, NotificationPreference } from './notification';
 import type { AppSettings, AppSettingsPatch } from './settings';
 import type {
   Account,
-  CollectedProductListing,
+  ProductCopyRecord,
   Config,
   CreatePreparedWxDraftBoxProductInput,
-  CreateProductListingCollectionSessionInput,
+  CreateProductCopySessionInput,
   CreateWxDraftBoxProductInput,
   CreateWxDraftBoxProductPrepareInput,
   CreateWxProductDraftSuggestionInput,
@@ -38,7 +38,7 @@ import type {
   ProductSourceBinding,
   ProductSourceItem,
   ProductQrcodeResult,
-  ProductListingCollectionSession,
+  ProductCopySession,
   ProductAuditCategoryPrecheckInput,
   ProductAuditCategoryPrecheckResult,
   ProductAuditFailurePolicy,
@@ -131,20 +131,20 @@ export interface RuntimeChannels {
   'productSources:remove': { args: [accountId: string, productId: string, sourceId: string]; result: ProductSourceBinding };
   'products:getQrcode': { args: [accountId: string, productId: string]; result: ProductQrcodeResult };
 
-  'productListingCollection:list': { args: []; result: CollectedProductListing[] };
-  'productListingCollection:remove': { args: [listingId: string]; result: void };
-  'productListingCollection:open': { args: [input: CreateProductListingCollectionSessionInput]; result: ProductListingCollectionSession };
-  'productListingCollection:getCurrentTabSession': { args: []; result: ProductListingCollectionSession | null };
-  'productListingCollection:markPageReady': { args: [sessionId: string]; result: ProductListingCollectionSession };
-  'productListingCollection:reportChallenge': { args: [sessionId: string, snapshot: TaobaoSecurityChallengeSnapshot]; result: ProductListingCollectionSession };
-  'productListingCollection:resolveChallenge': { args: [sessionId: string]; result: ProductListingCollectionSession };
-  'productListingCollection:complete': { args: [sessionId: string, snapshot: TaobaoProductSnapshot]; result: CollectedProductListing };
-  'productListingCollection:fail': { args: [sessionId: string, error: string]; result: ProductListingCollectionSession };
-  'productListingCollection:suggestWxCategoryFromFullList': { args: [input: CreateWxProductDraftSuggestionInput]; result: WxProductDraftSuggestionResult };
-  'productListingCollection:prepareWxDraftBoxProduct': { args: [input: CreateWxDraftBoxProductPrepareInput]; result: WxDraftBoxProductPrepareResult };
-  'productListingCollection:createPreparedWxDraftBoxProduct': { args: [input: CreatePreparedWxDraftBoxProductInput]; result: WxProductDraftCreationResult };
-  'productListingCollection:createWxDraftBoxProduct': { args: [input: CreateWxDraftBoxProductInput]; result: WxProductDraftCreationResult };
-  'productListingCollection:deleteCreatedWxDraftBoxProduct': { args: [input: DeleteCreatedWxDraftBoxProductInput]; result: DeleteCreatedWxDraftBoxProductResult };
+  'productCopy:list': { args: []; result: ProductCopyRecord[] };
+  'productCopy:remove': { args: [copyId: string]; result: void };
+  'productCopy:open': { args: [input: CreateProductCopySessionInput]; result: ProductCopySession };
+  'productCopy:getCurrentTabSession': { args: []; result: ProductCopySession | null };
+  'productCopy:markPageReady': { args: [sessionId: string]; result: ProductCopySession };
+  'productCopy:reportChallenge': { args: [sessionId: string, snapshot: TaobaoSecurityChallengeSnapshot]; result: ProductCopySession };
+  'productCopy:resolveChallenge': { args: [sessionId: string]; result: ProductCopySession };
+  'productCopy:complete': { args: [sessionId: string, snapshot: TaobaoProductSnapshot]; result: ProductCopyRecord };
+  'productCopy:fail': { args: [sessionId: string, error: string]; result: ProductCopySession };
+  'productCopy:suggestWxCategoryFromFullList': { args: [input: CreateWxProductDraftSuggestionInput]; result: WxProductDraftSuggestionResult };
+  'productCopy:prepareWxDraftBoxProduct': { args: [input: CreateWxDraftBoxProductPrepareInput]; result: WxDraftBoxProductPrepareResult };
+  'productCopy:createPreparedWxDraftBoxProduct': { args: [input: CreatePreparedWxDraftBoxProductInput]; result: WxProductDraftCreationResult };
+  'productCopy:createWxDraftBoxProduct': { args: [input: CreateWxDraftBoxProductInput]; result: WxProductDraftCreationResult };
+  'productCopy:deleteCreatedWxDraftBoxProduct': { args: [input: DeleteCreatedWxDraftBoxProductInput]; result: DeleteCreatedWxDraftBoxProductResult };
 
   'wxCategoryData:downloadProductRules': { args: [input: SyncWxCategoryProductRulesInput]; result: SyncWxCategoryProductRulesResult };
   'wxCategoryData:getProductRuleCacheStatus': { args: []; result: WxCategoryProductRuleCacheStatus };

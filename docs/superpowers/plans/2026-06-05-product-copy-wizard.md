@@ -1,10 +1,10 @@
-# Product Listing Wizard Implementation Plan
+# Product Copy Wizard Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Rework 上货管理 into an account-scoped page wizard that collects a Taobao/Tmall product, previews the collected data, converts it to a WeChat draft request, and creates a draft-box product only.
+**Goal:** Rework 复制商品 into an account-scoped page wizard that collects a Taobao/Tmall product, previews the collected data, converts it to a WeChat draft request, and creates a draft-box product only.
 
-**Architecture:** Reuse the existing background IPC and product listing services. Move `productListing` into the shared account layout, then refactor `ProductListingPage` into a single page-level wizard with local UI state and read-only preview panels. Keep history listing as non-primary scope for now.
+**Architecture:** Reuse the existing background IPC and product copy services. Move `productCopy` into the shared account layout, then refactor `ProductCopyPage` into a single page-level wizard with local UI state and read-only preview panels. Keep the history list as non-primary scope for now.
 
 **Tech Stack:** WXT, React 19, TypeScript, TanStack Query, Ant Design 6.
 
@@ -13,25 +13,25 @@
 ## File Structure
 
 - Modify: `src/components/Layout.tsx`
-  - Add `productListing` to `ACCOUNT_MODULES`.
-  - Render `ProductListingPage` through `AccountModuleContent` with the selected account.
-  - Remove the non-account scoped product listing branch.
+  - Add `productCopy` to `ACCOUNT_MODULES`.
+  - Render `ProductCopyPage` through `AccountModuleContent` with the selected account.
+  - Remove the non-account scoped product copy branch.
 
-- Modify: `src/pages/product-listing/ProductListingPage.tsx`
+- Modify: `src/pages/product-copy/ProductCopyPage.tsx`
   - Replace the list-and-modal interaction with a page-level wizard.
   - Keep existing collection IPC, category suggestion IPC, draft preparation IPC, and draft submission IPC.
-  - Remove account selector and `autoListing` switch.
-  - Force `autoListing: false` and `request.listing = 0` in the page flow.
+  - Remove account selector and post-creation audit switch.
+  - Force `request.listing = 0` in the page flow.
   - Add read-only collection and draft preview sections.
 
-- No backend or shared channel changes are expected.
+- Backend and shared channels use the `productCopy` namespace.
 
-## Task 1: Make 上货管理 Account-Scoped
+## Task 1: Make 复制商品 Account-Scoped
 
 **Files:**
 - Modify: `src/components/Layout.tsx`
 
-- [ ] **Step 1: Add productListing to account modules**
+- [ ] **Step 1: Add productCopy to account modules**
 
 Change:
 
@@ -42,28 +42,28 @@ const ACCOUNT_MODULES = new Set<string>(['orders', 'commonFunctions', 'violation
 to:
 
 ```ts
-const ACCOUNT_MODULES = new Set<string>(['orders', 'productListing', 'commonFunctions', 'violation']);
+const ACCOUNT_MODULES = new Set<string>(['orders', 'productCopy', 'commonFunctions', 'violation']);
 ```
 
-- [ ] **Step 2: Render ProductListingPage from AccountModuleContent**
+- [ ] **Step 2: Render ProductCopyPage from AccountModuleContent**
 
-Inside `AccountModuleContent`, add product listing to the account-scoped body:
+Inside `AccountModuleContent`, add product copy to the account-scoped body:
 
 ```tsx
 {activeModule === 'orders' && <OrdersPage scope={orderScope} accounts={accounts} />}
-{activeModule === 'productListing' && <ProductListingPage accountId={activeAccount.id} accountName={activeAccount.name} />}
+{activeModule === 'productCopy' && <ProductCopyPage accountId={activeAccount.id} accountName={activeAccount.name} />}
 {activeModule === 'commonFunctions' && <ProductAuditPage accountId={activeAccount.id} accounts={accounts} scope="account" />}
 {activeModule === 'violation' && <ViolationPage accountId={activeAccount.id} />}
 ```
 
-- [ ] **Step 3: Remove old non-account ProductListingPage branch**
+- [ ] **Step 3: Remove old non-account ProductCopyPage branch**
 
 Delete the later branch:
 
 ```tsx
-{activeModule === 'productListing' && (
+{activeModule === 'productCopy' && (
   <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-    <ProductListingPage accounts={accounts} activeAccountId={activeAccountId} />
+    <ProductCopyPage accounts={accounts} activeAccountId={activeAccountId} />
   </div>
 )}
 ```
@@ -76,19 +76,19 @@ Run:
 npm run compile
 ```
 
-Expected at this stage: it may fail until Task 2 updates `ProductListingPage` props. The useful signal is that the failure is limited to product listing prop types, not unrelated layout errors.
+Expected at this stage: it may fail until Task 2 updates `ProductCopyPage` props. The useful signal is that the failure is limited to product copy prop types, not unrelated layout errors.
 
-## Task 2: Refactor ProductListingPage State and Entry Flow
+## Task 2: Refactor ProductCopyPage State and Entry Flow
 
 **Files:**
-- Modify: `src/pages/product-listing/ProductListingPage.tsx`
+- Modify: `src/pages/product-copy/ProductCopyPage.tsx`
 
 - [ ] **Step 1: Replace props and remove draft form state**
 
 Use account-scoped props:
 
 ```ts
-interface ProductListingPageProps {
+interface ProductCopyPageProps {
   accountId: string;
   accountName?: string;
 }
@@ -101,7 +101,6 @@ interface WxDraftFormValues {
   accountId: string;
   catIdsText?: string;
   brandId?: string;
-  autoListing?: boolean;
 }
 ```
 
@@ -116,7 +115,7 @@ const [draftForm] = Form.useForm<WxDraftFormValues>();
 Add:
 
 ```ts
-type ProductListingWizardStep = 'input' | 'collectionPreview' | 'draftPreview' | 'completed';
+type ProductCopyWizardStep = 'input' | 'collectionPreview' | 'draftPreview' | 'completed';
 
 const DEFAULT_BRAND_ID = '2100000000';
 const DRAFT_BOX_LISTING_VALUE = 0;
@@ -125,9 +124,9 @@ const DRAFT_BOX_LISTING_VALUE = 0;
 Use state:
 
 ```ts
-const [currentStep, setCurrentStep] = useState<ProductListingWizardStep>('input');
-const [activeSession, setActiveSession] = useState<ProductListingCollectionSession | null>(null);
-const [collectedListing, setCollectedListing] = useState<CollectedProductListing | null>(null);
+const [currentStep, setCurrentStep] = useState<ProductCopyWizardStep>('input');
+const [activeSession, setActiveSession] = useState<ProductCopySession | null>(null);
+const [copyRecord, setCopyRecord] = useState<ProductCopyRecord | null>(null);
 const [draftPrepared, setDraftPrepared] = useState<WxProductDraftPrepareResult | null>(null);
 const [draftSuggestion, setDraftSuggestion] = useState<WxProductDraftSuggestionResult | null>(null);
 const [draftSubmittedResult, setDraftSubmittedResult] = useState<WxProductDraftCreationResult | null>(null);
@@ -143,7 +142,7 @@ const resetWizard = useCallback(() => {
   form.resetFields();
   setCurrentStep('input');
   setActiveSession(null);
-  setCollectedListing(null);
+  setCopyRecord(null);
   setDraftPrepared(null);
   setDraftSuggestion(null);
   setDraftSubmittedResult(null);
@@ -165,7 +164,7 @@ On collection completion:
 
 ```ts
 setActiveSession(null);
-setCollectedListing(listing);
+setCopyRecord(listing);
 setCurrentStep('collectionPreview');
 setDraftPrepared(null);
 setDraftSuggestion(null);
@@ -178,14 +177,14 @@ Keep the existing query cache update.
 ## Task 3: Implement the Page Wizard Shell
 
 **Files:**
-- Modify: `src/pages/product-listing/ProductListingPage.tsx`
+- Modify: `src/pages/product-copy/ProductCopyPage.tsx`
 
 - [ ] **Step 1: Add step mapping**
 
 Add:
 
 ```ts
-const wizardStepIndex: Record<ProductListingWizardStep, number> = {
+const wizardStepIndex: Record<ProductCopyWizardStep, number> = {
   input: 0,
   collectionPreview: 1,
   draftPreview: 2,
@@ -237,14 +236,14 @@ The history query can remain loaded for cache consistency, but the main screen s
 ## Task 4: Build the Read-Only Collection Preview Step
 
 **Files:**
-- Modify: `src/pages/product-listing/ProductListingPage.tsx`
+- Modify: `src/pages/product-copy/ProductCopyPage.tsx`
 
 - [ ] **Step 1: Add collection preview renderer**
 
 Create a local render function or component:
 
 ```tsx
-function renderCollectionPreview(listing: CollectedProductListing): React.ReactNode {
+function renderCollectionPreview(listing: ProductCopyRecord): React.ReactNode {
   return (
     <Space vertical size={16} style={{ width: '100%' }}>
       <Descriptions size="small" bordered column={2} items={[
@@ -278,29 +277,28 @@ At the bottom of this step render:
 </Space>
 ```
 
-The `类目转换` button should only run `suggestWxCategoryFromFullList({ accountId, listingId })` and show its result in `draftSuggestion` / status text. It must not advance the main flow.
+The `类目转换` button should only run `suggestWxCategoryFromFullList({ accountId, copyId })` and show its result in `draftSuggestion` / status text. It must not advance the main flow.
 
 ## Task 5: Generate and Preview Draft-Box Data
 
 **Files:**
-- Modify: `src/pages/product-listing/ProductListingPage.tsx`
+- Modify: `src/pages/product-copy/ProductCopyPage.tsx`
 
 - [ ] **Step 1: Update generateDraftDataMutation**
 
 Use the current account and fixed draft-box values:
 
 ```ts
-const suggestion = await extensionApi.productListingCollection.suggestWxCategoryFromFullList({
+const suggestion = await extensionApi.productCopy.suggestWxCategoryFromFullList({
   accountId,
-  listingId: collectedListing.id,
+  copyId: copyRecord.id,
 });
 
-const prepared = await extensionApi.productListingCollection.prepareWxDraft({
+const prepared = await extensionApi.productCopy.prepareWxDraft({
   accountId,
-  listingId: collectedListing.id,
+  copyId: copyRecord.id,
   catIds: suggestion.catIds,
   brandId: DEFAULT_BRAND_ID,
-  autoListing: false,
 });
 
 prepared.request.listing = DRAFT_BOX_LISTING_VALUE;
@@ -355,22 +353,21 @@ Render:
 ## Task 6: Submit Draft Only and Complete the Flow
 
 **Files:**
-- Modify: `src/pages/product-listing/ProductListingPage.tsx`
+- Modify: `src/pages/product-copy/ProductCopyPage.tsx`
 
 - [ ] **Step 1: Update submitPreparedDraftMutation**
 
-Use fixed `autoListing: false`:
+Submit the prepared request as a draft-box product:
 
 ```ts
-return extensionApi.productListingCollection.submitPreparedWxDraft({
+return extensionApi.productCopy.submitPreparedWxDraft({
   accountId: draftPrepared.accountId,
-  listingId: draftPrepared.listingId,
+  copyId: draftPrepared.copyId,
   request: {
     ...draftPrepared.request,
     listing: DRAFT_BOX_LISTING_VALUE,
   },
   uploadedImageCount: draftPrepared.uploadedImageCount,
-  autoListing: false,
 });
 ```
 
@@ -393,7 +390,7 @@ Render:
   title="微信小店草稿创建完成"
   description={`商品 ID：${draftSubmittedResult.productId}`}
 />
-<Button type="primary" onClick={resetWizard}>继续上货</Button>
+<Button type="primary" onClick={resetWizard}>继续复制商品</Button>
 ```
 
 ## Task 7: Verify
@@ -409,7 +406,7 @@ Run:
 npm run compile
 ```
 
-Expected: PASS. If it fails because of pre-existing unrelated scheduler changes, inspect the errors and separate unrelated failures from product listing regressions.
+Expected: PASS. If it fails because of pre-existing unrelated scheduler changes, inspect the errors and separate unrelated failures from product copy regressions.
 
 - [ ] **Step 2: Start WXT dev server when needed**
 
@@ -425,7 +422,7 @@ Expected: WXT dev server starts and opens the Chrome development profile.
 
 In the WXT dashboard:
 
-- 上货管理 displays the left account list.
+- 复制商品 displays the left account list.
 - Clicking an account switches current account and resets the wizard.
 - The main page starts with a product URL input.
 - Successful collection moves to read-only collected data preview.
@@ -439,8 +436,8 @@ In the WXT dashboard:
 Commit only:
 
 ```bash
-git add src/components/Layout.tsx src/pages/product-listing/ProductListingPage.tsx docs/superpowers/plans/2026-06-05-product-listing-wizard.md
-git commit -m "Refactor product listing into account wizard"
+git add src/components/Layout.tsx src/pages/product-copy/ProductCopyPage.tsx docs/superpowers/plans/2026-06-05-product-copy-wizard.md
+git commit -m "Refactor product copy into account wizard"
 ```
 
 Do not stage existing scheduler-related workspace changes.

@@ -1,3 +1,4 @@
+import type { ActivityLogDomain } from '../../shared/activity-log.ts';
 import { createWxShopListingClient } from './listing/api';
 import type { WxShopListingClient } from './listing/types';
 import { createWxShopOrdersClient } from './orders/api';
@@ -6,16 +7,24 @@ import type { WxShopOrdersClient } from './orders/types';
 const listingClients = new Map<string, WxShopListingClient>();
 const ordersClients = new Map<string, WxShopOrdersClient>();
 
+function listingClientKey(accountId: string, domain: ActivityLogDomain): string {
+  return `${domain}:${accountId}`;
+}
+
 /**
  * 商品发布域客户端。
  *
- * 只包含草稿、提审、删除和配额能力；后续上货 API 也归入这个功能域。
+ * 只包含草稿、提审、删除和配额能力；后续复制商品 API 也归入这个功能域。
  */
-export async function getListingClient(accountId: string): Promise<WxShopListingClient> {
-  let client = listingClients.get(accountId);
+export async function getListingClient(
+  accountId: string,
+  domain: ActivityLogDomain = 'productAudit',
+): Promise<WxShopListingClient> {
+  const key = listingClientKey(accountId, domain);
+  let client = listingClients.get(key);
   if (!client) {
-    client = createWxShopListingClient(accountId);
-    listingClients.set(accountId, client);
+    client = createWxShopListingClient(accountId, domain);
+    listingClients.set(key, client);
   }
   return client;
 }
@@ -35,6 +44,8 @@ export async function getOrdersClient(accountId: string): Promise<WxShopOrdersCl
 }
 
 export function removeWxShopClients(accountId: string): void {
-  listingClients.delete(accountId);
+  for (const key of listingClients.keys()) {
+    if (key.endsWith(`:${accountId}`)) listingClients.delete(key);
+  }
   ordersClients.delete(accountId);
 }

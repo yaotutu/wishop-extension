@@ -1,6 +1,6 @@
 import type { AppSettings } from '../../shared/settings.ts';
 import type {
-  CollectedProductListing,
+  ProductCopyRecord,
   CreateWxProductDraftSuggestionInput,
   WxProductDraftSuggestionResult,
 } from '../../shared/types.ts';
@@ -8,20 +8,20 @@ import type { SiliconFlowJsonCompletionInput } from '../ai/siliconflow-client.ts
 import { createSiliconFlowJsonCompletion, createSiliconFlowTimeoutFetcher } from '../ai/siliconflow-client.ts';
 import { recordActivityCompleted, recordActivityFailed, recordActivityStarted } from '../activity-logs/activity-log-service.ts';
 import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
-import { selectWxCategoryWithTwoStageAi } from './product-listing-category-ai-selection.ts';
-import type { RuntimeCategoryPath } from './product-listing-category-shortlist.ts';
+import { selectWxCategoryWithTwoStageAi } from './product-copy-category-ai-selection.ts';
+import type { RuntimeCategoryPath } from './product-copy-category-shortlist.ts';
 import { loadRuntimeWxCategoryPaths } from './wxshop-category-path-cache.ts';
 
 type CompleteJson = (input: SiliconFlowJsonCompletionInput) => Promise<unknown>;
 
 interface NormalizedInput {
   accountId: string;
-  listingId: string;
+  copyId: string;
 }
 
 export interface CreateWxFullCategorySuggestionDependencies {
   getSettings?: () => Promise<AppSettings>;
-  getListing?: (listingId: string) => Promise<CollectedProductListing | null>;
+  getCopyRecord?: (copyId: string) => Promise<ProductCopyRecord | null>;
   getCategoryPaths?: () => Promise<RuntimeCategoryPath[]>;
   completeJson?: CompleteJson;
 }
@@ -35,7 +35,7 @@ function normalizeText(value: unknown): string {
 function normalizeInput(input: CreateWxProductDraftSuggestionInput): NormalizedInput {
   return {
     accountId: normalizeText(input.accountId),
-    listingId: normalizeText(input.listingId),
+    copyId: normalizeText(input.copyId),
   };
 }
 
@@ -44,9 +44,9 @@ async function defaultGetSettings(): Promise<AppSettings> {
   return repository.getAppSettings();
 }
 
-async function defaultGetListing(listingId: string): Promise<CollectedProductListing | null> {
-  const repository = await import('../store/collected-product-listing-repository.ts');
-  return repository.getCollectedProductListing(listingId);
+async function defaultGetCopyRecord(copyId: string): Promise<ProductCopyRecord | null> {
+  const repository = await import('../store/product-copy-record-repository.ts');
+  return repository.getProductCopyRecord(copyId);
 }
 
 async function defaultGetCategoryPaths(): Promise<RuntimeCategoryPath[]> {
@@ -58,26 +58,26 @@ export async function createWxProductFullCategorySuggestion(
   dependencies: CreateWxFullCategorySuggestionDependencies = {},
 ): Promise<WxProductDraftSuggestionResult> {
   const input = normalizeInput(rawInput);
-  if (!input.listingId) throw new Error('缺少本地采集商品 ID');
+  if (!input.copyId) throw new Error('缺少本地采集商品 ID');
   const logger = createDiagnosticLogger({
-    domain: 'listing',
+    domain: 'productCopy',
     component: 'FullCategoryAI',
     accountId: input.accountId || undefined,
   });
 
   await recordActivityStarted({
-    domain: 'listing',
+    domain: 'productCopy',
     scope: 'global',
     trigger: 'background',
     title: 'AI 全量类目选择开始',
-    detail: `采集商品：${input.listingId}`,
-    metadata: { listingId: input.listingId, accountId: input.accountId || null },
+    detail: `采集商品：${input.copyId}`,
+    metadata: { copyId: input.copyId, accountId: input.accountId || null },
   });
 
   try {
-    logger.info('开始读取采集商品', { listingId: input.listingId });
-    const loadListing = dependencies.getListing || defaultGetListing;
-    const listing = await loadListing(input.listingId);
+    logger.info('开始读取采集商品', { copyId: input.copyId });
+    const loadCopyRecord = dependencies.getCopyRecord || defaultGetCopyRecord;
+    const listing = await loadCopyRecord(input.copyId);
     if (!listing) throw new Error('采集商品不存在或已删除');
 
     logger.info('开始读取静态微信类目缓存');
@@ -87,7 +87,7 @@ export async function createWxProductFullCategorySuggestion(
 
     logger.info('开始读取 AI 设置');
     const settings = await (dependencies.getSettings || defaultGetSettings)();
-    const aiSettings = settings.aiListing;
+    const aiSettings = settings.aiProductCopy;
     if (!aiSettings.siliconFlowApiKey.trim()) throw new Error('请先在设置里填写 SiliconFlow API Key');
 
     logger.info('开始调用 SiliconFlow 进行两轮全量类目选择', {
@@ -97,7 +97,7 @@ export async function createWxProductFullCategorySuggestion(
     });
     const completeJson = dependencies.completeJson || createSiliconFlowJsonCompletion;
     const selection = await selectWxCategoryWithTwoStageAi({
-      listingId: input.listingId,
+      copyId: input.copyId,
       listing,
       categoryPaths,
       completeJson,
@@ -117,13 +117,13 @@ export async function createWxProductFullCategorySuggestion(
     });
 
     await recordActivityCompleted({
-      domain: 'listing',
+      domain: 'productCopy',
       scope: 'global',
       trigger: 'background',
       title: 'AI 全量类目选择完成',
       detail: `${result.categoryPath?.join(' / ') || result.catIds.join(' / ')}，候选 ${selection.aiScreenedCandidateCount}/${selection.localCandidateCount}/${categoryPaths.length} 条`,
       metadata: {
-        listingId: input.listingId,
+        copyId: input.copyId,
         catIds: result.catIds.join('/'),
         categoryCount: categoryPaths.length,
         localCandidateCount: selection.localCandidateCount,
@@ -135,13 +135,13 @@ export async function createWxProductFullCategorySuggestion(
     const message = error instanceof Error ? error.message : 'AI 全量类目选择失败';
     logger.error('AI 全量类目选择失败', { error: message });
     await recordActivityFailed({
-      domain: 'listing',
+      domain: 'productCopy',
       scope: 'global',
       trigger: 'background',
       title: 'AI 全量类目选择失败',
-      detail: `采集商品：${input.listingId}`,
+      detail: `采集商品：${input.copyId}`,
       error: { message },
-      metadata: { listingId: input.listingId, accountId: input.accountId || null },
+      metadata: { copyId: input.copyId, accountId: input.accountId || null },
     });
     throw error;
   }

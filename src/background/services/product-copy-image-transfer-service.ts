@@ -1,10 +1,10 @@
 import type {
-  CollectedProductListing,
+  ProductCopyRecord,
   TaobaoProductImageAsset,
   TaobaoProductImageRole,
 } from '../../shared/types.ts';
 import type { WxShopListingClient } from '../wxshop/listing/types.ts';
-import { collectWxDraftSourceImages } from './product-listing-wx-draft-mapper.ts';
+import { collectWxDraftSourceImages } from './product-copy-wx-draft-mapper.ts';
 
 type ImageTransferLogger = Pick<ReturnType<typeof import('../logging/diagnostic-logger.ts').createDiagnosticLogger>, 'info' | 'warn' | 'error'>;
 
@@ -14,7 +14,7 @@ export interface WxDraftImageUploadSource {
   candidates: string[];
 }
 
-export interface ProductListingImageDownloadResult {
+export interface ProductCopyImageDownloadResult {
   sourceUrl: string;
   fetchedUrl: string;
   filename: string;
@@ -22,13 +22,13 @@ export interface ProductListingImageDownloadResult {
   data: ArrayBuffer;
 }
 
-export interface ProductListingImageDownloadDependencies {
+export interface ProductCopyImageDownloadDependencies {
   fetch?: typeof fetch;
 }
 
 export interface UploadWxDraftSourceImagesOptions {
   logger?: ImageTransferLogger;
-  downloadImage?: (source: WxDraftImageUploadSource) => Promise<ProductListingImageDownloadResult>;
+  downloadImage?: (source: WxDraftImageUploadSource) => Promise<ProductCopyImageDownloadResult>;
 }
 
 function uniqueStrings(values: string[]): string[] {
@@ -61,7 +61,7 @@ function candidatesFromAsset(asset: TaobaoProductImageAsset): string[] {
   ]);
 }
 
-function resolveImageRole(listing: CollectedProductListing, sourceUrl: string): TaobaoProductImageRole {
+function resolveImageRole(listing: ProductCopyRecord, sourceUrl: string): TaobaoProductImageRole {
   const matchedAsset = listing.images.assets.find(asset => assetMatchesSource(asset, sourceUrl));
   if (matchedAsset?.role) return matchedAsset.role;
   if (listing.images.main.includes(sourceUrl)) return 'main';
@@ -70,7 +70,7 @@ function resolveImageRole(listing: CollectedProductListing, sourceUrl: string): 
   return 'unknown';
 }
 
-function resolveImageCandidates(listing: CollectedProductListing, sourceUrl: string): string[] {
+function resolveImageCandidates(listing: ProductCopyRecord, sourceUrl: string): string[] {
   const matchedAssets = listing.images.assets.filter(asset => assetMatchesSource(asset, sourceUrl));
   return uniqueStrings([
     ...matchedAssets.flatMap(candidatesFromAsset),
@@ -78,7 +78,7 @@ function resolveImageCandidates(listing: CollectedProductListing, sourceUrl: str
   ]);
 }
 
-export function buildWxDraftImageUploadSources(listing: CollectedProductListing): WxDraftImageUploadSource[] {
+export function buildWxDraftImageUploadSources(listing: ProductCopyRecord): WxDraftImageUploadSource[] {
   return collectWxDraftSourceImages(listing).map(sourceUrl => ({
     sourceUrl,
     role: resolveImageRole(listing, sourceUrl),
@@ -114,10 +114,10 @@ function normalizeMimeType(value: string | null, url: string): string {
   return '';
 }
 
-export async function downloadProductListingImage(
+export async function downloadProductCopyImage(
   source: WxDraftImageUploadSource,
-  dependencies: ProductListingImageDownloadDependencies = {},
-): Promise<ProductListingImageDownloadResult> {
+  dependencies: ProductCopyImageDownloadDependencies = {},
+): Promise<ProductCopyImageDownloadResult> {
   const fetchImage = dependencies.fetch || fetch;
   const failures: string[] = [];
   for (const candidate of source.candidates) {
@@ -160,15 +160,15 @@ export async function downloadProductListingImage(
 }
 
 export async function uploadWxDraftSourceImages(
-  listing: CollectedProductListing,
+  listing: ProductCopyRecord,
   client: WxShopListingClient,
   options: UploadWxDraftSourceImagesOptions = {},
 ): Promise<Map<string, string>> {
   const uploadedImages = new Map<string, string>();
   const sources = buildWxDraftImageUploadSources(listing);
-  const downloadImage = options.downloadImage || (source => downloadProductListingImage(source));
+  const downloadImage = options.downloadImage || (source => downloadProductCopyImage(source));
   options.logger?.info('开始本地校验并上传微信小店商品图片', {
-    listingId: listing.id,
+    copyId: listing.id,
     imageCount: sources.length,
   });
 
@@ -178,7 +178,7 @@ export async function uploadWxDraftSourceImages(
       const uploaded = await client.uploadImageByUrl(downloaded.fetchedUrl);
       uploadedImages.set(source.sourceUrl, uploaded.imgUrl);
       options.logger?.info('商品图片本地校验后上传完成', {
-        listingId: listing.id,
+        copyId: listing.id,
         imageIndex: index + 1,
         imageCount: sources.length,
         role: source.role,
@@ -188,7 +188,7 @@ export async function uploadWxDraftSourceImages(
     } catch (error) {
       const message = error instanceof Error ? error.message : '微信小店图片上传失败';
       options.logger?.error('商品图片本地校验后上传失败', {
-        listingId: listing.id,
+        copyId: listing.id,
         imageIndex: index + 1,
         imageCount: sources.length,
         role: source.role,

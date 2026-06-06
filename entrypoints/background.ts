@@ -1,6 +1,6 @@
 import { installRuntimeHandlers } from '../src/background/handlers';
 import { installPurchaseLookupTabCleanup } from '../src/background/purchase-lookup/purchase-lookup-session-service';
-import { installProductListingCollectionTabCleanup } from '../src/background/services/product-listing-collection-service';
+import { installProductCopyTabCleanup } from '../src/background/services/product-copy-session-service';
 import { registerProductAuditScheduledJobs } from '../src/background/scheduler/product-audit-job-executor';
 import {
   ensureOrderShipmentCheckScheduledJob,
@@ -23,7 +23,7 @@ export default defineBackground(() => {
   installShippingTabCleanup();
   installShippingPaymentSuccessWatcher();
   installPurchaseLookupTabCleanup();
-  installProductListingCollectionTabCleanup();
+  installProductCopyTabCleanup();
   installTaobaoRefundTabCleanup();
   installTaobaoWorkTabCleanup();
   installOrderShipmentCheckDispatchListener();

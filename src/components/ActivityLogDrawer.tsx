@@ -8,7 +8,7 @@ import type { ActivityLogDomain, ActivityLogEntry, ActivityLogEvent, ActivityLog
 const { Text } = Typography;
 
 const domainLabels: Record<ActivityLogDomain, string> = {
-  listing: '商品上货',
+  productCopy: '商品复制',
   productAudit: '商品提审',
   violation: '违规词',
   orders: '订单',

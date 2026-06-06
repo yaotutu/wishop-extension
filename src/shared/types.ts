@@ -5,7 +5,7 @@ export interface Config {
   appSecret: string;
 }
 
-export type ScheduledJobModule = 'listing' | 'productAudit' | 'orders' | 'violation' | 'store' | 'system';
+export type ScheduledJobModule = 'productCopy' | 'productAudit' | 'orders' | 'violation' | 'store' | 'system';
 export type ScheduledJobScope = 'account' | 'global' | 'system';
 export type ScheduledJobType =
   | 'productAudit.submitDrafts'
@@ -466,14 +466,14 @@ export interface TaobaoProductSnapshot {
   collectedAt: number;
 }
 
-export interface CollectedProductListing extends TaobaoProductSnapshot {
+export interface ProductCopyRecord extends TaobaoProductSnapshot {
   id: string;
   sourceUrl: string;
   missingFields: string[];
   updatedAt: number;
 }
 
-export interface CreateProductListingCollectionSessionInput {
+export interface CreateProductCopySessionInput {
   url: string;
 }
 
@@ -605,7 +605,7 @@ export type WxProductDraftBoxPreparedRequest = WxProductDraftPreparedRequest & {
 
 export interface CreateWxDraftBoxProductInput {
   accountId: string;
-  listingId: string;
+  copyId: string;
   catIds: string[];
   expressTemplateId?: string;
   afterSaleAddressId?: string;
@@ -626,7 +626,7 @@ interface WxProductDraftPrepareResultSummary {
 
 export interface WxDraftBoxProductPrepareResult {
   accountId: string;
-  listingId: string;
+  copyId: string;
   request: WxProductDraftBoxPreparedRequest;
   uploadedImageCount: number;
   preparedAt: number;
@@ -638,14 +638,14 @@ export interface WxDraftBoxProductPrepareResult {
 
 export interface CreatePreparedWxDraftBoxProductInput {
   accountId: string;
-  listingId: string;
+  copyId: string;
   request: WxProductDraftBoxPreparedRequest;
   uploadedImageCount: number;
 }
 
 export interface WxProductDraftCreationResult {
   accountId: string;
-  listingId: string;
+  copyId: string;
   productId: string;
   createTime?: string;
   listing: 0;
@@ -654,14 +654,14 @@ export interface WxProductDraftCreationResult {
 
 export interface DeleteCreatedWxDraftBoxProductInput {
   accountId: string;
-  listingId: string;
+  copyId: string;
   productId: string;
   productTitle?: string;
 }
 
 export interface DeleteCreatedWxDraftBoxProductResult {
   accountId: string;
-  listingId: string;
+  copyId: string;
   productId: string;
   deleted: boolean;
   errorCode?: number;
@@ -670,11 +670,11 @@ export interface DeleteCreatedWxDraftBoxProductResult {
 
 export interface CreateWxProductDraftSuggestionInput {
   accountId?: string;
-  listingId: string;
+  copyId: string;
 }
 
 export interface WxProductDraftSuggestionResult {
-  listingId: string;
+  copyId: string;
   catIds: string[];
   categoryPath?: string[];
   categoryCandidateSource?: WxProductCategoryCandidateSource;
@@ -699,7 +699,7 @@ export interface ProductAuditCategoryPrecheckResult {
   checkedAt: number;
 }
 
-export type ProductListingCollectionSessionStatus =
+export type ProductCopySessionStatus =
   | 'created'
   | 'queued'
   | 'opened'
@@ -708,15 +708,15 @@ export type ProductListingCollectionSessionStatus =
   | 'completed'
   | 'failed';
 
-export interface ProductListingCollectionSession {
+export interface ProductCopySession {
   id: string;
   url: string;
-  status: ProductListingCollectionSessionStatus;
+  status: ProductCopySessionStatus;
   createdAt: number;
   updatedAt: number;
   expiresAt: number;
   tabId?: number;
-  listingId?: string;
+  copyId?: string;
   lastError?: string;
   challenge?: TaobaoSecurityChallengeSnapshot;
 }
@@ -825,7 +825,7 @@ export interface CreateShippingSessionInput {
   paymentWorkflow?: ShippingPaymentWorkflow;
 }
 
-export type LicensedFeature = 'orders' | 'listing' | 'productAudit' | 'violation' | 'shipping';
+export type LicensedFeature = 'orders' | 'productCopy' | 'productAudit' | 'violation' | 'shipping';
 
 export interface LicenseActivationInput {
   licenseKey: string;

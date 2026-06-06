@@ -4,7 +4,7 @@
 
 ## 目标
 
-上货模块的核心输入是一个淘宝或天猫商品 URL，输出是后续可映射到微信小店上架草稿的结构化商品数据。当前阶段先完成淘宝侧采集和本地保存，微信小店提交逻辑后续再接入。
+复制商品模块的核心输入是一个淘宝或天猫商品 URL，输出是后续可映射到微信小店草稿箱商品的结构化商品数据。当前阶段先完成淘宝侧采集和本地保存，微信小店提交逻辑后续再接入。
 
 采集结果至少应覆盖：
 
@@ -34,8 +34,8 @@
   -> MAIN world content script 读取淘宝页面运行时模型
   -> MAIN world content script 从详情区域稳定读取图文详情图
   -> adapter 转换成 TaobaoProductSnapshot
-  -> background 保存为 CollectedProductListing
-  -> 上货管理页面展示本地采集结果
+  -> background 保存为 ProductCopyRecord
+  -> 复制商品页面展示本地采集结果
 ```
 
 ## 为什么使用 MAIN world
@@ -95,11 +95,11 @@ MAIN world 读取的数据必须做字段清洗。任何疑似地址、电话、
 
 - `entrypoints/taobao-product-collector-main-world.content.ts`：只负责 MAIN world 页面模型和详情图读取。
 - `src/content/taobao/runtime/page-world-product-collector.ts`：负责 isolated world 与 MAIN world 的消息桥。
-- `src/content/taobao/runtime/product-listing-collection-workflow.ts`：负责采集流程、页面检测、异常处理和调用后台 IPC。
+- `src/content/taobao/runtime/product-copy-workflow.ts`：负责采集流程、页面检测、异常处理和调用后台 IPC。
 - `src/content/taobao/adapters/product-detail-collection-adapter.ts`：负责把页面模型和 DOM fallback 转换成 `TaobaoProductSnapshot`。
-- `src/background/services/product-listing-collection-service.ts`：负责会话、队列、工作标签页、保存和活动日志。
-- `src/background/store/collected-product-listing-repository.ts`：负责本地采集结果持久化。
-- `src/pages/product-listing/ProductListingPage.tsx`：只负责输入 URL、展示列表和预览采集结果。
+- `src/background/services/product-copy-session-service.ts`：负责会话、队列、工作标签页、保存和活动日志。
+- `src/background/store/product-copy-record-repository.ts`：负责本地采集结果持久化。
+- `src/pages/product-copy/ProductCopyPage.tsx`：只负责输入 URL、展示列表和预览采集结果。
 
 UI 组件不得直接读取淘宝 DOM。adapter 不得保存数据、发 IPC、写 ActivityLog 或渲染 UI。background service 不得操作淘宝 DOM。
 

@@ -1,6 +1,6 @@
-import type { CollectedProductListing } from '../src/shared/types.ts';
+import type { ProductCopyRecord } from '../src/shared/types.ts';
 
-export function sampleCollectedProductListing(patch: Partial<CollectedProductListing> = {}): CollectedProductListing {
+export function sampleProductCopyRecord(patch: Partial<ProductCopyRecord> = {}): ProductCopyRecord {
   return {
     id: 'taobao:1010211244888',
     sourceUrl: 'https://item.taobao.com/item.htm?id=1010211244888',

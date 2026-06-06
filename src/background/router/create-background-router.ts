@@ -8,7 +8,7 @@ import { createOrderAssociationRuntimeHandlers } from '../runtime-handlers/order
 import { createPurchaseLookupRuntimeHandlers } from '../runtime-handlers/purchase-lookup-handlers';
 import { createRealAddressRuntimeHandlers } from '../runtime-handlers/real-address-handlers';
 import { createProductRuntimeHandlers } from '../runtime-handlers/product-handlers';
-import { createProductListingCollectionRuntimeHandlers } from '../runtime-handlers/product-listing-collection-handlers';
+import { createProductCopyRuntimeHandlers } from '../runtime-handlers/product-copy-handlers';
 import { createProductAuditRuntimeHandlers } from '../runtime-handlers/product-audit-handlers';
 import { createProductSourceRuntimeHandlers } from '../runtime-handlers/product-source-handlers';
 import { createQuotaRuntimeHandlers } from '../runtime-handlers/quota-handlers';
@@ -70,22 +70,22 @@ const FEATURE_CHANNELS = {
   'productSources:set': 'orders',
   'productSources:remove': 'orders',
   'products:getQrcode': 'orders',
-  'productListingCollection:list': 'listing',
-  'productListingCollection:remove': 'listing',
-  'productListingCollection:open': 'listing',
-  'productListingCollection:getCurrentTabSession': 'listing',
-  'productListingCollection:markPageReady': 'listing',
-  'productListingCollection:reportChallenge': 'listing',
-  'productListingCollection:resolveChallenge': 'listing',
-  'productListingCollection:complete': 'listing',
-  'productListingCollection:fail': 'listing',
-  'productListingCollection:suggestWxCategoryFromFullList': 'listing',
-  'productListingCollection:prepareWxDraftBoxProduct': 'listing',
-  'productListingCollection:createPreparedWxDraftBoxProduct': 'listing',
-  'productListingCollection:createWxDraftBoxProduct': 'listing',
-  'productListingCollection:deleteCreatedWxDraftBoxProduct': 'listing',
-  'wxCategoryData:downloadProductRules': 'listing',
-  'wxCategoryData:getProductRuleCacheStatus': 'listing',
+  'productCopy:list': 'productCopy',
+  'productCopy:remove': 'productCopy',
+  'productCopy:open': 'productCopy',
+  'productCopy:getCurrentTabSession': 'productCopy',
+  'productCopy:markPageReady': 'productCopy',
+  'productCopy:reportChallenge': 'productCopy',
+  'productCopy:resolveChallenge': 'productCopy',
+  'productCopy:complete': 'productCopy',
+  'productCopy:fail': 'productCopy',
+  'productCopy:suggestWxCategoryFromFullList': 'productCopy',
+  'productCopy:prepareWxDraftBoxProduct': 'productCopy',
+  'productCopy:createPreparedWxDraftBoxProduct': 'productCopy',
+  'productCopy:createWxDraftBoxProduct': 'productCopy',
+  'productCopy:deleteCreatedWxDraftBoxProduct': 'productCopy',
+  'wxCategoryData:downloadProductRules': 'productCopy',
+  'wxCategoryData:getProductRuleCacheStatus': 'productCopy',
   'drafts:fetch': 'productAudit',
   'drafts:submitAudit': 'productAudit',
   'drafts:delete': 'productAudit',
@@ -144,7 +144,7 @@ interface CreateBackgroundRouterOptions {
   getCurrentTabShippingSession: (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
   getCurrentTabPurchaseLookupSession: (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
   getCurrentTabTaobaoRefundSession: (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
-  getCurrentTabProductListingCollectionSession: (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
+  getCurrentTabProductCopySession: (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
 }
 
 /**
@@ -164,7 +164,7 @@ export function createBackgroundRouter(options: CreateBackgroundRouterOptions): 
     ...createOrderAssociationRuntimeHandlers(),
     ...createPurchaseLookupRuntimeHandlers(options.getCurrentTabPurchaseLookupSession),
     ...createTaobaoRefundRuntimeHandlers(options.getCurrentTabTaobaoRefundSession),
-    ...createProductListingCollectionRuntimeHandlers(options.getCurrentTabProductListingCollectionSession),
+    ...createProductCopyRuntimeHandlers(options.getCurrentTabProductCopySession),
     ...createWxCategoryDataRuntimeHandlers(),
     ...createDraftRuntimeHandlers({
       fetchDrafts,

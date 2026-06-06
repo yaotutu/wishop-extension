@@ -1,15 +1,15 @@
-# 上货管理页面主向导设计
+# 复制商品页面主向导设计
 
 ## 背景
 
-当前上货管理页已经具备淘宝商品采集、采集详情查看、微信小店上架数据生成和草稿提交能力，但交互入口以“本地采集商品列表 + 分步上架弹窗”为主。新的目标是把上货流程改成页面主向导，让商户进入页面后按清晰顺序完成单个商品的采集、转换、确认和创建草稿。
+当前复制商品页已经具备淘宝商品采集、采集详情查看、微信小店草稿数据生成和草稿提交能力，但交互入口以“本地采集商品列表 + 分步复制商品弹窗”为主。新的目标是把复制商品流程改成页面主向导，让商户进入页面后按清晰顺序完成单个商品的采集、转换、确认和创建草稿。
 
-上货管理也要进入与订单管理一致的账号工作区：左侧展示账号列表，右侧在当前选中账号下工作。用户切换左侧账号后，右侧上货动作使用新的当前账号。
+复制商品也要进入与订单管理一致的账号工作区：左侧展示账号列表，右侧在当前选中账号下工作。用户切换左侧账号后，右侧复制商品动作使用新的当前账号。
 
 ## 目标
 
-1. 上货管理使用公共账号侧栏布局，和订单管理一致。
-2. 页面主内容改成一步一步的上货向导。
+1. 复制商品使用公共账号侧栏布局，和订单管理一致。
+2. 页面主内容改成一步一步的复制商品向导。
 3. 用户先输入淘宝或天猫商品链接并采集。
 4. 采集完成后展示淘宝侧采集数据，只读预览。
 5. 用户点击“下一步”后自动完成类目转换和微信小店草稿数据生成。
@@ -18,7 +18,7 @@
 
 ## 非目标
 
-1. 本次不重点处理历史上货记录列表、记录归属和账号隔离。
+1. 本次不重点处理历史复制商品记录列表、记录归属和账号隔离。
 2. 本次不做创建后自动提审，也不展示“创建后提交审核”开关。
 3. 本次不改变淘宝页面采集 adapter、MAIN world 读取逻辑或后台工作标签页队列。
 4. 本次不新增微信小店发品接口能力，只复用现有 `prepareWxDraft` 和 `submitPreparedWxDraft`。
@@ -27,7 +27,7 @@
 
 ### 公共布局
 
-`productListing` 应加入公共 `ACCOUNT_MODULES`，由 `Layout` 统一渲染左侧账号列表。`ProductListingPage` 不再接收账号数组和账号下拉选择，而是接收当前账号：
+`productCopy` 应加入公共 `ACCOUNT_MODULES`，由 `Layout` 统一渲染左侧账号列表。`ProductCopyPage` 不再接收账号数组和账号下拉选择，而是接收当前账号：
 
 - `accountId`
 - 可选 `accountName`
@@ -52,14 +52,14 @@
 页面首屏核心区域是商品链接输入框和“开始采集”按钮。
 
 - 输入框支持淘宝和天猫商品链接。
-- 点击开始采集后调用 `productListingCollection.open({ url })`。
+- 点击开始采集后调用 `productCopy.open({ url })`。
 - 采集中展示当前会话状态和链接。
 - 遇到登录、验证码或安全验证时沿用现有 `onChallenge` 提示。
 - 采集完成后自动进入“采集预览”。
 
 ### 步骤二：采集预览
 
-采集预览展示 `CollectedProductListing` 的只读结构化数据：
+采集预览展示 `ProductCopyRecord` 的只读结构化数据：
 
 - 商品基础信息：标题、平台、商品 ID、店铺、原始类目、价格、销量、发货信息。
 - 图片信息：主图、详情图和图片数量。
@@ -70,18 +70,18 @@
 
 底部按钮：
 
-- `类目转换`：开发预留按钮，执行单独的类目转换诊断，不作为正式上货主路径。
+- `类目转换`：开发预留按钮，执行单独的类目转换诊断，不作为正式复制商品主路径。
 - `下一步`：主流程按钮，自动执行类目转换和微信小店草稿数据准备。
 
 ### 步骤三：草稿预览
 
 点击“下一步”后，页面在当前账号下执行：
 
-1. `suggestWxCategoryFromFullList({ accountId, listingId })`
+1. `suggestWxCategoryFromFullList({ accountId, copyId })`
 2. 校验返回的类目路径 ID 是否完整。
-3. `prepareWxDraft({ accountId, listingId, catIds, brandId: '2100000000', autoListing: false })`
+3. `prepareWxDraft({ accountId, copyId, catIds, brandId: '2100000000' })`
 
-这里的 `autoListing` 必须写死为 `false`。上货管理的终点是草稿箱，不允许在本流程里创建后提审。
+这里必须生成草稿箱请求，最终 `request.listing` 固定为 `0`。复制商品的终点是草稿箱，不允许在本流程里创建后提审。
 
 草稿预览展示 `WxProductDraftPrepareResult.request` 中的最终数据：
 
@@ -104,14 +104,14 @@
 
 点击“创建草稿”后调用：
 
-`submitPreparedWxDraft({ accountId, listingId, request, uploadedImageCount, autoListing: false })`
+`submitPreparedWxDraft({ accountId, copyId, request, uploadedImageCount })`
 
 成功后展示：
 
 - 微信小店商品 ID。
 - 已创建到草稿箱。
 - 已上传图片数量。
-- “继续上货”按钮，重置向导回到输入链接。
+- “继续复制商品”按钮，重置向导回到输入链接。
 
 ## 状态模型
 
@@ -119,13 +119,13 @@
 
 - `currentStep`
 - `activeSession`
-- `collectedListing`
+- `copyRecord`
 - `draftSuggestion`
 - `draftPrepared`
 - `draftSubmittedResult`
 - `statusText`
 
-采集完成时仍更新 `productListingCollection.list` 的 query cache，保证现有本地记录能力不被破坏。历史记录本次可以保留为弱入口，也可以先不在主视图突出展示。
+采集完成时仍更新 `productCopy.list` 的 query cache，保证现有本地记录能力不被破坏。历史记录本次可以保留为弱入口，也可以先不在主视图突出展示。
 
 ## 错误处理
 
@@ -141,14 +141,14 @@
 主要前端改动：
 
 - `src/components/Layout.tsx`
-  - 将 `productListing` 加入账号模块。
-  - 在 `AccountModuleContent` 中渲染 `ProductListingPage accountId={activeAccount.id}`。
-  - 移除非账号区域里单独渲染 `ProductListingPage` 的分支。
+  - 将 `productCopy` 加入账号模块。
+  - 在 `AccountModuleContent` 中渲染 `ProductCopyPage accountId={activeAccount.id}`。
+  - 移除非账号区域里单独渲染 `ProductCopyPage` 的分支。
 
-- `src/pages/product-listing/ProductListingPage.tsx`
+- `src/pages/product-copy/ProductCopyPage.tsx`
   - 从列表/弹窗式入口改为页面主向导。
-  - 移除微信账号下拉和 `autoListing` 开关。
-  - 将 `autoListing` 固定为 `false`。
+  - 移除微信账号下拉和创建后提审开关。
+  - 将 `request.listing` 固定为 `0`。
   - 增加采集预览和草稿预览的页面内展示组件。
 
 后台和共享 IPC 暂不需要新增 channel。
@@ -158,10 +158,10 @@
 1. 运行 `npm run compile`。
 2. 如果涉及页面行为验证，启动 `npm run dev`，在 WXT 开发浏览器里打开后台管理页。
 3. 手动验证：
-   - 上货管理出现左侧账号列表。
-   - 切换账号会重置上货向导。
+   - 复制商品出现左侧账号列表。
+   - 切换账号会重置复制商品向导。
    - 输入链接后可以开始采集。
    - 采集完成后进入只读预览。
    - 下一步生成草稿数据时使用当前账号。
    - 草稿预览不出现“创建后提交审核”开关。
-   - 创建草稿请求的 `autoListing` 为 `false`。
+   - 创建草稿请求的 `request.listing` 为 `0`。

@@ -1,16 +1,16 @@
 import type {
-  CollectedProductListing,
+  ProductCopyRecord,
   WxProductCategoryCandidate,
   WxProductDraftSuggestionResult,
 } from '../../shared/types.ts';
 import type { SiliconFlowChatMessage, SiliconFlowJsonCompletionInput } from '../ai/siliconflow-client.ts';
-import { shortlistCategoryPaths, type RuntimeCategoryPath } from './product-listing-category-shortlist.ts';
+import { shortlistCategoryPaths, type RuntimeCategoryPath } from './product-copy-category-shortlist.ts';
 
 type CompleteJson = (input: SiliconFlowJsonCompletionInput) => Promise<unknown>;
 
 interface SelectCategoryWithAiInput {
-  listingId: string;
-  listing: CollectedProductListing;
+  copyId: string;
+  listing: ProductCopyRecord;
   categoryPaths: RuntimeCategoryPath[];
   completeJson: CompleteJson;
   apiKey: string;
@@ -63,7 +63,7 @@ function categoryPayload(categoryPaths: RuntimeCategoryPath[]): Array<{ catIds: 
 }
 
 function productFactsForPrompt(
-  listing: CollectedProductListing,
+  listing: ProductCopyRecord,
   categoryPaths: RuntimeCategoryPath[],
 ): Record<string, unknown> {
   const sourceCategory = listing.category.source;
@@ -90,7 +90,7 @@ function productFactsForPrompt(
 }
 
 function buildScreeningMessages(
-  listing: CollectedProductListing,
+  listing: ProductCopyRecord,
   categoryPaths: RuntimeCategoryPath[],
 ): SiliconFlowChatMessage[] {
   const facts = productFactsForPrompt(listing, categoryPaths);
@@ -113,7 +113,7 @@ function buildScreeningMessages(
 }
 
 function buildFinalMessages(
-  listing: CollectedProductListing,
+  listing: ProductCopyRecord,
   categoryPaths: RuntimeCategoryPath[],
 ): SiliconFlowChatMessage[] {
   const facts = productFactsForPrompt(listing, categoryPaths);
@@ -167,7 +167,7 @@ function normalizeScreenedCategoryPaths(
 function normalizeFinalSuggestionPayload(
   payload: unknown,
   options: {
-    listingId: string;
+    copyId: string;
     categoryPaths: RuntimeCategoryPath[];
     localCandidates: RuntimeCategoryPath[];
     screenedCandidates: RuntimeCategoryPath[];
@@ -191,7 +191,7 @@ function normalizeFinalSuggestionPayload(
   };
 
   return {
-    listingId: options.listingId,
+    copyId: options.copyId,
     catIds: matchedPath.catIds,
     categoryPath: matchedPath.names,
     categoryCandidateSource: 'wxStaticSnapshot',
@@ -248,7 +248,7 @@ export async function selectWxCategoryWithTwoStageAi(
 
   return {
     result: normalizeFinalSuggestionPayload(finalPayload, {
-      listingId: input.listingId,
+      copyId: input.copyId,
       categoryPaths: input.categoryPaths,
       localCandidates,
       screenedCandidates,

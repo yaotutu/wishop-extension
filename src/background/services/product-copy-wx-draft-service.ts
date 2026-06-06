@@ -1,5 +1,5 @@
 import type {
-  CollectedProductListing,
+  ProductCopyRecord,
   CreatePreparedWxDraftBoxProductInput,
   CreateWxDraftBoxProductInput,
   CreateWxDraftBoxProductPrepareInput,
@@ -15,14 +15,14 @@ import type { WxShopCategoryProductRule, WxShopListingClient } from '../wxshop/l
 import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 import {
   collectWxDraftSourceImages,
-  mapCollectedListingToWxAddProductRequest,
-} from './product-listing-wx-draft-mapper.ts';
-import { generateRuleDrivenWxProductAttributes } from './product-listing-wx-attribute-ai-service.ts';
+  mapProductCopyRecordToWxAddProductRequest,
+} from './product-copy-wx-draft-mapper.ts';
+import { generateRuleDrivenWxProductAttributes } from './product-copy-wx-attribute-ai-service.ts';
 import {
-  type ProductListingImageDownloadResult,
+  type ProductCopyImageDownloadResult,
   type WxDraftImageUploadSource,
   uploadWxDraftSourceImages,
-} from './product-listing-image-transfer-service.ts';
+} from './product-copy-image-transfer-service.ts';
 import { getCachedWxCategoryProductRule } from './wx-category-product-rule-cache-service.ts';
 
 type ActivityRecorder = (input: Record<string, unknown>) => Promise<unknown>;
@@ -31,32 +31,32 @@ type CompleteJson = (input: SiliconFlowJsonCompletionInput) => Promise<unknown>;
 const DEFAULT_DRAFT_STOCK_NUM = 999;
 
 export interface WxDraftBoxProductDependencies {
-  getListing?: (listingId: string) => Promise<CollectedProductListing | null>;
+  getCopyRecord?: (copyId: string) => Promise<ProductCopyRecord | null>;
   getClient?: (accountId: string) => Promise<WxShopListingClient>;
   getCategoryProductRule?: (catId: string) => Promise<WxShopCategoryProductRule | null>;
   getSettings?: () => Promise<AppSettings>;
   completeJson?: CompleteJson;
-  downloadImage?: (source: WxDraftImageUploadSource) => Promise<ProductListingImageDownloadResult>;
+  downloadImage?: (source: WxDraftImageUploadSource) => Promise<ProductCopyImageDownloadResult>;
   recordStarted?: ActivityRecorder;
   recordCompleted?: ActivityRecorder;
   recordFailed?: ActivityRecorder;
 }
 
-function createRunId(input: { accountId: string; listingId: string }): string {
-  return `createWxDraftBoxProduct:${input.accountId}:${input.listingId}:${Date.now()}`;
+function createRunId(input: { accountId: string; copyId: string }): string {
+  return `createWxDraftBoxProduct:${input.accountId}:${input.copyId}:${Date.now()}`;
 }
 
-function createPrepareRunId(input: { accountId: string; listingId: string }): string {
-  return `prepareWxDraftBoxProduct:${input.accountId}:${input.listingId}:${Date.now()}`;
+function createPrepareRunId(input: { accountId: string; copyId: string }): string {
+  return `prepareWxDraftBoxProduct:${input.accountId}:${input.copyId}:${Date.now()}`;
 }
 
-function createDeleteRunId(input: { accountId: string; listingId: string; productId: string }): string {
-  return `deleteCreatedWxDraftBoxProduct:${input.accountId}:${input.listingId}:${input.productId}:${Date.now()}`;
+function createDeleteRunId(input: { accountId: string; copyId: string; productId: string }): string {
+  return `deleteCreatedWxDraftBoxProduct:${input.accountId}:${input.copyId}:${input.productId}:${Date.now()}`;
 }
 
-function validateInput(input: { accountId: string; listingId: string }): void {
+function validateInput(input: { accountId: string; copyId: string }): void {
   if (!input.accountId.trim()) throw new Error('缺少微信小店账号 ID');
-  if (!input.listingId.trim()) throw new Error('缺少本地采集商品 ID');
+  if (!input.copyId.trim()) throw new Error('缺少本地采集商品 ID');
 }
 
 function validateDeleteInput(input: DeleteCreatedWxDraftBoxProductInput): void {
@@ -75,7 +75,7 @@ function leafCategoryId(catIds: string[]): string {
 async function resolveExpressTemplateId(
   input: CreateWxDraftBoxProductPrepareInput,
   client: WxShopListingClient,
-  logger = createDiagnosticLogger({ domain: 'listing', component: 'WxDraftPrepare' }),
+  logger = createDiagnosticLogger({ domain: 'productCopy', component: 'WxDraftPrepare' }),
 ): Promise<string> {
   const manualTemplateId = input.expressTemplateId?.trim();
   if (manualTemplateId) return manualTemplateId;
@@ -91,7 +91,7 @@ async function resolveExpressTemplateId(
 async function resolveAfterSaleAddressId(
   input: CreateWxDraftBoxProductPrepareInput,
   client: WxShopListingClient,
-  logger = createDiagnosticLogger({ domain: 'listing', component: 'WxDraftPrepare' }),
+  logger = createDiagnosticLogger({ domain: 'productCopy', component: 'WxDraftPrepare' }),
 ): Promise<string> {
   const manualAddressId = input.afterSaleAddressId?.trim();
   if (manualAddressId) return manualAddressId;
@@ -124,7 +124,7 @@ async function resolveAfterSaleAddressId(
 async function resolveWxDraftSystemDefaults(
   input: CreateWxDraftBoxProductPrepareInput,
   client: WxShopListingClient,
-  logger = createDiagnosticLogger({ domain: 'listing', component: 'WxDraftPrepare' }),
+  logger = createDiagnosticLogger({ domain: 'productCopy', component: 'WxDraftPrepare' }),
 ): Promise<{ expressTemplateId: string; afterSaleAddressId: string; defaultStockNum: number }> {
   const [expressTemplateId, afterSaleAddressId] = await Promise.all([
     resolveExpressTemplateId(input, client, logger),
@@ -137,15 +137,15 @@ async function resolveWxDraftSystemDefaults(
   };
 }
 
-async function uploadListingImages(
-  listing: CollectedProductListing,
+async function uploadCopyRecordImages(
+  listing: ProductCopyRecord,
   client: WxShopListingClient,
   dependencies: Pick<WxDraftBoxProductDependencies, 'downloadImage'>,
-  logger = createDiagnosticLogger({ domain: 'listing', component: 'WxDraftPrepare' }),
+  logger = createDiagnosticLogger({ domain: 'productCopy', component: 'WxDraftPrepare' }),
 ): Promise<Map<string, string>> {
   const sourceImages = collectWxDraftSourceImages(listing);
   logger.info('开始上传微信小店商品图片', {
-    listingId: listing.id,
+    copyId: listing.id,
     imageCount: sourceImages.length,
   });
   return uploadWxDraftSourceImages(listing, client, {
@@ -154,14 +154,14 @@ async function uploadListingImages(
   });
 }
 
-async function defaultGetListing(listingId: string): Promise<CollectedProductListing | null> {
-  const repository = await import('../store/collected-product-listing-repository.ts');
-  return repository.getCollectedProductListing(listingId);
+async function defaultGetCopyRecord(copyId: string): Promise<ProductCopyRecord | null> {
+  const repository = await import('../store/product-copy-record-repository.ts');
+  return repository.getProductCopyRecord(copyId);
 }
 
 async function defaultGetClient(accountId: string): Promise<WxShopListingClient> {
   const registry = await import('../wxshop/client-registry.ts');
-  return registry.getListingClient(accountId);
+  return registry.getListingClient(accountId, 'productCopy');
 }
 
 async function defaultGetCategoryProductRule(catId: string): Promise<WxShopCategoryProductRule | null> {
@@ -191,7 +191,7 @@ function summarizePreparedRequest(
 ): WxDraftBoxProductPrepareResult {
   return {
     accountId: input.accountId,
-    listingId: input.listingId,
+    copyId: input.copyId,
     request,
     uploadedImageCount,
     preparedAt: Date.now(),
@@ -209,9 +209,9 @@ function summarizePreparedRequest(
 
 async function resolveWxDraftProductAttributes(
   input: CreateWxDraftBoxProductPrepareInput,
-  listing: CollectedProductListing,
+  listing: ProductCopyRecord,
   dependencies: Pick<WxDraftBoxProductDependencies, 'getCategoryProductRule' | 'getSettings' | 'completeJson'>,
-  logger = createDiagnosticLogger({ domain: 'listing', component: 'WxDraftPrepare' }),
+  logger = createDiagnosticLogger({ domain: 'productCopy', component: 'WxDraftPrepare' }),
 ): Promise<{
   attrs: CreateWxDraftBoxProductPrepareInput['attrs'];
   warnings: string[];
@@ -230,7 +230,7 @@ async function resolveWxDraftProductAttributes(
     requiredAttrCount: categoryRule.productAttrs.filter(rule => rule.required).length,
   });
   const result = await generateRuleDrivenWxProductAttributes({
-    listingId: input.listingId,
+    copyId: input.copyId,
     listing,
     categoryRule,
     providedAttrs: input.attrs,
@@ -253,14 +253,14 @@ async function resolveWxDraftProductAttributes(
   };
 }
 
-export async function prepareWxDraftBoxProductFromCollectedListing(
+export async function prepareWxDraftBoxProductFromCopyRecord(
   input: CreateWxDraftBoxProductPrepareInput,
   dependencies: WxDraftBoxProductDependencies = {},
 ): Promise<WxDraftBoxProductPrepareResult> {
   validateInput(input);
   const runId = createPrepareRunId(input);
   const logger = createDiagnosticLogger({
-    domain: 'listing',
+    domain: 'productCopy',
     component: 'WxDraftPrepare',
     accountId: input.accountId,
   });
@@ -268,13 +268,13 @@ export async function prepareWxDraftBoxProductFromCollectedListing(
   const recordCompleted = dependencies.recordCompleted || defaultRecordCompleted;
   const recordFailed = dependencies.recordFailed || defaultRecordFailed;
   const activityBase = {
-    domain: 'listing' as const,
+    domain: 'productCopy' as const,
     scope: 'account' as const,
     accountId: input.accountId,
     trigger: 'manual' as const,
     runId,
     metadata: {
-      listingId: input.listingId,
+      copyId: input.copyId,
       catIds: input.catIds.join('/'),
       submitMode: 'draftBox',
     },
@@ -282,30 +282,30 @@ export async function prepareWxDraftBoxProductFromCollectedListing(
 
   await recordStarted({
     ...activityBase,
-    title: '微信小店上架数据生成开始',
-    detail: `采集商品：${input.listingId}`,
+    title: '微信小店草稿数据生成开始',
+    detail: `采集商品：${input.copyId}`,
   });
 
   try {
-    logger.info('开始读取本地采集商品', { listingId: input.listingId });
-    const loadListing = dependencies.getListing || defaultGetListing;
-    const listing = await loadListing(input.listingId);
+    logger.info('开始读取本地采集商品', { copyId: input.copyId });
+    const loadCopyRecord = dependencies.getCopyRecord || defaultGetCopyRecord;
+    const listing = await loadCopyRecord(input.copyId);
     if (!listing) throw new Error('采集商品不存在或已删除');
 
-    logger.info('开始创建微信小店 client', { listingId: input.listingId });
+    logger.info('开始创建微信小店 client', { copyId: input.copyId });
     const getClient = dependencies.getClient || defaultGetClient;
     const client = await getClient(input.accountId);
     const attrResult = await resolveWxDraftProductAttributes(input, listing, dependencies, logger);
     const defaults = await resolveWxDraftSystemDefaults(input, client, logger);
-    const uploadedImages = await uploadListingImages(listing, client, dependencies, logger);
+    const uploadedImages = await uploadCopyRecordImages(listing, client, dependencies, logger);
     logger.info('开始生成微信小店新增商品请求体', {
-      listingId: input.listingId,
+      copyId: input.copyId,
       uploadedImageCount: uploadedImages.size,
       skuCount: listing.sku.matrix.length,
       attrCount: attrResult.attrs?.length ?? listing.params.length,
       defaultStockNum: defaults.defaultStockNum,
     });
-    const addProductRequest = mapCollectedListingToWxAddProductRequest(listing, {
+    const addProductRequest = mapProductCopyRecordToWxAddProductRequest(listing, {
       catIds: input.catIds,
       expressTemplateId: defaults.expressTemplateId,
       afterSaleAddressId: defaults.afterSaleAddressId,
@@ -318,7 +318,7 @@ export async function prepareWxDraftBoxProductFromCollectedListing(
 
     await recordCompleted({
       ...activityBase,
-      title: '微信小店上架数据生成完成',
+      title: '微信小店草稿数据生成完成',
       detail: addProductRequest.title,
       summary: {
         uploadedImages: uploadedImages.size,
@@ -334,15 +334,15 @@ export async function prepareWxDraftBoxProductFromCollectedListing(
     });
     return prepared;
   } catch (error) {
-    const message = errorMessage(error, '微信小店上架数据生成失败');
-    logger.error('微信小店上架数据生成失败', {
-      listingId: input.listingId,
+    const message = errorMessage(error, '微信小店草稿数据生成失败');
+    logger.error('微信小店草稿数据生成失败', {
+      copyId: input.copyId,
       error: message,
     });
     await recordFailed({
       ...activityBase,
-      title: '微信小店上架数据生成失败',
-      detail: `采集商品：${input.listingId}`,
+      title: '微信小店草稿数据生成失败',
+      detail: `采集商品：${input.copyId}`,
       error: { message },
     });
     throw error;
@@ -363,13 +363,13 @@ export async function createPreparedWxDraftBoxProduct(
   const recordCompleted = dependencies.recordCompleted || defaultRecordCompleted;
   const recordFailed = dependencies.recordFailed || defaultRecordFailed;
   const activityBase = {
-    domain: 'listing' as const,
+    domain: 'productCopy' as const,
     scope: 'account' as const,
     accountId: input.accountId,
     trigger: 'manual' as const,
     runId,
     metadata: {
-      listingId: input.listingId,
+      copyId: input.copyId,
     },
   };
 
@@ -385,7 +385,7 @@ export async function createPreparedWxDraftBoxProduct(
     const created = await client.addProduct(input.request);
     const result: WxProductDraftCreationResult = {
       accountId: input.accountId,
-      listingId: input.listingId,
+      copyId: input.copyId,
       productId: created.productId,
       createTime: created.createTime,
       listing: 0,
@@ -412,14 +412,14 @@ export async function createPreparedWxDraftBoxProduct(
   }
 }
 
-export async function createWxDraftBoxProductFromCollectedListing(
+export async function createWxDraftBoxProductFromCopyRecord(
   input: CreateWxDraftBoxProductInput,
   dependencies: WxDraftBoxProductDependencies = {},
 ): Promise<WxProductDraftCreationResult> {
-  const prepared = await prepareWxDraftBoxProductFromCollectedListing(input, dependencies);
+  const prepared = await prepareWxDraftBoxProductFromCopyRecord(input, dependencies);
   return createPreparedWxDraftBoxProduct({
     accountId: prepared.accountId,
-    listingId: prepared.listingId,
+    copyId: prepared.copyId,
     request: prepared.request,
     uploadedImageCount: prepared.uploadedImageCount,
   }, dependencies);
@@ -435,7 +435,7 @@ export async function deleteCreatedWxDraftBoxProduct(
   const productTitle = input.productTitle?.trim() || productId;
   const runId = createDeleteRunId({ ...input, productId });
   const logger = createDiagnosticLogger({
-    domain: 'listing',
+    domain: 'productCopy',
     component: 'WxDraftCleanup',
     accountId: input.accountId,
   });
@@ -443,13 +443,13 @@ export async function deleteCreatedWxDraftBoxProduct(
   const recordCompleted = dependencies.recordCompleted || defaultRecordCompleted;
   const recordFailed = dependencies.recordFailed || defaultRecordFailed;
   const activityBase = {
-    domain: 'listing' as const,
+    domain: 'productCopy' as const,
     scope: 'account' as const,
     accountId: input.accountId,
     trigger: 'manual' as const,
     runId,
     metadata: {
-      listingId: input.listingId,
+      copyId: input.copyId,
       productId,
       submitMode: 'draftBoxCleanup',
     },
@@ -462,8 +462,8 @@ export async function deleteCreatedWxDraftBoxProduct(
   });
 
   try {
-    logger.info('开始删除上货测试创建的微信小店草稿', {
-      listingId: input.listingId,
+    logger.info('开始删除复制商品测试创建的微信小店草稿', {
+      copyId: input.copyId,
       productId,
     });
     const getClient = dependencies.getClient || defaultGetClient;
@@ -477,7 +477,7 @@ export async function deleteCreatedWxDraftBoxProduct(
       });
       return {
         accountId: input.accountId,
-        listingId: input.listingId,
+        copyId: input.copyId,
         productId,
         deleted: true,
       };
@@ -492,7 +492,7 @@ export async function deleteCreatedWxDraftBoxProduct(
     });
     return {
       accountId: input.accountId,
-      listingId: input.listingId,
+      copyId: input.copyId,
       productId,
       deleted: false,
       errorCode: result.errcode,
@@ -500,8 +500,8 @@ export async function deleteCreatedWxDraftBoxProduct(
     };
   } catch (error) {
     const message = errorMessage(error, '微信小店测试草稿删除失败');
-    logger.error('删除上货测试创建的微信小店草稿失败', {
-      listingId: input.listingId,
+    logger.error('删除复制商品测试创建的微信小店草稿失败', {
+      copyId: input.copyId,
       productId,
       error: message,
     });

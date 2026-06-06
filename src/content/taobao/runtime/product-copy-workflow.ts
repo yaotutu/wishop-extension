@@ -1,5 +1,5 @@
 import { extensionApi } from '../../../shared/extension-api.ts';
-import type { ProductListingCollectionSession, TaobaoProductSnapshot } from '../../../shared/types.ts';
+import type { ProductCopySession, TaobaoProductSnapshot } from '../../../shared/types.ts';
 import {
   buildTaobaoProductSnapshotFromPageModel,
   detectTaobaoProductDetailPage,
@@ -116,28 +116,28 @@ export async function collectTaobaoProductSnapshotFromSources(
   return mergeSnapshot(snapshot, fallback);
 }
 
-export async function runProductListingCollectionWorkflow(
-  session: ProductListingCollectionSession,
+export async function runProductCopyWorkflow(
+  session: ProductCopySession,
 ): Promise<void> {
   try {
-    await extensionApi.productListingCollection.markPageReady(session.id);
+    await extensionApi.productCopy.markPageReady(session.id);
     const challenge = detectTaobaoSecurityChallenge();
     if (challenge.detected) {
-      await extensionApi.productListingCollection.reportChallenge(session.id, challenge);
+      await extensionApi.productCopy.reportChallenge(session.id, challenge);
       return;
     }
     if (!detectTaobaoProductDetailPage(location.href)) {
-      await extensionApi.productListingCollection.fail(session.id, '当前页面不是淘宝或天猫商品详情页');
+      await extensionApi.productCopy.fail(session.id, '当前页面不是淘宝或天猫商品详情页');
       return;
     }
     const snapshot = await collectSnapshot();
     if (!isTaobaoProductSnapshotUseful(snapshot)) {
-      await extensionApi.productListingCollection.fail(session.id, '没有读取到可用的淘宝商品数据');
+      await extensionApi.productCopy.fail(session.id, '没有读取到可用的淘宝商品数据');
       return;
     }
-    await extensionApi.productListingCollection.complete(session.id, snapshot);
+    await extensionApi.productCopy.complete(session.id, snapshot);
   } catch (error) {
     const message = error instanceof Error ? error.message : '淘宝商品采集失败';
-    await extensionApi.productListingCollection.fail(session.id, message).catch(() => {});
+    await extensionApi.productCopy.fail(session.id, message).catch(() => {});
   }
 }

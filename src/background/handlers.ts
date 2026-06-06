@@ -1,6 +1,6 @@
 import { SessionManager } from './utils/session-manager';
 import { getPurchaseLookupSessionByTab } from './purchase-lookup/purchase-lookup-session-service';
-import { getProductListingCollectionSessionByTab } from './services/product-listing-collection-service';
+import { getProductCopySessionByTab } from './services/product-copy-session-service';
 import { getShippingSessionByTab } from './shipping/shipping-session-service';
 import { getTaobaoRefundSessionByTab } from './taobao-refund/taobao-refund-session-service';
 import { createBackgroundRouter } from './router/create-background-router';
@@ -19,7 +19,7 @@ const runtimeRouter = createBackgroundRouter({
   getCurrentTabShippingSession,
   getCurrentTabPurchaseLookupSession,
   getCurrentTabTaobaoRefundSession,
-  getCurrentTabProductListingCollectionSession,
+  getCurrentTabProductCopySession,
 });
 
 async function handleMessage(channel: string, args: unknown[], sender?: chrome.runtime.MessageSender): Promise<unknown> {
@@ -59,14 +59,14 @@ async function getCurrentTabTaobaoRefundSession(sender?: chrome.runtime.MessageS
   return getTaobaoRefundSessionByTab(tabId);
 }
 
-async function getCurrentTabProductListingCollectionSession(sender?: chrome.runtime.MessageSender): Promise<unknown> {
+async function getCurrentTabProductCopySession(sender?: chrome.runtime.MessageSender): Promise<unknown> {
   if (sender?.tab?.id !== undefined) {
-    return getProductListingCollectionSessionByTab(sender.tab.id);
+    return getProductCopySessionByTab(sender.tab.id);
   }
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
   const tabId = tabs[0]?.id;
   if (tabId === undefined) return null;
-  return getProductListingCollectionSessionByTab(tabId);
+  return getProductCopySessionByTab(tabId);
 }
 
 export function installRuntimeHandlers(): void {

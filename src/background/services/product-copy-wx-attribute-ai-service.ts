@@ -1,6 +1,6 @@
 import type { AppSettings } from '../../shared/settings.ts';
 import type {
-  CollectedProductListing,
+  ProductCopyRecord,
   WxProductDraftAttribute,
 } from '../../shared/types.ts';
 import type { SiliconFlowChatMessage, SiliconFlowJsonCompletionInput } from '../ai/siliconflow-client.ts';
@@ -13,8 +13,8 @@ import type {
 type CompleteJson = (input: SiliconFlowJsonCompletionInput) => Promise<unknown>;
 
 export interface GenerateRuleDrivenWxProductAttributesInput {
-  listingId: string;
-  listing: CollectedProductListing;
+  copyId: string;
+  listing: ProductCopyRecord;
   categoryRule: WxShopCategoryProductRule;
   providedAttrs?: WxProductDraftAttribute[];
 }
@@ -128,7 +128,7 @@ function buildAttributeMessages(input: GenerateRuleDrivenWxProductAttributesInpu
     {
       role: 'user',
       content: JSON.stringify({
-        listingId: input.listingId,
+        copyId: input.copyId,
         categoryRule: {
           catId: input.categoryRule.catId,
           requiredProductAttrs: requiredRules.map(rulePayload),
@@ -247,7 +247,7 @@ function errorMessage(error: unknown, fallback: string): string {
 
 /**
  * 根据“本地微信类目规则 + 淘宝采集信息”生成最终商品参数。
- * 这个函数是上架流程里唯一的商品参数补齐入口，禁止在调用方再追加字段名猜测或默认兜底。
+ * 这个函数是复制商品流程里唯一的商品参数补齐入口，禁止在调用方再追加字段名猜测或默认兜底。
  */
 export async function generateRuleDrivenWxProductAttributes(
   input: GenerateRuleDrivenWxProductAttributesInput,
@@ -264,7 +264,7 @@ export async function generateRuleDrivenWxProductAttributes(
   }
 
   const settings = await (dependencies.getSettings || defaultGetSettings)();
-  const aiSettings = settings.aiListing;
+  const aiSettings = settings.aiProductCopy;
   if (!aiSettings.siliconFlowApiKey.trim()) throw new Error('请先在设置里填写 SiliconFlow API Key');
 
   let payload: unknown;

@@ -1,7 +1,7 @@
 import type { ActivityLogNotificationIntent } from './notification';
 
 export type ActivityLogLevel = 'info' | 'success' | 'warning' | 'error';
-export type ActivityLogDomain = 'listing' | 'productAudit' | 'violation' | 'orders' | 'store' | 'scheduler' | 'system';
+export type ActivityLogDomain = 'productCopy' | 'productAudit' | 'violation' | 'orders' | 'store' | 'scheduler' | 'system';
 export type ActivityLogScope = 'global' | 'account';
 export type ActivityLogEvent = 'started' | 'queued' | 'waiting_user' | 'completed' | 'skipped' | 'failed';
 export type ActivityLogTrigger = 'manual' | 'scheduled' | 'globalScheduled' | 'background';

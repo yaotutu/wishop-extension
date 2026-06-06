@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { shortlistCategoryPaths } from '../src/background/services/product-listing-category-shortlist.ts';
-import { sampleCollectedProductListing } from './product-listing-fixtures.ts';
+import { shortlistCategoryPaths } from '../src/background/services/product-copy-category-shortlist.ts';
+import { sampleProductCopyRecord } from './product-copy-fixtures.ts';
 
 function fillerCategory(index: number) {
   return {
@@ -22,7 +22,7 @@ function dataCableCategory() {
 }
 
 test('shortlists full WeChat categories before calling AI', () => {
-  const listing = sampleCollectedProductListing({
+  const listing = sampleProductCopyRecord({
     title: '适用kindle充电传输数据线paperwhite电子书配件',
   });
   const categoryPaths = [

@@ -18,7 +18,7 @@ import type {
   WxShopCategoryProductRule,
   WxShopListingClient,
 } from '../wxshop/listing/types.ts';
-import type { RuntimeCategoryPath } from './product-listing-category-shortlist.ts';
+import type { RuntimeCategoryPath } from './product-copy-category-shortlist.ts';
 import { loadRuntimeWxCategoryPaths } from './wxshop-category-path-cache.ts';
 
 type ActivityRecorder = (input: Record<string, unknown>) => Promise<unknown>;
@@ -138,7 +138,7 @@ function createInitialRuntimeState(input: {
 
 async function defaultGetClient(accountId: string): Promise<WxShopListingClient> {
   const registry = await import('../wxshop/client-registry.ts');
-  return registry.getListingClient(accountId);
+  return registry.getListingClient(accountId, 'productCopy');
 }
 
 async function defaultRecordStarted(input: Record<string, unknown>): Promise<unknown> {
@@ -191,7 +191,7 @@ export async function syncWxCategoryProductRulesToLocalCache(
   const intervalMs = dependencies.intervalMs ?? DEFAULT_SYNC_INTERVAL_MS;
   const runId = `syncWxCategoryProductRules:${input.accountId}:${now()}`;
   const logger = createDiagnosticLogger({
-    domain: 'listing',
+    domain: 'productCopy',
     component: 'WxCategoryRuleCache',
     accountId: input.accountId,
   });
@@ -214,7 +214,7 @@ export async function syncWxCategoryProductRulesToLocalCache(
   });
 
   await recordStarted({
-    domain: 'listing',
+    domain: 'productCopy',
     scope: 'account',
     accountId: input.accountId,
     trigger: 'manual',
@@ -299,7 +299,7 @@ export async function syncWxCategoryProductRulesToLocalCache(
     };
     const status = await getWxCategoryProductRuleCacheStatus({ loadCategoryPaths });
     await recordCompleted({
-      domain: 'listing',
+      domain: 'productCopy',
       scope: 'account',
       accountId: input.accountId,
       trigger: 'manual',
@@ -329,7 +329,7 @@ export async function syncWxCategoryProductRulesToLocalCache(
       lastError: message,
     };
     await recordFailed({
-      domain: 'listing',
+      domain: 'productCopy',
       scope: 'account',
       accountId: input.accountId,
       trigger: 'manual',

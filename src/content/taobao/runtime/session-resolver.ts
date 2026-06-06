@@ -1,5 +1,5 @@
 import type {
-  ProductListingCollectionSession,
+  ProductCopySession,
   PurchaseLookupSession,
   ShippingSession,
   TaobaoRefundSession,
@@ -29,17 +29,17 @@ export interface TaobaoContentSessions {
   shippingSession: ShippingSession | null;
   purchaseLookupSession: PurchaseLookupSession | null;
   taobaoRefundSession: TaobaoRefundSession | null;
-  productListingCollectionSession: ProductListingCollectionSession | null;
+  productCopySession: ProductCopySession | null;
   workspaceRole: TaobaoWorkspaceRole | null;
 }
 
 export async function resolveTaobaoContentSessions(): Promise<TaobaoContentSessions> {
-  const [shippingSession, purchaseLookupSession, taobaoRefundSession, productListingCollectionSession, workspaceRole] = await Promise.all([
+  const [shippingSession, purchaseLookupSession, taobaoRefundSession, productCopySession, workspaceRole] = await Promise.all([
     waitForSession(() => extensionApi.shipping.getCurrentTabSession()),
     waitForSession(() => extensionApi.purchaseLookup.getCurrentTabSession()),
     waitForSession(() => extensionApi.taobaoRefund.getCurrentTabSession()),
-    waitForSession(() => extensionApi.productListingCollection.getCurrentTabSession()),
+    waitForSession(() => extensionApi.productCopy.getCurrentTabSession()),
     extensionApi.taobaoWorkspace.getCurrentRole().catch(() => null),
   ]);
-  return { shippingSession, purchaseLookupSession, taobaoRefundSession, productListingCollectionSession, workspaceRole };
+  return { shippingSession, purchaseLookupSession, taobaoRefundSession, productCopySession, workspaceRole };
 }

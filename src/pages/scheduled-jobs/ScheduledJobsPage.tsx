@@ -13,7 +13,7 @@ interface ScheduledJobsPageProps {
 }
 
 const moduleLabels: Record<ScheduledJob['module'], string> = {
-  listing: '商品上货',
+  productCopy: '商品复制',
   productAudit: '商品提审',
   orders: '订单管理',
   violation: '违规检测',

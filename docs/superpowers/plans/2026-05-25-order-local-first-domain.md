@@ -179,7 +179,7 @@ Replace `useOrdersQuery` with a local-first `useOrderListQuery(scope, status, se
 
 - [ ] **Step 3: Update Layout scope selection**
 
-Show “全部账号” in the order module sidebar and pass `OrderScope` into `OrdersPage`. Keep product listing global scope behavior unchanged.
+Show “全部账号” in the order module sidebar and pass `OrderScope` into `OrdersPage`. Keep product copy global scope behavior unchanged.
 
 - [ ] **Step 4: Update OrdersPage actions**
 

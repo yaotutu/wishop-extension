@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { CollectedProductListing } from '../src/shared/types.ts';
+import type { ProductCopyRecord } from '../src/shared/types.ts';
 import {
   collectWxDraftSourceImages,
-  mapCollectedListingToWxAddProductRequest,
-} from '../src/background/services/product-listing-wx-draft-mapper.ts';
+  mapProductCopyRecordToWxAddProductRequest,
+} from '../src/background/services/product-copy-wx-draft-mapper.ts';
 
-function sampleListing(patch: Partial<CollectedProductListing> = {}): CollectedProductListing {
+function sampleListing(patch: Partial<ProductCopyRecord> = {}): ProductCopyRecord {
   return {
     id: 'taobao:1010211244888',
     sourceUrl: 'https://item.taobao.com/item.htm?id=1010211244888',
@@ -90,11 +90,11 @@ function sampleListing(patch: Partial<CollectedProductListing> = {}): CollectedP
   };
 }
 
-test('maps a collected Taobao listing to a WeChat add-product draft request', () => {
+test('maps a Taobao product copy record to a WeChat add-product draft request', () => {
   const listing = sampleListing();
   const imageMap = new Map(collectWxDraftSourceImages(listing).map((url, index) => [url, `https://mmecimage.cn/p/uploaded-${index}.jpg`]));
 
-  const request = mapCollectedListingToWxAddProductRequest(listing, {
+  const request = mapProductCopyRecordToWxAddProductRequest(listing, {
     catIds: ['10000111', '10000113', '6091'],
     expressTemplateId: '47428464001',
     afterSaleAddressId: '123456',
@@ -150,7 +150,7 @@ test('maps a collected Taobao listing to a WeChat add-product draft request', ()
   });
 });
 
-test('builds one default SKU when the collected listing has no SKU matrix', () => {
+test('builds one default SKU when the product copy record has no SKU matrix', () => {
   const listing = sampleListing({
     price: { rangeText: '12.80' },
     images: { ...sampleListing().images, detail: [] },
@@ -159,7 +159,7 @@ test('builds one default SKU when the collected listing has no SKU matrix', () =
   });
   const imageMap = new Map(collectWxDraftSourceImages(listing).map((url, index) => [url, `https://mmecimage.cn/p/uploaded-${index}.jpg`]));
 
-  const request = mapCollectedListingToWxAddProductRequest(listing, {
+  const request = mapProductCopyRecordToWxAddProductRequest(listing, {
     catIds: ['10000111', '10000113', '6091'],
     expressTemplateId: '47428464001',
     afterSaleAddressId: '123456',
@@ -177,14 +177,14 @@ test('builds one default SKU when the collected listing has no SKU matrix', () =
   }]);
 });
 
-test('uses the first uploaded main image as detail fallback when collected detail images are empty', () => {
+test('uses the first uploaded main image as detail fallback when detail images are empty', () => {
   const listing = sampleListing({
     images: { ...sampleListing().images, detail: [] },
     detail: { text: '', source: 'none', images: [] },
   });
   const imageMap = new Map(collectWxDraftSourceImages(listing).map((url, index) => [url, `https://mmecimage.cn/p/uploaded-${index}.jpg`]));
 
-  const request = mapCollectedListingToWxAddProductRequest(listing, {
+  const request = mapProductCopyRecordToWxAddProductRequest(listing, {
     catIds: ['10000111', '10000113', '6091'],
     expressTemplateId: '47428464001',
     afterSaleAddressId: '123456',
@@ -211,7 +211,7 @@ test('removes emoji characters from WeChat SKU attribute values', () => {
   });
   const imageMap = new Map(collectWxDraftSourceImages(listing).map((url, index) => [url, `https://mmecimage.cn/p/uploaded-${index}.jpg`]));
 
-  const request = mapCollectedListingToWxAddProductRequest(listing, {
+  const request = mapProductCopyRecordToWxAddProductRequest(listing, {
     catIds: ['10000111', '10000113', '6091'],
     expressTemplateId: '47428464001',
     afterSaleAddressId: '123456',
@@ -228,7 +228,7 @@ test('uses AI-normalized attributes when they are supplied for the WeChat draft'
   const listing = sampleListing();
   const imageMap = new Map(collectWxDraftSourceImages(listing).map((url, index) => [url, `https://mmecimage.cn/p/uploaded-${index}.jpg`]));
 
-  const request = mapCollectedListingToWxAddProductRequest(listing, {
+  const request = mapProductCopyRecordToWxAddProductRequest(listing, {
     catIds: ['10000111', '10000113', '6091'],
     expressTemplateId: '47428464001',
     afterSaleAddressId: '123456',
@@ -246,7 +246,7 @@ test('accepts a four-level WeChat leaf category path when preparing a draft requ
   const listing = sampleListing();
   const imageMap = new Map(collectWxDraftSourceImages(listing).map((url, index) => [url, `https://mmecimage.cn/p/uploaded-${index}.jpg`]));
 
-  const request = mapCollectedListingToWxAddProductRequest(listing, {
+  const request = mapProductCopyRecordToWxAddProductRequest(listing, {
     catIds: ['10000215', '10000218', '10000603', '546890'],
     expressTemplateId: '47428464001',
     afterSaleAddressId: '123456',
@@ -261,12 +261,12 @@ test('accepts a four-level WeChat leaf category path when preparing a draft requ
   ]);
 });
 
-test('rejects listings that cannot satisfy WeChat add-product minimum fields', () => {
+test('rejects product copy records that cannot satisfy WeChat add-product minimum fields', () => {
   const listing = sampleListing({ images: { ...sampleListing().images, main: ['https://img.alicdn.com/main-1.jpg'] } });
   const imageMap = new Map(collectWxDraftSourceImages(listing).map((url, index) => [url, `https://mmecimage.cn/p/uploaded-${index}.jpg`]));
 
   assert.throws(
-    () => mapCollectedListingToWxAddProductRequest(listing, {
+    () => mapProductCopyRecordToWxAddProductRequest(listing, {
       catIds: ['10000111', '10000113', '6091'],
       expressTemplateId: '47428464001',
       afterSaleAddressId: '123456',
@@ -277,7 +277,7 @@ test('rejects listings that cannot satisfy WeChat add-product minimum fields', (
   );
 
   assert.throws(
-    () => mapCollectedListingToWxAddProductRequest(sampleListing(), {
+    () => mapProductCopyRecordToWxAddProductRequest(sampleListing(), {
       catIds: ['6091'],
       expressTemplateId: '47428464001',
       afterSaleAddressId: '123456',
@@ -287,7 +287,7 @@ test('rejects listings that cannot satisfy WeChat add-product minimum fields', (
   );
 
   assert.throws(
-    () => mapCollectedListingToWxAddProductRequest(sampleListing(), {
+    () => mapProductCopyRecordToWxAddProductRequest(sampleListing(), {
       catIds: ['10000111', '10000113', '6091'],
       expressTemplateId: '',
       afterSaleAddressId: '123456',
@@ -297,7 +297,7 @@ test('rejects listings that cannot satisfy WeChat add-product minimum fields', (
   );
 
   assert.throws(
-    () => mapCollectedListingToWxAddProductRequest(sampleListing(), {
+    () => mapProductCopyRecordToWxAddProductRequest(sampleListing(), {
       catIds: ['10000111', '10000113', '6091'],
       expressTemplateId: '47428464001',
       afterSaleAddressId: '',

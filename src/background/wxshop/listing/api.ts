@@ -1,3 +1,4 @@
+import type { ActivityLogDomain } from '../../../shared/activity-log.ts';
 import type { DraftProduct, QuotaResult, WxProductCategoryPath } from '../../../shared/types';
 import { createWxShopRequestClient } from '../core/request';
 import type {
@@ -100,10 +101,10 @@ function normalizeCategoryAttrRules(value: unknown): WxShopCategoryProductAttrRu
     .filter((item): item is WxShopCategoryProductAttrRule => Boolean(item));
 }
 
-export function createWxShopListingClient(accountId: string): WxShopListingClient {
+export function createWxShopListingClient(accountId: string, domain: ActivityLogDomain = 'productAudit'): WxShopListingClient {
   const wxshop = createWxShopRequestClient({
     accountId,
-    domain: 'listing',
+    domain,
     component: 'WxShopListingClient',
   });
 

@@ -13,7 +13,7 @@ import {
 import wechatQrcode from '../../assets/wechat-qrcode.png';
 import douyinQrcode from '../../assets/douyin-qrcode.png';
 import type { Account, LicenseState } from '../../shared/types';
-import { DEFAULT_AI_LISTING_SETTINGS } from '../../shared/settings';
+import { DEFAULT_AI_PRODUCT_COPY_SETTINGS } from '../../shared/settings';
 import { useAppSettingsQuery, useUpdateAppSettingsMutation } from '../../hooks/useOrderQueries';
 import type { SettingsTab } from '../../stores/dashboard-ui-preferences-store';
 import { queryKeys } from '../../query/query-keys';
@@ -31,7 +31,7 @@ const MENU_ITEMS = [
   { key: 'about', label: '关于/更新', icon: <InfoCircleOutlined /> },
   { key: 'product', label: '产品介绍', icon: <AppstoreOutlined /> },
   { key: 'license', label: '授权状态', icon: <SafetyCertificateOutlined /> },
-  { key: 'aiListing', label: 'AI 上货', icon: <RobotOutlined /> },
+  { key: 'aiProductCopy', label: 'AI 复制商品', icon: <RobotOutlined /> },
   { key: 'baseData', label: '基础数据', icon: <CloudDownloadOutlined /> },
   { key: 'contact', label: '联系我们', icon: <CustomerServiceOutlined /> },
 ];
@@ -164,34 +164,34 @@ const LicensePanel: React.FC = () => {
   );
 };
 
-interface AiListingFormValues {
+interface AiProductCopyFormValues {
   siliconFlowApiKey: string;
   siliconFlowModel: string;
 }
 
-const AiListingPanel: React.FC = () => {
-  const [form] = Form.useForm<AiListingFormValues>();
+const AiProductCopyPanel: React.FC = () => {
+  const [form] = Form.useForm<AiProductCopyFormValues>();
   const settingsQuery = useAppSettingsQuery();
   const updateSettingsMutation = useUpdateAppSettingsMutation();
 
   useEffect(() => {
-    const settings = settingsQuery.data?.aiListing;
+    const settings = settingsQuery.data?.aiProductCopy;
     if (!settings) return;
     form.setFieldsValue(settings);
-  }, [form, settingsQuery.data?.aiListing]);
+  }, [form, settingsQuery.data?.aiProductCopy]);
 
-  const save = async (values: AiListingFormValues) => {
+  const save = async (values: AiProductCopyFormValues) => {
     await updateSettingsMutation.mutateAsync({
-      aiListing: {
+      aiProductCopy: {
         siliconFlowApiKey: values.siliconFlowApiKey,
         siliconFlowModel: values.siliconFlowModel,
       },
     });
-    message.success('AI 上货设置已保存');
+    message.success('AI 复制商品设置已保存');
   };
 
   return (
-    <Card title="AI 上货">
+    <Card title="AI 复制商品">
       <Alert
         type="info"
         showIcon
@@ -201,7 +201,7 @@ const AiListingPanel: React.FC = () => {
       <Form
         form={form}
         layout="vertical"
-        initialValues={DEFAULT_AI_LISTING_SETTINGS}
+        initialValues={DEFAULT_AI_PRODUCT_COPY_SETTINGS}
         onFinish={save}
         style={{ maxWidth: 620 }}
       >
@@ -215,7 +215,7 @@ const AiListingPanel: React.FC = () => {
           name="siliconFlowModel"
           label="模型"
         >
-          <Input allowClear placeholder={DEFAULT_AI_LISTING_SETTINGS.siliconFlowModel} />
+          <Input allowClear placeholder={DEFAULT_AI_PRODUCT_COPY_SETTINGS.siliconFlowModel} />
         </Form.Item>
         <Button
           type="primary"
@@ -376,7 +376,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ accounts, activeAccountId, 
         {activeTab === 'about' && <AboutPanel />}
         {activeTab === 'product' && <ProductPanel />}
         {activeTab === 'license' && <LicensePanel />}
-        {activeTab === 'aiListing' && <AiListingPanel />}
+        {activeTab === 'aiProductCopy' && <AiProductCopyPanel />}
         {activeTab === 'baseData' && <BaseDataPanel accounts={accounts} activeAccountId={activeAccountId} />}
         {activeTab === 'contact' && <ContactPanel />}
       </div>

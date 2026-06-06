@@ -1,4 +1,4 @@
-import type { CollectedProductListing } from '../../shared/types.ts';
+import type { ProductCopyRecord } from '../../shared/types.ts';
 
 export interface RuntimeCategoryPath {
   catIds: string[];
@@ -67,7 +67,7 @@ function addSearchText(tokens: Map<string, number>, value: unknown, weight: numb
   }
 }
 
-function listingSearchTerms(listing: CollectedProductListing): Array<[string, number]> {
+function listingSearchTerms(listing: ProductCopyRecord): Array<[string, number]> {
   const terms = new Map<string, number>();
   const sourceCategory = listing.category.source;
   addSearchText(terms, listing.title, 12);
@@ -109,7 +109,7 @@ function scoreCategoryPath(path: RuntimeCategoryPath, terms: Array<[string, numb
  * 这里先在本地全量类目缓存里做确定性检索，再把 Top 候选交给 AI 做最终判断。
  */
 export function shortlistCategoryPaths(
-  listing: CollectedProductListing,
+  listing: ProductCopyRecord,
   categoryPaths: RuntimeCategoryPath[],
   limit = MAX_AI_CATEGORY_CANDIDATES,
 ): RuntimeCategoryPath[] {

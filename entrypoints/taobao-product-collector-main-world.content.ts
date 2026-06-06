@@ -110,7 +110,7 @@ function readProductPageModel(): unknown {
     skuBase: res.skuBase,
     /**
      * sku2info 的原始节点混有价格库存和下单风控参数。这里只保留
-     * 上货需要的公开商品事实，避免持久化 asac、mi_id、buyExParams 等会话字段。
+     * 复制商品需要的公开商品事实，避免持久化 asac、mi_id、buyExParams 等会话字段。
      */
     skuCore: { sku2info: pickPublicSku2Info(skuCore.sku2info) },
     pcTrade: {

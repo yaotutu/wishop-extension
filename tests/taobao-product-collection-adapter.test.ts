@@ -4,7 +4,7 @@ import {
   buildTaobaoProductSnapshotFromPageModel,
   sanitizeTaobaoProductPageModel,
 } from '../src/content/taobao/adapters/product-detail-collection-adapter.ts';
-import { collectTaobaoProductSnapshotFromSources } from '../src/content/taobao/runtime/product-listing-collection-workflow.ts';
+import { collectTaobaoProductSnapshotFromSources } from '../src/content/taobao/runtime/product-copy-workflow.ts';
 
 const pageModel = {
   seller: {
@@ -134,7 +134,7 @@ const pageModel = {
   },
 };
 
-test('maps Taobao ICE page model to a complete listing collection snapshot', () => {
+test('maps Taobao ICE page model to a complete product copy snapshot', () => {
   const snapshot = buildTaobaoProductSnapshotFromPageModel({
     pageModel,
     url: 'https://item.taobao.com/item.htm?id=1010211244888',

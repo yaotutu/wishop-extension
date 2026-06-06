@@ -65,7 +65,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCE: NotificationPreference = {
     'system.credential_invalid': true,
   },
   domainEnabled: {
-    listing: true,
+    productCopy: true,
     productAudit: true,
     violation: true,
     orders: true,

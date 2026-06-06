@@ -12,8 +12,8 @@ export interface ShipmentCheckSettings {
   failureCooldownMinutes: number;
 }
 
-export interface AiListingSettings {
-  /** SiliconFlow API Key 仅保存在本地 chrome.storage，不进入日志和上架请求。 */
+export interface AiProductCopySettings {
+  /** SiliconFlow API Key 仅保存在本地 chrome.storage，不进入日志和草稿请求。 */
   siliconFlowApiKey: string;
   /** 默认使用 SiliconFlow 文档里的聊天补全示例模型，设置页允许用户按账号额度自行替换。 */
   siliconFlowModel: string;
@@ -21,12 +21,12 @@ export interface AiListingSettings {
 
 export interface AppSettings {
   shipmentCheck: ShipmentCheckSettings;
-  aiListing: AiListingSettings;
+  aiProductCopy: AiProductCopySettings;
 }
 
 export interface AppSettingsPatch {
   shipmentCheck?: Partial<ShipmentCheckSettings>;
-  aiListing?: Partial<AiListingSettings>;
+  aiProductCopy?: Partial<AiProductCopySettings>;
 }
 
 export const MAX_SHIPMENT_CHECK_ORDER_LOOKBACK_DAYS = 7;
@@ -45,14 +45,14 @@ export const DEFAULT_SHIPMENT_CHECK_SETTINGS: ShipmentCheckSettings = {
   failureCooldownMinutes: 60,
 };
 
-export const DEFAULT_AI_LISTING_SETTINGS: AiListingSettings = {
+export const DEFAULT_AI_PRODUCT_COPY_SETTINGS: AiProductCopySettings = {
   siliconFlowApiKey: '',
   siliconFlowModel: 'Qwen/QwQ-32B',
 };
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   shipmentCheck: DEFAULT_SHIPMENT_CHECK_SETTINGS,
-  aiListing: DEFAULT_AI_LISTING_SETTINGS,
+  aiProductCopy: DEFAULT_AI_PRODUCT_COPY_SETTINGS,
 };
 
 function boundedNumber(value: unknown, fallback: number, min: number, max: number): number {
@@ -102,17 +102,19 @@ function normalizeOptionalText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-export function normalizeAiListingSettings(input?: Partial<AiListingSettings>): AiListingSettings {
+export function normalizeAiProductCopySettings(input?: Partial<AiProductCopySettings>): AiProductCopySettings {
   const model = normalizeOptionalText(input?.siliconFlowModel);
   return {
     siliconFlowApiKey: normalizeOptionalText(input?.siliconFlowApiKey),
-    siliconFlowModel: model || DEFAULT_AI_LISTING_SETTINGS.siliconFlowModel,
+    siliconFlowModel: model || DEFAULT_AI_PRODUCT_COPY_SETTINGS.siliconFlowModel,
   };
 }
 
 export function normalizeAppSettings(input?: AppSettingsPatch): AppSettings {
+  // 只在存储迁移和旧本地数据归一化时读取 aiListing，运行期设置统一使用 aiProductCopy。
+  const legacyInput = input as AppSettingsPatch & { aiListing?: Partial<AiProductCopySettings> } | undefined;
   return {
     shipmentCheck: normalizeShipmentCheckSettings(input?.shipmentCheck),
-    aiListing: normalizeAiListingSettings(input?.aiListing),
+    aiProductCopy: normalizeAiProductCopySettings(input?.aiProductCopy || legacyInput?.aiListing),
   };
 }

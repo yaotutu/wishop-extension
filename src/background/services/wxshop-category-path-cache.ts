@@ -1,4 +1,4 @@
-import type { RuntimeCategoryPath } from './product-listing-category-shortlist.ts';
+import type { RuntimeCategoryPath } from './product-copy-category-shortlist.ts';
 
 interface RuntimeCategorySnapshot {
   version?: number;

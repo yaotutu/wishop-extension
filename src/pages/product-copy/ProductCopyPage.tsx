@@ -21,17 +21,17 @@ import type { TableProps } from 'antd';
 import { queryKeys } from '../../query/query-keys';
 import { extensionApi } from '../../shared/extension-api';
 import type {
-  CollectedProductListing,
+  ProductCopyRecord,
   DeleteCreatedWxDraftBoxProductResult,
-  ProductListingCollectionSession,
+  ProductCopySession,
   WxDraftBoxProductPrepareResult,
   WxProductDraftCreationResult,
   WxProductDraftSuggestionResult,
 } from '../../shared/types';
 
-type ProductListingWizardStep = 'input' | 'collectionPreview' | 'draftPreview' | 'completed';
+type ProductCopyWizardStep = 'input' | 'collectionPreview' | 'draftPreview' | 'completed';
 
-interface ProductListingPageProps {
+interface ProductCopyPageProps {
   accountId: string;
   accountName?: string;
 }
@@ -47,7 +47,7 @@ const missingFieldLabels: Record<string, string> = {
   productParams: '商品参数',
 };
 
-const wizardStepIndex: Record<ProductListingWizardStep, number> = {
+const wizardStepIndex: Record<ProductCopyWizardStep, number> = {
   input: 0,
   collectionPreview: 1,
   draftPreview: 2,
@@ -105,11 +105,11 @@ function formatCentPrice(value: number): string {
   return `¥${(value / 100).toFixed(2)}`;
 }
 
-function skuSummary(listing: CollectedProductListing): string {
+function skuSummary(listing: ProductCopyRecord): string {
   return listing.sku.groups.map(group => `${group.name} ${group.values.length}`).join(' / ') || '-';
 }
 
-function statusTags(listing: CollectedProductListing): React.ReactNode {
+function statusTags(listing: ProductCopyRecord): React.ReactNode {
   if (listing.missingFields.length === 0) return <Tag color="green">完整</Tag>;
   return (
     <Space size={4} wrap>
@@ -122,7 +122,7 @@ function statusTags(listing: CollectedProductListing): React.ReactNode {
   );
 }
 
-function sourceCategoryText(listing?: Pick<CollectedProductListing, 'category'> | null): string {
+function sourceCategoryText(listing?: Pick<ProductCopyRecord, 'category'> | null): string {
   const category = listing?.category.source;
   if (!category) return '-';
   return category.path?.join(' / ')
@@ -144,13 +144,13 @@ function normalizedCategoryText(suggestion: WxProductDraftSuggestionResult | nul
   return suggestion.categoryPath?.join(' / ') || suggestion.catIds.join(' / ') || '-';
 }
 
-interface ProductListingPreviewImageProps {
+interface ProductCopyPreviewImageProps {
   url: string;
   alt: string;
   detail?: boolean;
 }
 
-const ProductListingPreviewImage: React.FC<ProductListingPreviewImageProps> = ({ url, alt, detail = false }) => {
+const ProductCopyPreviewImage: React.FC<ProductCopyPreviewImageProps> = ({ url, alt, detail = false }) => {
   const objectUrlRef = useRef<string | null>(null);
   const fallbackRequestedRef = useRef(false);
   const [displaySrc, setDisplaySrc] = useState(url);
@@ -217,7 +217,7 @@ function renderImageGroup(urls: string[], alt: string, detail = false): React.Re
     <Image.PreviewGroup>
       <div style={detail ? detailImageGridStyle : imageGridStyle}>
         {urls.map((url, index) => (
-          <ProductListingPreviewImage
+          <ProductCopyPreviewImage
             key={`${url}:${index}`}
             url={url}
             alt={alt}
@@ -283,12 +283,12 @@ function renderCategorySuggestion(suggestion: WxProductDraftSuggestionResult | n
   );
 }
 
-const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, accountName }) => {
+const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountName }) => {
   const [form] = Form.useForm<{ url: string }>();
   const queryClient = useQueryClient();
-  const [currentStep, setCurrentStep] = useState<ProductListingWizardStep>('input');
-  const [activeSession, setActiveSession] = useState<ProductListingCollectionSession | null>(null);
-  const [collectedListing, setCollectedListing] = useState<CollectedProductListing | null>(null);
+  const [currentStep, setCurrentStep] = useState<ProductCopyWizardStep>('input');
+  const [activeSession, setActiveSession] = useState<ProductCopySession | null>(null);
+  const [copyRecord, setCopyRecord] = useState<ProductCopyRecord | null>(null);
   const [draftPrepared, setDraftPrepared] = useState<WxDraftBoxProductPrepareResult | null>(null);
   const [draftSuggestion, setDraftSuggestion] = useState<WxProductDraftSuggestionResult | null>(null);
   const [draftSubmittedResult, setDraftSubmittedResult] = useState<WxProductDraftCreationResult | null>(null);
@@ -308,7 +308,7 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
     form.resetFields();
     setCurrentStep('input');
     setActiveSession(null);
-    setCollectedListing(null);
+    setCopyRecord(null);
     setDraftPrepared(null);
     setDraftSuggestion(null);
     setDraftSubmittedResult(null);
@@ -322,11 +322,11 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
   }, [accountId, resetWizard]);
 
   const collectMutation = useMutation({
-    mutationFn: (url: string) => extensionApi.productListingCollection.open({ url }),
+    mutationFn: (url: string) => extensionApi.productCopy.open({ url }),
     onSuccess: session => {
       setActiveSession(session);
       setCurrentStep('input');
-      setCollectedListing(null);
+      setCopyRecord(null);
       setDraftPrepared(null);
       setDraftSuggestion(null);
       setDraftSubmittedResult(null);
@@ -345,10 +345,10 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
       setFullCategoryStatus('正在执行类目转换诊断。');
     },
     mutationFn: async () => {
-      if (!collectedListing) throw new Error('请先完成商品采集');
-      return extensionApi.productListingCollection.suggestWxCategoryFromFullList({
+      if (!copyRecord) throw new Error('请先完成商品采集');
+      return extensionApi.productCopy.suggestWxCategoryFromFullList({
         accountId,
-        listingId: collectedListing.id,
+        copyId: copyRecord.id,
       });
     },
     onSuccess: suggestion => {
@@ -364,19 +364,19 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
   });
 
   /**
-   * “下一步”是正式上货路径：
+   * “下一步”是正式复制商品路径：
    * 先让后台按当前账号做微信类目转换，再准备微信小店新增商品请求体。
-   * 上货管理只负责创建草稿箱商品，因此这里调用 DraftBox 专用命令。
+   * 复制商品只负责创建草稿箱商品，因此这里调用 DraftBox 专用命令。
    */
   const generateDraftDataMutation = useMutation({
     onMutate: () => {
       setFullCategoryStatus('正在转换微信类目并生成草稿箱数据，图片会同步上传到微信小店。');
     },
     mutationFn: async () => {
-      if (!collectedListing) throw new Error('请先完成商品采集');
-      const suggestion = await extensionApi.productListingCollection.suggestWxCategoryFromFullList({
+      if (!copyRecord) throw new Error('请先完成商品采集');
+      const suggestion = await extensionApi.productCopy.suggestWxCategoryFromFullList({
         accountId,
-        listingId: collectedListing.id,
+        copyId: copyRecord.id,
       });
       const catIds = suggestion.catIds;
 
@@ -384,9 +384,9 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
         throw new Error('AI 返回的微信小店类目路径不完整，请重新生成');
       }
 
-      const prepared = await extensionApi.productListingCollection.prepareWxDraftBoxProduct({
+      const prepared = await extensionApi.productCopy.prepareWxDraftBoxProduct({
         accountId,
-        listingId: collectedListing.id,
+        copyId: copyRecord.id,
         catIds,
         brandId: DEFAULT_BRAND_ID,
       });
@@ -419,9 +419,9 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
       cancelText: '保留',
       okButtonProps: { danger: true },
       async onOk() {
-        const deleteResult = await extensionApi.productListingCollection.deleteCreatedWxDraftBoxProduct({
+        const deleteResult = await extensionApi.productCopy.deleteCreatedWxDraftBoxProduct({
           accountId: result.accountId,
-          listingId: result.listingId,
+          copyId: result.copyId,
           productId: result.productId,
           productTitle,
         });
@@ -439,9 +439,9 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
   const submitPreparedDraftMutation = useMutation({
     mutationFn: () => {
       if (!draftPrepared) throw new Error('请先生成草稿箱数据');
-      return extensionApi.productListingCollection.createPreparedWxDraftBoxProduct({
+      return extensionApi.productCopy.createPreparedWxDraftBoxProduct({
         accountId: draftPrepared.accountId,
-        listingId: draftPrepared.listingId,
+        copyId: draftPrepared.copyId,
         request: {
           ...draftPrepared.request,
           listing: DRAFT_BOX_LISTING_VALUE,
@@ -463,15 +463,15 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
   });
 
   useEffect(() => {
-    const cleanupCompleted = extensionApi.productListingCollection.onCompleted(listing => {
-      queryClient.setQueryData<CollectedProductListing[]>(
-        queryKeys.productListingCollection.list,
+    const cleanupCompleted = extensionApi.productCopy.onCompleted(listing => {
+      queryClient.setQueryData<ProductCopyRecord[]>(
+        queryKeys.productCopy.list,
         current => [listing, ...(current || []).filter(item => item.id !== listing.id)],
       );
 
       if (activeCollectionUrl && listing.sourceUrl !== activeCollectionUrl) return;
       setActiveSession(null);
-      setCollectedListing(listing);
+      setCopyRecord(listing);
       setCurrentStep('collectionPreview');
       setDraftPrepared(null);
       setDraftSuggestion(null);
@@ -480,12 +480,12 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
       setFullCategoryStatus('');
       message.success('商品采集完成');
     });
-    const cleanupFailed = extensionApi.productListingCollection.onFailed(payload => {
+    const cleanupFailed = extensionApi.productCopy.onFailed(payload => {
       if (activeCollectionUrl && payload.url !== activeCollectionUrl) return;
       setActiveSession(null);
       message.error(payload.error || '商品采集失败');
     });
-    const cleanupChallenge = extensionApi.productListingCollection.onChallenge(payload => {
+    const cleanupChallenge = extensionApi.productCopy.onChallenge(payload => {
       if (activeCollectionUrl && payload.url !== activeCollectionUrl) return;
       message.warning(payload.reason || '淘宝工作页需要登录或安全验证');
     });
@@ -498,7 +498,7 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
 
   const handleCollect = async (values: { url: string }) => {
     const url = values.url.trim();
-    setCollectedListing(null);
+    setCopyRecord(null);
     setDraftPrepared(null);
     setDraftSuggestion(null);
     setDraftSubmittedResult(null);
@@ -507,13 +507,13 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
     await collectMutation.mutateAsync(url);
   };
 
-  const renderCollectionPreview = (listing: CollectedProductListing): React.ReactNode => {
-    const paramColumns: TableProps<CollectedProductListing['params'][number]>['columns'] = [
+  const renderCollectionPreview = (listing: ProductCopyRecord): React.ReactNode => {
+    const paramColumns: TableProps<ProductCopyRecord['params'][number]>['columns'] = [
       { title: '分组', dataIndex: 'group', width: 120 },
       { title: '参数', dataIndex: 'name', width: 220 },
       { title: '值', dataIndex: 'value' },
     ];
-    const skuColumns: TableProps<CollectedProductListing['sku']['matrix'][number]>['columns'] = [
+    const skuColumns: TableProps<ProductCopyRecord['sku']['matrix'][number]>['columns'] = [
       {
         title: '规格',
         key: 'specs',
@@ -806,12 +806,12 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
     if (currentStep === 'input') return renderInputStep();
 
     if (currentStep === 'collectionPreview') {
-      if (!collectedListing) {
+      if (!copyRecord) {
         return <Alert type="warning" showIcon title="暂无采集数据" />;
       }
       return (
         <Space vertical size={16} style={{ width: '100%' }}>
-          {renderCollectionPreview(collectedListing)}
+          {renderCollectionPreview(copyRecord)}
           <div style={actionBarStyle}>
             <Button onClick={resetWizard}>重新采集</Button>
             <Space>
@@ -885,7 +885,7 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
             description={`已删除微信小店商品 ID：${draftDeleteResult.productId}`}
           />
         )}
-        <Button type="primary" onClick={resetWizard}>继续上货</Button>
+        <Button type="primary" onClick={resetWizard}>继续复制商品</Button>
       </Space>
     );
   };
@@ -893,7 +893,7 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
   return (
     <div style={pageStyle}>
       <div>
-        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>上货管理</h2>
+        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>复制商品</h2>
         <p style={{ margin: '8px 0 0', color: '#666', fontSize: 13 }}>
           {accountName || accountId}
         </p>
@@ -914,4 +914,4 @@ const ProductListingPage: React.FC<ProductListingPageProps> = ({ accountId, acco
   );
 };
 
-export default ProductListingPage;
+export default ProductCopyPage;

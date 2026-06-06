@@ -1,17 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { CollectedProductListing } from '../src/shared/types.ts';
+import type { ProductCopyRecord } from '../src/shared/types.ts';
 import type { WxShopListingClient } from '../src/background/wxshop/listing/types.ts';
 import {
-  downloadProductListingImage,
+  downloadProductCopyImage,
   uploadWxDraftSourceImages,
-} from '../src/background/services/product-listing-image-transfer-service.ts';
-import { sampleCollectedProductListing } from './product-listing-fixtures.ts';
+} from '../src/background/services/product-copy-image-transfer-service.ts';
+import { sampleProductCopyRecord } from './product-copy-fixtures.ts';
 
-function oneImageListing(): CollectedProductListing {
+function oneImageListing(): ProductCopyRecord {
   const normalizedUrl = 'https://img.alicdn.com/imgextra/i1/100/O1CN-demo.jpg';
   const rawUrl = 'https://img.alicdn.com/imgextra/i1/100/O1CN-demo_790x790q90.jpg';
-  return sampleCollectedProductListing({
+  return sampleProductCopyRecord({
     images: {
       main: [normalizedUrl, 'https://img.alicdn.com/main-2.jpg', 'https://img.alicdn.com/main-3.jpg'],
       detail: [],
@@ -29,7 +29,7 @@ function oneImageListing(): CollectedProductListing {
       images: [],
     },
     sku: {
-      ...sampleCollectedProductListing().sku,
+      ...sampleProductCopyRecord().sku,
       matrix: [],
     },
   });
@@ -45,7 +45,7 @@ function silentLogger() {
 
 test('downloads the next candidate when a normalized Taobao image URL is not reachable', async () => {
   const attemptedUrls: string[] = [];
-  const downloaded = await downloadProductListingImage({
+  const downloaded = await downloadProductCopyImage({
     sourceUrl: 'https://img.alicdn.com/imgextra/i1/100/O1CN-demo.jpg',
     candidates: [
       'https://img.alicdn.com/imgextra/i1/100/O1CN-demo.jpg',

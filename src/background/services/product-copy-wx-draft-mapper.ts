@@ -1,5 +1,5 @@
 import type {
-  CollectedProductListing,
+  ProductCopyRecord,
   TaobaoProductSkuMatrixItem,
   WxProductDraftAttribute,
 } from '../../shared/types.ts';
@@ -21,7 +21,7 @@ const WX_CATEGORY_MIN_DEPTH = 3;
 const WX_CATEGORY_MAX_DEPTH = 4;
 const EMOJI_CHARACTER_PATTERN = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}\u{20E3}]/gu;
 
-export interface ProductListingWxDraftMappingOptions {
+export interface ProductCopyWxDraftMappingOptions {
   catIds: string[];
   expressTemplateId?: string;
   afterSaleAddressId?: string;
@@ -79,7 +79,7 @@ function buildShortTitle(title: string): string {
   return truncateText(title, WX_SHORT_TITLE_MAX_LENGTH);
 }
 
-function buildAttrs(listing: CollectedProductListing): WxShopAddProductAttr[] {
+function buildAttrs(listing: ProductCopyRecord): WxShopAddProductAttr[] {
   const seen = new Set<string>();
   const attrs: WxShopAddProductAttr[] = [];
   for (const param of listing.params) {
@@ -140,7 +140,7 @@ function normalizeDefaultStock(defaultStockNum?: number): number {
   return defaultStockNum;
 }
 
-function resolveMainImages(listing: CollectedProductListing, uploadedImages: ProductListingWxDraftMappingOptions['uploadedImages']): string[] {
+function resolveMainImages(listing: ProductCopyRecord, uploadedImages: ProductCopyWxDraftMappingOptions['uploadedImages']): string[] {
   const sourceImages = uniqueStrings(listing.images.main).slice(0, WX_HEAD_IMAGE_MAX_COUNT);
   if (sourceImages.length < WX_HEAD_IMAGE_MIN_COUNT) {
     throw new Error('微信小店商品主图至少需要 3 张');
@@ -148,7 +148,7 @@ function resolveMainImages(listing: CollectedProductListing, uploadedImages: Pro
   return sourceImages.map(url => lookupUploadedImage(uploadedImages, url));
 }
 
-function resolveDetailImages(listing: CollectedProductListing, uploadedImages: ProductListingWxDraftMappingOptions['uploadedImages']): string[] {
+function resolveDetailImages(listing: ProductCopyRecord, uploadedImages: ProductCopyWxDraftMappingOptions['uploadedImages']): string[] {
   const mainImageSet = new Set(uniqueStrings(listing.images.main).slice(0, WX_HEAD_IMAGE_MAX_COUNT));
   return uniqueStrings(listing.images.detail)
     .filter(url => !mainImageSet.has(url))
@@ -156,7 +156,7 @@ function resolveDetailImages(listing: CollectedProductListing, uploadedImages: P
     .map(url => lookupUploadedImage(uploadedImages, url));
 }
 
-function skuPriceInFen(sku: TaobaoProductSkuMatrixItem, listing: CollectedProductListing): number {
+function skuPriceInFen(sku: TaobaoProductSkuMatrixItem, listing: ProductCopyRecord): number {
   const price = sku.priceMoney ?? parseMoneyToFen(sku.priceText) ?? parseMoneyToFen(listing.price.rangeText);
   if (!price || price <= 0) {
     throw new Error(`SKU「${sku.id}」缺少有效价格`);
@@ -179,11 +179,11 @@ function skuAttrs(sku: TaobaoProductSkuMatrixItem): WxShopAddProductAttr[] {
 }
 
 function buildSku(
-  listing: CollectedProductListing,
+  listing: ProductCopyRecord,
   sku: TaobaoProductSkuMatrixItem,
   index: number,
   defaultStockNum: number,
-  uploadedImages: ProductListingWxDraftMappingOptions['uploadedImages'],
+  uploadedImages: ProductCopyWxDraftMappingOptions['uploadedImages'],
   fallbackThumbImg: string,
 ): WxShopAddProductSku {
   const skuCode = sanitizeCode(sku.skuId || sku.id, `${listing.identity.platform}-${listing.identity.itemId}-${index + 1}`);
@@ -198,7 +198,7 @@ function buildSku(
 }
 
 function buildDefaultSku(
-  listing: CollectedProductListing,
+  listing: ProductCopyRecord,
   defaultStockNum: number,
   fallbackThumbImg: string,
 ): WxShopAddProductSku {
@@ -217,9 +217,9 @@ function buildDefaultSku(
 }
 
 function buildSkus(
-  listing: CollectedProductListing,
+  listing: ProductCopyRecord,
   defaultStockNum: number,
-  uploadedImages: ProductListingWxDraftMappingOptions['uploadedImages'],
+  uploadedImages: ProductCopyWxDraftMappingOptions['uploadedImages'],
   fallbackThumbImg: string,
 ): WxShopAddProductSku[] {
   const matrix = listing.sku.matrix.slice(0, WX_SKU_MAX_COUNT);
@@ -227,7 +227,7 @@ function buildSkus(
   return matrix.map((sku, index) => buildSku(listing, sku, index, defaultStockNum, uploadedImages, fallbackThumbImg));
 }
 
-export function collectWxDraftSourceImages(listing: CollectedProductListing): string[] {
+export function collectWxDraftSourceImages(listing: ProductCopyRecord): string[] {
   return uniqueStrings([
     ...listing.images.main.slice(0, WX_HEAD_IMAGE_MAX_COUNT),
     ...listing.images.detail.slice(0, WX_DETAIL_IMAGE_MAX_COUNT),
@@ -235,9 +235,9 @@ export function collectWxDraftSourceImages(listing: CollectedProductListing): st
   ]);
 }
 
-export function mapCollectedListingToWxAddProductRequest(
-  listing: CollectedProductListing,
-  options: ProductListingWxDraftMappingOptions,
+export function mapProductCopyRecordToWxAddProductRequest(
+  listing: ProductCopyRecord,
+  options: ProductCopyWxDraftMappingOptions,
 ): WxShopAddProductRequest {
   const title = truncateText(listing.title || listing.identity.itemId, WX_TITLE_MAX_LENGTH);
   if (Array.from(title).length < 5) {
@@ -271,7 +271,7 @@ export function mapCollectedListingToWxAddProductRequest(
     // 运费险保持关闭，避免把非必需付费服务隐式打开。
     extra_service: { is_open_cod: 0, seven_day_return: 1, freight_insurance: 0 },
     skus: buildSkus(listing, defaultStockNum, options.uploadedImages, headImgs[0]),
-    // 上货管理只创建微信小店草稿箱商品。提审和正式上架由商品提审模块接管，
+    // 复制商品只创建微信小店草稿箱商品。提审和正式上架由商品提审模块接管，
     // 因此这里从请求体转换层开始就固定 listing=0，避免业务层误传 listing=1。
     listing: 0,
     express_info: { template_id: expressTemplateId },
