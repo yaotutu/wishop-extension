@@ -101,3 +101,23 @@ test('uploads the locally validated fetched URL to WeChat', async () => {
   assert.equal(uploadUrlCalls[0], 'https://img.alicdn.com/imgextra/i1/100/O1CN-demo_790x790q90.jpg');
   assert.equal(uploaded.get('https://img.alicdn.com/imgextra/i1/100/O1CN-demo.jpg'), 'https://mmecimage.cn/p/1.jpg');
 });
+
+test('falls back to WeChat URL upload when local Taobao image download is blocked', async () => {
+  const uploadUrlCalls: string[] = [];
+  const client = {
+    async uploadImageByUrl(imgUrl: string) {
+      uploadUrlCalls.push(imgUrl);
+      return { imgUrl: `https://mmecimage.cn/p/${uploadUrlCalls.length}.jpg` };
+    },
+  } as Partial<WxShopListingClient> as WxShopListingClient;
+
+  const uploaded = await uploadWxDraftSourceImages(oneImageListing(), client, {
+    logger: silentLogger(),
+    downloadImage: async () => {
+      throw new Error('图片下载失败：https://img.alicdn.com/imgextra/i1/100/O1CN-demo.jpg Failed to fetch');
+    },
+  });
+
+  assert.equal(uploadUrlCalls[0], 'https://img.alicdn.com/imgextra/i1/100/O1CN-demo_790x790q90.jpg');
+  assert.equal(uploaded.get('https://img.alicdn.com/imgextra/i1/100/O1CN-demo.jpg'), 'https://mmecimage.cn/p/1.jpg');
+});

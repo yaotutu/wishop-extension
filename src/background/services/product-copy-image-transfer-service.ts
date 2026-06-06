@@ -113,6 +113,10 @@ function filenameForImage(source: WxDraftImageUploadSource, mimeType: string): s
   return `wishop-taobao-${role}-${signature || 'image'}.${extension}`;
 }
 
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 function normalizeMimeType(value: string | null, url: string): string {
   const contentType = value?.split(';')[0]?.trim().toLowerCase() || '';
   if (contentType.startsWith('image/')) return contentType;
@@ -160,12 +164,69 @@ export async function downloadProductCopyImage(
         data,
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : '请求失败';
-      failures.push(`${candidate} ${message}`);
+      failures.push(`${candidate} ${errorMessage(error, '请求失败')}`);
     }
   }
 
   throw new Error(`图片下载失败：${failures.join('；') || source.sourceUrl}`);
+}
+
+async function resolveUploadCandidateUrls(
+  source: WxDraftImageUploadSource,
+  downloadImage: (source: WxDraftImageUploadSource) => Promise<ProductCopyImageDownloadResult>,
+  logger?: ImageTransferLogger,
+): Promise<{ urls: string[]; localDownloadFailure?: string }> {
+  try {
+    const downloaded = await downloadImage(source);
+    return {
+      urls: uniqueStrings([downloaded.fetchedUrl, ...source.candidates]),
+    };
+  } catch (error) {
+    const localDownloadFailure = errorMessage(error, '图片下载失败');
+    logger?.warn('商品图片本地下载校验失败，改由微信小店按候选链接上传', {
+      role: source.role,
+      sourceUrl: source.sourceUrl,
+      candidateCount: source.candidates.length,
+      error: localDownloadFailure,
+    });
+
+    // 淘宝 CDN 有时会拒绝扩展后台 fetch，但微信小店服务端仍可能可以按 URL 拉取。
+    // 本地下载失败时不能直接中断，应把页面采集到的候选链接逐个交给微信上传接口验证。
+    return {
+      urls: uniqueStrings([...source.candidates, source.sourceUrl]),
+      localDownloadFailure,
+    };
+  }
+}
+
+async function uploadImageByCandidateUrls(
+  client: WxShopListingClient,
+  source: WxDraftImageUploadSource,
+  urls: string[],
+  localDownloadFailure?: string,
+): Promise<{ uploaded: Awaited<ReturnType<WxShopListingClient['uploadImageByUrl']>>; uploadUrl: string }> {
+  const failures: string[] = [];
+  const failureMessages: string[] = [];
+
+  for (const url of urls) {
+    try {
+      return {
+        uploaded: await client.uploadImageByUrl(url),
+        uploadUrl: url,
+      };
+    } catch (error) {
+      const message = errorMessage(error, '微信小店图片上传失败');
+      failureMessages.push(message);
+      failures.push(`${url} ${message}`);
+    }
+  }
+
+  if (!localDownloadFailure && failureMessages.length === 1) {
+    throw new Error(failureMessages[0]);
+  }
+
+  const localDownloadText = localDownloadFailure ? `本地图片下载失败：${localDownloadFailure}；` : '';
+  throw new Error(`${localDownloadText}微信小店按链接上传失败：${failures.join('；') || source.sourceUrl}`);
 }
 
 export async function uploadWxDraftSourceImages(
@@ -187,8 +248,13 @@ export async function uploadWxDraftSourceImages(
 
   for (const [index, source] of sources.entries()) {
     try {
-      const downloaded = await downloadImage(source);
-      const uploaded = await client.uploadImageByUrl(downloaded.fetchedUrl);
+      const candidateResult = await resolveUploadCandidateUrls(source, downloadImage, options.logger);
+      const { uploaded, uploadUrl } = await uploadImageByCandidateUrls(
+        client,
+        source,
+        candidateResult.urls,
+        candidateResult.localDownloadFailure,
+      );
       uploadedImages.set(source.sourceUrl, uploaded.imgUrl);
       options.logger?.info('商品图片本地校验后上传完成', {
         copyId: listing.id,
@@ -196,10 +262,10 @@ export async function uploadWxDraftSourceImages(
         imageCount: sources.length,
         role: source.role,
         sourceUrl: source.sourceUrl,
-        fetchedUrl: downloaded.fetchedUrl,
+        fetchedUrl: uploadUrl,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : '微信小店图片上传失败';
+      const message = errorMessage(error, '微信小店图片上传失败');
       options.logger?.error('商品图片本地校验后上传失败', {
         copyId: listing.id,
         imageIndex: index + 1,
