@@ -3,6 +3,7 @@ import test from 'node:test';
 import type { ProductCopyRecord } from '../src/shared/types.ts';
 import type { WxShopListingClient } from '../src/background/wxshop/listing/types.ts';
 import {
+  buildWxDraftImageUploadSources,
   downloadProductCopyImage,
   uploadWxDraftSourceImages,
 } from '../src/background/services/product-copy-image-transfer-service.ts';
@@ -75,6 +76,47 @@ test('downloads the next candidate when a normalized Taobao image URL is not rea
   assert.equal(downloaded.fetchedUrl, 'https://img.alicdn.com/imgextra/i1/100/O1CN-demo_790x790q90.jpg');
   assert.equal(downloaded.mimeType, 'image/jpeg');
   assert.equal(downloaded.data.byteLength, 4);
+});
+
+test('keeps rendered Taobao image variants as upload candidates for the same source image', () => {
+  const sourceUrl = 'https://img.alicdn.com/imgextra/i3/1658664522/O1CN01XfBEui1jH83p8WysA_!!1658664522.jpg';
+  const renderedVariantUrl = 'https://img.alicdn.com/imgextra/i3/1658664522/O1CN01XfBEui1jH83p8WysA_!!1658664522.jpg_q50.jpg_.webp';
+  const listing = sampleProductCopyRecord({
+    images: {
+      main: [sourceUrl, 'https://img.alicdn.com/main-2.jpg', 'https://img.alicdn.com/main-3.jpg'],
+      detail: [],
+      assets: [
+        {
+          url: sourceUrl,
+          normalizedUrl: sourceUrl,
+          role: 'main',
+          source: 'pageModel',
+          flags: [],
+        },
+        {
+          url: renderedVariantUrl,
+          normalizedUrl: renderedVariantUrl,
+          role: 'fallback',
+          source: 'documentDom',
+          flags: [],
+        },
+      ],
+    },
+    detail: {
+      text: '',
+      source: 'none',
+      images: [],
+    },
+    sku: {
+      ...sampleProductCopyRecord().sku,
+      matrix: [],
+    },
+  });
+
+  const [source] = buildWxDraftImageUploadSources(listing);
+
+  assert.equal(source.sourceUrl, sourceUrl);
+  assert.deepEqual(source.candidates, [sourceUrl, renderedVariantUrl]);
 });
 
 test('uploads the locally validated fetched URL to WeChat', async () => {

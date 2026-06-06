@@ -47,11 +47,22 @@ function normalizeImageCandidate(rawUrl: string): string {
   return trimmed.startsWith('//') ? `https:${trimmed}` : trimmed.replace(/^http:\/\//i, 'https://');
 }
 
+function normalizeTaobaoImageIdentity(rawUrl: string): string {
+  return normalizeImageCandidate(rawUrl)
+    .replace(/~(?:crop|tplv|resize|q\d+|webp)[^~?#]*~/iu, '')
+    .replace(/(\.(?:jpe?g|png|webp|gif))_(?:\d+x\d+(?:q\d+)?|q\d+|sum|webp)\.(?:jpe?g|png|webp|gif)_?(?:\.(?:webp))?(?=$|[?#])/iu, '$1')
+    .replace(/_(?:\d+x\d+(?:q\d+)?|sum|webp)\.(jpe?g|png|webp|gif)(?=$|[?#])/iu, '.$1');
+}
+
 function assetMatchesSource(asset: TaobaoProductImageAsset, sourceUrl: string): boolean {
   const normalizedSourceUrl = normalizeImageCandidate(sourceUrl);
+  const sourceImageIdentity = normalizeTaobaoImageIdentity(sourceUrl);
   if (normalizeImageCandidate(asset.url) === normalizedSourceUrl) return true;
   if (normalizeImageCandidate(asset.normalizedUrl) === normalizedSourceUrl) return true;
-  return Object.values(asset.lazyAttrs || {}).some(value => normalizeImageCandidate(value) === normalizedSourceUrl);
+  if (Object.values(asset.lazyAttrs || {}).some(value => normalizeImageCandidate(value) === normalizedSourceUrl)) return true;
+  if (normalizeTaobaoImageIdentity(asset.url) === sourceImageIdentity) return true;
+  if (normalizeTaobaoImageIdentity(asset.normalizedUrl) === sourceImageIdentity) return true;
+  return Object.values(asset.lazyAttrs || {}).some(value => normalizeTaobaoImageIdentity(value) === sourceImageIdentity);
 }
 
 function candidatesFromAsset(asset: TaobaoProductImageAsset): string[] {
