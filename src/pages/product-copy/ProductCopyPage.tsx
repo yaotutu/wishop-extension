@@ -79,6 +79,11 @@ interface ProductCopyParameterFormValues {
 
 type ParameterSummaryStatus = 'default' | 'configured' | 'localDefault';
 
+type ProductCopyStepStatus = {
+  type: 'info' | 'success' | 'error';
+  message: string;
+};
+
 type AdvancedSettingsConfiguredCounts = {
   basic: number;
   pricingContent: number;
@@ -727,7 +732,10 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
   const [draftSuggestion, setDraftSuggestion] = useState<WxProductDraftSuggestionResult | null>(null);
   const [draftSubmittedResult, setDraftSubmittedResult] = useState<WxProductDraftCreationResult | null>(null);
   const [draftDeleteResult, setDraftDeleteResult] = useState<DeleteCreatedWxDraftBoxProductResult | null>(null);
-  const [fullCategoryStatus, setFullCategoryStatus] = useState('');
+  // 向导每一步只展示自己负责的状态，避免生成草稿失败被错误挂到采集预览里。
+  const [categoryStatus, setCategoryStatus] = useState<ProductCopyStepStatus | null>(null);
+  const [draftGenerationStatus, setDraftGenerationStatus] = useState<ProductCopyStepStatus | null>(null);
+  const [draftCreationStatus, setDraftCreationStatus] = useState<ProductCopyStepStatus | null>(null);
   const [isAdvancedSettingsModalOpen, setIsAdvancedSettingsModalOpen] = useState(false);
   const [, refreshParameterSummary] = useState(0);
 
@@ -840,7 +848,9 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
     setDraftSuggestion(null);
     setDraftSubmittedResult(null);
     setDraftDeleteResult(null);
-    setFullCategoryStatus('');
+    setCategoryStatus(null);
+    setDraftGenerationStatus(null);
+    setDraftCreationStatus(null);
   }, [form, parameterForm]);
 
   // 左侧账号切换后必须清空当前向导，避免把上一个账号准备好的草稿请求提交到新账号下。
@@ -884,7 +894,9 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
       setDraftSuggestion(null);
       setDraftSubmittedResult(null);
       setDraftDeleteResult(null);
-      setFullCategoryStatus('');
+      setCategoryStatus(null);
+      setDraftGenerationStatus(null);
+      setDraftCreationStatus(null);
       setIsAdvancedSettingsModalOpen(false);
       message.success('已打开淘宝工作页采集商品');
     },
@@ -896,7 +908,7 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
 
   const categoryOnlyMutation = useMutation({
     onMutate: () => {
-      setFullCategoryStatus('正在执行类目转换诊断。');
+      setCategoryStatus({ type: 'info', message: '正在执行类目转换诊断。' });
     },
     mutationFn: async () => {
       if (!copyRecord) throw new Error('请先完成商品采集');
@@ -907,12 +919,12 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
     },
     onSuccess: suggestion => {
       setDraftSuggestion(suggestion);
-      setFullCategoryStatus(`类目转换结果：${normalizedCategoryText(suggestion)}`);
+      setCategoryStatus({ type: 'success', message: `类目转换结果：${normalizedCategoryText(suggestion)}` });
       message.success('类目转换完成');
     },
     onError: error => {
       const detail = error instanceof Error ? error.message : '类目转换失败';
-      setFullCategoryStatus(`失败：${detail}`);
+      setCategoryStatus({ type: 'error', message: detail });
       message.error(detail);
     },
   });
@@ -924,7 +936,11 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
    */
   const generateDraftDataMutation = useMutation({
     onMutate: () => {
-      setFullCategoryStatus('正在按参数设置生成草稿箱数据，图片会同步上传到微信小店。');
+      setDraftPrepared(null);
+      setDraftSubmittedResult(null);
+      setDraftDeleteResult(null);
+      setDraftCreationStatus(null);
+      setDraftGenerationStatus({ type: 'info', message: '正在按参数设置生成草稿箱数据，图片会同步上传到微信小店。' });
     },
     mutationFn: async () => {
       if (!copyRecord) throw new Error('请先完成商品采集');
@@ -976,14 +992,17 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
       setDraftDeleteResult(null);
       setCurrentStep('draftPreview');
       const categoryText = suggestion.categoryPath?.join(' / ') || catIds.join(' / ');
-      setFullCategoryStatus(prepared.warnings.length > 0
-        ? `已生成：${categoryText}，${prepared.warnings.length} 条商品参数复核提示。`
-        : `已生成：${categoryText}`);
+      setDraftGenerationStatus(null);
+      setCategoryStatus({ type: 'success', message: `类目转换结果：${categoryText}` });
       message.success('草稿箱数据已生成');
     },
     onError: error => {
       const detail = error instanceof Error ? error.message : '草稿箱数据生成失败';
-      setFullCategoryStatus(`失败：${detail}`);
+      setCurrentStep('parameterSettings');
+      setDraftPrepared(null);
+      setDraftSubmittedResult(null);
+      setDraftDeleteResult(null);
+      setDraftGenerationStatus({ type: 'error', message: detail });
       message.error(detail);
     },
   });
@@ -1015,6 +1034,11 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
   }, [queryClient]);
 
   const submitPreparedDraftMutation = useMutation({
+    onMutate: () => {
+      setDraftSubmittedResult(null);
+      setDraftDeleteResult(null);
+      setDraftCreationStatus({ type: 'info', message: '正在创建微信小店草稿，创建成功后会按设置关联淘宝货源。' });
+    },
     mutationFn: () => {
       if (!draftPrepared) throw new Error('请先生成草稿箱数据');
       return extensionApi.productCopy.createPreparedWxDraftBoxProduct({
@@ -1031,6 +1055,7 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
     onSuccess: result => {
       setDraftSubmittedResult(result);
       setDraftDeleteResult(null);
+      setDraftCreationStatus(null);
       setCurrentStep('completed');
       void queryClient.invalidateQueries({ queryKey: queryKeys.productCopy.createdProduct(accountId, result.copyId) });
       message.success(`微信小店草稿已创建：${result.productId}`);
@@ -1038,6 +1063,8 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
     },
     onError: error => {
       const detail = error instanceof Error ? error.message : '提交微信小店草稿失败';
+      setCurrentStep('draftPreview');
+      setDraftCreationStatus({ type: 'error', message: detail });
       message.error(detail);
     },
   });
@@ -1058,7 +1085,9 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
       setDraftSuggestion(null);
       setDraftSubmittedResult(null);
       setDraftDeleteResult(null);
-      setFullCategoryStatus('');
+      setCategoryStatus(null);
+      setDraftGenerationStatus(null);
+      setDraftCreationStatus(null);
       message.success('商品采集完成');
     });
     const cleanupFailed = extensionApi.productCopy.onFailed(payload => {
@@ -1084,7 +1113,9 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
     setDraftSuggestion(null);
     setDraftSubmittedResult(null);
     setDraftDeleteResult(null);
-    setFullCategoryStatus('');
+    setCategoryStatus(null);
+    setDraftGenerationStatus(null);
+    setDraftCreationStatus(null);
     await collectMutation.mutateAsync(url);
   };
 
@@ -1161,12 +1192,12 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
 
         {renderCategorySuggestion(draftSuggestion)}
 
-        {fullCategoryStatus && (
+        {categoryStatus && (
           <Alert
-            type={categoryOnlyMutation.isError || generateDraftDataMutation.isError ? 'error' : 'info'}
+            type={categoryStatus.type}
             showIcon
-            title="处理状态"
-            description={fullCategoryStatus}
+            title={categoryStatus.type === 'error' ? '类目转换失败' : '类目转换状态'}
+            description={categoryStatus.message}
           />
         )}
 
@@ -1239,6 +1270,15 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
     return (
       <Space vertical size={16} style={{ width: '100%' }}>
         {renderCategorySuggestion(draftSuggestion)}
+
+        {draftCreationStatus && (
+          <Alert
+            type={draftCreationStatus.type}
+            showIcon
+            title={draftCreationStatus.type === 'error' ? '创建草稿失败' : '创建草稿状态'}
+            description={draftCreationStatus.message}
+          />
+        )}
 
         <Descriptions
           size="small"
@@ -1459,6 +1499,14 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
           title="参数设置"
           description="这些参数会参与生成草稿箱预览；修改参数后需要重新生成草稿预览。"
         />
+        {draftGenerationStatus && (
+          <Alert
+            type={draftGenerationStatus.type}
+            showIcon
+            title={draftGenerationStatus.type === 'error' ? '草稿预览生成失败' : '草稿预览生成状态'}
+            description={draftGenerationStatus.message}
+          />
+        )}
         {parameterOptionsQuery.isError && (
           <Alert
             type="warning"

@@ -110,6 +110,18 @@ test('product copy parameters are configured before draft preview generation', (
   assert.match(listingClientSource, /requestFreightTemplateDetail/);
 });
 
+test('product copy draft errors stay on the step that owns the action', () => {
+  assert.doesNotMatch(pageSource, /fullCategoryStatus/);
+  assert.match(pageSource, /const \[categoryStatus, setCategoryStatus\] = useState<ProductCopyStepStatus \| null>\(null\)/);
+  assert.match(pageSource, /const \[draftGenerationStatus, setDraftGenerationStatus\] = useState<ProductCopyStepStatus \| null>\(null\)/);
+  assert.match(pageSource, /const \[draftCreationStatus, setDraftCreationStatus\] = useState<ProductCopyStepStatus \| null>\(null\)/);
+  assert.match(pageSource, /setDraftGenerationStatus\(\{ type: 'error', message: detail \}\)/);
+  assert.match(pageSource, /title=\{draftGenerationStatus\.type === 'error' \? '草稿预览生成失败' : '草稿预览生成状态'\}/);
+  assert.match(pageSource, /setDraftCreationStatus\(\{ type: 'error', message: detail \}\)/);
+  assert.match(pageSource, /title=\{draftCreationStatus\.type === 'error' \? '创建草稿失败' : '创建草稿状态'\}/);
+  assert.doesNotMatch(pageSource, /categoryOnlyMutation\.isError \|\| generateDraftDataMutation\.isError/);
+});
+
 test('product copy preview images retry Taobao CDN images through local blob urls', () => {
   assert.match(pageSource, /const ProductCopyPreviewImage: React\.FC<ProductCopyPreviewImageProps>/);
   assert.match(pageSource, /fetch\(currentUrl, \{ credentials: 'include' \}\)/);
