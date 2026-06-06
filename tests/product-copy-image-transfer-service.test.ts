@@ -135,7 +135,7 @@ test('uploads the locally validated fetched URL to WeChat', async () => {
       fetchedUrl: source.candidates[0],
       data: new Uint8Array([9, 8, 7]).buffer,
       mimeType: 'image/jpeg',
-      filename: 'wishop-taobao-main-1.jpg',
+      filename: 'dianxiaoqi-taobao-main-1.jpg',
     }),
   });
 

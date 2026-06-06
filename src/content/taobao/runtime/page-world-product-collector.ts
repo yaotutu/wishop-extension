@@ -6,8 +6,8 @@ export interface PageWorldProductPayload {
   resourceHints?: string[];
 }
 
-export const TAOBAO_PRODUCT_COLLECTION_REQUEST_EVENT = 'wishop:collect-taobao-product';
-export const TAOBAO_PRODUCT_COLLECTION_RESPONSE_EVENT = 'wishop:taobao-product-collected';
+export const TAOBAO_PRODUCT_COLLECTION_REQUEST_EVENT = 'dianxiaoqi:collect-taobao-product';
+export const TAOBAO_PRODUCT_COLLECTION_RESPONSE_EVENT = 'dianxiaoqi:taobao-product-collected';
 
 export function collectTaobaoProductFromPageWorld(timeoutMs = 3000): Promise<PageWorldProductPayload> {
   return new Promise((resolve, reject) => {

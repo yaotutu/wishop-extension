@@ -83,18 +83,18 @@ export const PurchaseLookupToolbar: React.FC<Props> = ({ session }) => {
   }, [completed, readAndComplete, waitingVerification]);
 
   return (
-    <section className="wishop-purchase-lookup">
-      <div className="wishop-purchase-lookup__header">
-        <strong>微店管家正在读取淘宝订单</strong>
+    <section className="dianxiaoqi-purchase-lookup">
+      <div className="dianxiaoqi-purchase-lookup__header">
+        <strong>店小七正在读取淘宝订单</strong>
         <span>{completed ? '已完成' : '请保持此页面打开'}</span>
       </div>
-      <div className="wishop-purchase-lookup__body">
+      <div className="dianxiaoqi-purchase-lookup__body">
         <p>{statusText}</p>
         <ul>
           {snapshotLines(snapshot).map(line => <li key={line}>{line}</li>)}
         </ul>
       </div>
-      <div className="wishop-purchase-lookup__actions">
+      <div className="dianxiaoqi-purchase-lookup__actions">
         <button type="button" onClick={() => void readAndComplete()} disabled={completingRef.current && !completed}>
           {waitingVerification ? '我已完成验证，继续读取' : '重新读取'}
         </button>

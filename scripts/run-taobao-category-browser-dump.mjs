@@ -124,7 +124,7 @@ function browserSnippet() {
       }
     }
     if (rows.length > 0 && rows.length % 200 === 0) {
-      console.log('[wishop] 已读取', rows.length, '个类目，待处理父类目', queue.length);
+      console.log('[dianxiaoqi] 已读取', rows.length, '个类目，待处理父类目', queue.length);
       document.title = '淘宝类目抓取中：' + rows.length;
     }
     await sleep(80);
@@ -140,7 +140,7 @@ function browserSnippet() {
     }),
   });
   if (!saveResponse.ok) throw new Error('本地保存失败：' + saveResponse.status);
-  console.log('[wishop] 淘宝类目抓取完成，共', rows.length, '个');
+  console.log('[dianxiaoqi] 淘宝类目抓取完成，共', rows.length, '个');
   document.title = '淘宝类目抓取完成：' + rows.length;
 })();`;
 }

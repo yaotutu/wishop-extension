@@ -324,7 +324,7 @@ function writeOutputs(snapshot) {
 
 async function run() {
   const port = await getFreePort();
-  const userDataDir = path.join(tmpdir(), `wishop-taobao-home-cdp-${Date.now()}`);
+  const userDataDir = path.join(tmpdir(), `dianxiaoqi-taobao-home-cdp-${Date.now()}`);
   const chrome = spawn(CHROME_PATH, [
     '--headless=new',
     `--remote-debugging-port=${port}`,

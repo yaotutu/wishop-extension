@@ -87,4 +87,4 @@ declare namespace chrome {
 }
 
 declare const chrome: any;
-declare const __WISHOP_BUILD_TIME__: string;
+declare const __DIANXIAOQI_BUILD_TIME__: string;

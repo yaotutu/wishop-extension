@@ -315,14 +315,14 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
     return (
       <section
         ref={toolbarRef}
-        className="wishop-shipping-toolbar wishop-shipping-toolbar--collapsed"
+        className="dianxiaoqi-shipping-toolbar dianxiaoqi-shipping-toolbar--collapsed"
         style={{ top: position.top, left: position.left }}
       >
         <button
           type="button"
-          className="wishop-shipping-collapsed-button"
+          className="dianxiaoqi-shipping-collapsed-button"
           onClick={() => setCollapsed(false)}
-          title="展开微店管家发货助手"
+          title="展开店小七发货助手"
         >
           发货助手
         </button>
@@ -350,31 +350,31 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
   return (
     <section
       ref={toolbarRef}
-      className="wishop-shipping-toolbar"
+      className="dianxiaoqi-shipping-toolbar"
       style={{ top: position.top, left: position.left }}
     >
       <div
-        className="wishop-shipping-header"
+        className="dianxiaoqi-shipping-header"
         onPointerDown={handleDragStart}
         onPointerMove={handleDragMove}
         onPointerUp={handleDragEnd}
         onPointerCancel={handleDragEnd}
       >
-        <div className="wishop-shipping-title">
-          <strong>微店管家发货助手</strong>
-          <span className="wishop-shipping-status">{activeSession.status} · 拖动标题可调整位置</span>
+        <div className="dianxiaoqi-shipping-title">
+          <strong>店小七发货助手</strong>
+          <span className="dianxiaoqi-shipping-status">{activeSession.status} · 拖动标题可调整位置</span>
         </div>
         <button
           type="button"
-          className="wishop-shipping-icon-button"
+          className="dianxiaoqi-shipping-icon-button"
           onClick={() => setCollapsed(true)}
           title="暂时隐藏"
         >
           -
         </button>
       </div>
-      <div className="wishop-shipping-grid">
-        <div className="wishop-shipping-card">
+      <div className="dianxiaoqi-shipping-grid">
+        <div className="dianxiaoqi-shipping-card">
           <label>微信订单</label>
           <p title={activeSession.order.title}>{activeSession.order.title}</p>
           <small>订单号：{activeSession.orderId}</small>
@@ -383,38 +383,38 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
           <small>下单：{formatTime(activeSession.order.createTime)} · 支付：{formatTime(activeSession.order.payTime)}</small>
         </div>
         {purchaseAssociationVisible && (
-          <div className="wishop-shipping-card">
+          <div className="dianxiaoqi-shipping-card">
             <label>淘宝采购关联</label>
             <p>{activeSession.purchaseAssociationMessage || '等待淘宝付款完成'}</p>
             {activeSession.linkedPlatformOrderId && <small>淘宝订单号：{activeSession.linkedPlatformOrderId}</small>}
             <small>状态：{formatPurchaseAssociationStatus(activeSession.purchaseAssociationStatus)}</small>
           </div>
         )}
-        <div className="wishop-shipping-card">
+        <div className="dianxiaoqi-shipping-card">
           <label>SKU / 规格</label>
           <p title={skuText(activeSession)}>{skuText(activeSession)}</p>
           {activeSession.order.skuCode && <small>编码：{activeSession.order.skuCode}</small>}
         </div>
         {isCheckoutPage && (
-          <div className="wishop-shipping-card">
+          <div className="dianxiaoqi-shipping-card">
             <label>利润预估</label>
-            <p className={estimatedProfit !== undefined && estimatedProfit < 0 ? 'wishop-shipping-profit-value wishop-shipping-profit-value--negative' : 'wishop-shipping-profit-value'}>
+            <p className={estimatedProfit !== undefined && estimatedProfit < 0 ? 'dianxiaoqi-shipping-profit-value dianxiaoqi-shipping-profit-value--negative' : 'dianxiaoqi-shipping-profit-value'}>
               利润 {formatPrice(estimatedProfit)} · 利润率 {formatRate(estimatedProfitRate)}
             </p>
             <small>微信实付：{formatPrice(orderPrice)} · 手续费：{formatPrice(commissionFee)}</small>
             <small>淘宝应付：{purchaseCost !== undefined ? formatPrice(purchaseCost) : snapshot.checkoutPayAmountText || '未读取到'}</small>
           </div>
         )}
-        <div className="wishop-shipping-card">
+        <div className="dianxiaoqi-shipping-card">
           <label>真实收货信息</label>
           <p title={addressText(address)}>
             {addressText(address) || '未获取真实地址，点击下方按钮会消耗今日额度'}
           </p>
           {fetchedAt && <small>获取时间：{fetchedAt}</small>}
-          <div className={isCheckoutPage ? 'wishop-shipping-inline-actions' : 'wishop-shipping-inline-actions wishop-shipping-inline-actions--single'}>
+          <div className={isCheckoutPage ? 'dianxiaoqi-shipping-inline-actions' : 'dianxiaoqi-shipping-inline-actions dianxiaoqi-shipping-inline-actions--single'}>
             <button
               type="button"
-              className="wishop-shipping-inline-primary"
+              className="dianxiaoqi-shipping-inline-primary"
               onClick={() => fetchRealAddress(Boolean(address))}
               disabled={addressLoading}
             >
@@ -423,7 +423,7 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
             {isCheckoutPage && (
               <button
                 type="button"
-                className="wishop-shipping-inline-primary"
+                className="dianxiaoqi-shipping-inline-primary"
                 onClick={() => setCheckoutAddressDebugVisible(visible => !visible)}
               >
                 {checkoutAddressDebugVisible ? '隐藏地址结构' : '查看地址结构'}
@@ -432,7 +432,7 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
           </div>
         </div>
         {isCheckoutPage && checkoutAddressDebugVisible && (
-          <div className="wishop-shipping-card">
+          <div className="dianxiaoqi-shipping-card">
             <label>淘宝填充地址结构</label>
             {checkoutAddressPreview ? (
               <>
@@ -449,14 +449,14 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
             )}
           </div>
         )}
-        <div className="wishop-shipping-card">
+        <div className="dianxiaoqi-shipping-card">
           <label>备注</label>
           <small>{activeSession.order.customerNotes?.trim() ? `买家：${activeSession.order.customerNotes}` : '买家：无'}</small>
           <small>{activeSession.order.merchantNotes?.trim() ? `商家：${activeSession.order.merchantNotes}` : '商家：无'}</small>
           <small>{activeSession.source.remark?.trim() ? `货源：${activeSession.source.remark}` : '货源：无'}</small>
         </div>
       </div>
-      <div className="wishop-shipping-actions">
+      <div className="dianxiaoqi-shipping-actions">
         <button type="button" onClick={copyOrderInfo}>复制订单</button>
         <button type="button" onClick={copySku}>复制SKU</button>
         <button type="button" onClick={copyAddress}>复制地址</button>
@@ -468,7 +468,7 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
         )}
         <button type="button" onClick={refreshSnapshot}>重读页面</button>
       </div>
-      {notice && <div className="wishop-shipping-notice">{notice}</div>}
+      {notice && <div className="dianxiaoqi-shipping-notice">{notice}</div>}
     </section>
   );
 };

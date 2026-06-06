@@ -103,7 +103,7 @@ test('maps a Taobao product copy record to a WeChat add-product draft request', 
     uploadedImages: imageMap,
   });
 
-  assert.equal(request.out_product_id, 'wishop-taobao-1010211244888');
+  assert.equal(request.out_product_id, 'dianxiaoqi-taobao-1010211244888');
   assert.equal(request.title, listing.title);
   assert.equal(request.short_title, '适用kindle充电传输数据线paper');
   assert.deepEqual(request.head_imgs, [

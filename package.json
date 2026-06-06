@@ -1,6 +1,6 @@
 {
-  "name": "wishop-extension",
-  "description": "微店管家 Chrome MV3 extension",
+  "name": "dianxiaoqi-extension",
+  "description": "店小七 Chrome MV3 extension",
   "private": true,
   "version": "0.0.50",
   "type": "module",

@@ -57,7 +57,7 @@ async function fakeDownloadImage(source: WxDraftImageUploadSource) {
   return {
     sourceUrl: source.sourceUrl,
     fetchedUrl: source.candidates[0],
-    filename: 'wishop-test-image.jpg',
+    filename: 'dianxiaoqi-test-image.jpg',
     mimeType: 'image/jpeg',
     data: new Uint8Array([1, 2, 3]).buffer,
   };

@@ -51,7 +51,7 @@ const AboutPanel: React.FC = () => {
   return (
     <Card title="关于">
       <Descriptions column={1} style={{ maxWidth: 500 }}>
-        <Descriptions.Item label="应用名称">微店管家 (Wishop)</Descriptions.Item>
+        <Descriptions.Item label="应用名称">店小七 (Dianxiaoqi)</Descriptions.Item>
         <Descriptions.Item label="当前版本">v{version}</Descriptions.Item>
       </Descriptions>
     </Card>
@@ -69,9 +69,9 @@ const ProductPanel: React.FC = () => {
 
   return (
     <Card title="产品介绍">
-      <Title level={4}>微店管家 (Wishop)</Title>
+      <Title level={4}>店小七 (Dianxiaoqi)</Title>
       <Paragraph style={{ maxWidth: 600, color: '#555' }}>
-        微店管家是一款专为微信小店商家打造的桌面效率工具，帮助你高效管理多个店铺的商品上架、审核和合规检测流程。
+        店小七是一款专为微信小店商家打造的桌面效率工具，帮助你高效管理多个店铺的商品上架、审核和合规检测流程。
       </Paragraph>
       <div style={{ marginTop: 24 }}>
         <Title level={5}>核心功能</Title>

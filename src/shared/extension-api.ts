@@ -83,13 +83,13 @@ function shouldAutoReloadRuntime(errorMessage: string): boolean {
 function scheduleDevRuntimeReload(errorMessage: string): void {
   if (devRuntimeReloadScheduled) return;
   devRuntimeReloadScheduled = true;
-  console.warn(`[wishop] ${errorMessage}。开发环境检测到前后台版本不一致，正在自动重新加载插件。`);
+  console.warn(`[dianxiaoqi] ${errorMessage}。开发环境检测到前后台版本不一致，正在自动重新加载插件。`);
   window.setTimeout(() => {
     try {
       const runtime = chrome.runtime as typeof chrome.runtime & { reload?: () => void };
       runtime.reload?.();
     } catch (error) {
-      console.warn('[wishop] 自动重新加载插件失败，请手动在 chrome://extensions 重新加载。', error);
+      console.warn('[dianxiaoqi] 自动重新加载插件失败，请手动在 chrome://extensions 重新加载。', error);
     }
   }, 300);
 }

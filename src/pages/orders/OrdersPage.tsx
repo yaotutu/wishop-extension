@@ -795,7 +795,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
         onSearchKeywordChange={setSearchKeyword}
         onSearch={handleSearch}
         onRefresh={() => {
-          console.info('[wishop][orders:ui] manual refresh start', {
+          console.info('[dianxiaoqi][orders:ui] manual refresh start', {
             scope,
             accountIds,
             activeStatus: activeStatus ?? 'all',
@@ -803,7 +803,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
           });
           refreshOrdersMutation.mutate(undefined, {
             onSuccess: (result) => {
-              console.info('[wishop][orders:ui] manual refresh success', result);
+              console.info('[dianxiaoqi][orders:ui] manual refresh success', result);
               const fetchedOrderCount = result.fetchedOrderCount;
               if (result.status === 'failed') {
                 setRefreshError(`订单刷新失败：${result.failedAccounts.map(item => `${item.accountName || item.accountId}: ${item.error}`).join('; ')}`);
@@ -825,7 +825,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
             onError: (err: any) => {
               const messageText = err?.message || String(err);
               setRefreshError(messageText);
-              console.error('[wishop][orders:ui] manual refresh failed', {
+              console.error('[dianxiaoqi][orders:ui] manual refresh failed', {
                 scope,
                 accountIds,
                 error: messageText,

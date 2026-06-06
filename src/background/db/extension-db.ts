@@ -96,7 +96,7 @@ export class ExtensionDb extends Dexie {
   wxCategoryProductRules!: Table<WxCategoryProductRuleCacheItem, string>;
 
   constructor() {
-    super('wishop-extension');
+    super('dianxiaoqi-extension');
     this.version(1).stores({
       accounts: 'id, appId, updatedAt',
       orders: '[accountId+orderId], accountId, [accountId+status+updateTime], [accountId+createTime], [accountId+lastFetchedAt]',

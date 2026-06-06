@@ -56,7 +56,7 @@ function filenameForImage(source: WxDraftImageUploadSource, mimeType: string): s
     .replace(/[^A-Za-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 48);
-  return `wishop-taobao-${role}-${signature || 'image'}.${extension}`;
+  return `dianxiaoqi-taobao-${role}-${signature || 'image'}.${extension}`;
 }
 
 function errorMessage(error: unknown, fallback: string): string {

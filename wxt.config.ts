@@ -37,7 +37,7 @@ export default defineConfig({
   outDir: 'output',
   vite: () => ({
     define: {
-      __WISHOP_BUILD_TIME__: JSON.stringify(BUILD_TIME),
+      __DIANXIAOQI_BUILD_TIME__: JSON.stringify(BUILD_TIME),
     },
     build: {
       sourcemap: false,
@@ -64,13 +64,13 @@ export default defineConfig({
     ],
   },
   manifest: {
-    name: '微店管家',
+    name: '店小七',
     description: '微信小店多账户商品提审、订单管理和违规词检测工具',
     version: packageJson.version,
     permissions: EXTENSION_PERMISSIONS,
     host_permissions: HOST_PERMISSIONS,
     action: {
-      default_title: '打开微店管家',
+      default_title: '打开店小七',
     },
   },
 });

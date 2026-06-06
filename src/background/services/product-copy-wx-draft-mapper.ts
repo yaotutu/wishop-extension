@@ -393,7 +393,7 @@ export function mapProductCopyRecordToWxAddProductRequest(
   const resolvedDetailImgs = detailImgs.length > 0 ? detailImgs : [headImgs[0]];
   const attrs = buildOverrideAttrs(options.attrs) ?? buildAttrs(listing);
   const request: WxShopAddProductRequest = {
-    out_product_id: sanitizeCode(`wishop-${listing.identity.platform}-${listing.identity.itemId}`, listing.identity.itemId),
+    out_product_id: sanitizeCode(`dianxiaoqi-${listing.identity.platform}-${listing.identity.itemId}`, listing.identity.itemId),
     title,
     short_title: buildShortTitle(title),
     head_imgs: headImgs,
