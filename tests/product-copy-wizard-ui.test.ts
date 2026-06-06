@@ -54,9 +54,11 @@ test('product copy parameters are configured before draft preview generation', (
   assert.match(pageSource, /title: '参数设置'/);
   assert.match(pageSource, /getDraftParameterOptions\(accountId\)/);
   assert.match(pageSource, /getCreatedProduct\(accountId, copyRecord\.id\)/);
+  assert.match(pageSource, /compactParameterGridStyle/);
+  assert.match(pageSource, /compactParameterItemStyle/);
   assert.match(pageSource, /autoCategoryMatch/);
   assert.match(pageSource, /autoCategoryMatch: true/);
-  assert.match(pageSource, /<Checkbox>AI 自动识别<\/Checkbox>/);
+  assert.match(pageSource, /<Checkbox>类目匹配：AI 自动识别<\/Checkbox>/);
   assert.match(pageSource, /\{!autoCategoryMatch && \(/);
   assert.match(pageSource, /duplicateFilter/);
   assert.match(pageSource, /autoSourceBinding/);
@@ -82,6 +84,7 @@ test('product copy parameters are configured before draft preview generation', (
   assert.match(pageSource, /advancedSettingsConfiguredCounts/);
   assert.match(pageSource, /advancedSettingsTabLabel\('价格与内容'/);
   assert.match(pageSource, /已配置 \$\{count\} 项/);
+  assert.match(pageSource, /<Form\.Item name="productStatus" label="复制后商品状态">[\s\S]*<Select[\s\S]*disabled/);
   assert.match(pageSource, /isAdvancedSettingsModalOpen/);
   assert.match(pageSource, /<Modal[\s\S]*title="高级参数"[\s\S]*open=\{isAdvancedSettingsModalOpen\}/);
   assert.match(pageSource, /setIsAdvancedSettingsModalOpen\(true\)/);

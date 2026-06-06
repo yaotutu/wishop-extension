@@ -139,6 +139,18 @@ const actionBarStyle: React.CSSProperties = {
   borderTop: '1px solid #f0f0f0',
 };
 
+const compactParameterGridStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+  gap: '8px 16px',
+  alignItems: 'center',
+  marginBottom: 12,
+};
+
+const compactParameterItemStyle: React.CSSProperties = {
+  marginBottom: 0,
+};
+
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleString('zh-CN');
 }
@@ -1370,9 +1382,17 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
           initialValues={defaultParameterValues()}
           onValuesChange={handleParameterValuesChange}
         >
-          <Form.Item name="autoCategoryMatch" label="类目匹配" valuePropName="checked">
-            <Checkbox>AI 自动识别</Checkbox>
-          </Form.Item>
+          <div style={compactParameterGridStyle}>
+            <Form.Item name="autoCategoryMatch" valuePropName="checked" style={compactParameterItemStyle}>
+              <Checkbox>类目匹配：AI 自动识别</Checkbox>
+            </Form.Item>
+            <Form.Item name="duplicateFilter" valuePropName="checked" style={compactParameterItemStyle}>
+              <Checkbox>重复过滤：遇到已复制的记录，自动跳过</Checkbox>
+            </Form.Item>
+            <Form.Item name="autoSourceBinding" valuePropName="checked" style={compactParameterItemStyle}>
+              <Checkbox>货源关联：创建草稿后，把当前淘宝链接自动关联到微信商品</Checkbox>
+            </Form.Item>
+          </div>
           {!autoCategoryMatch && (
             <Form.Item
               name="categoryKey"
@@ -1391,18 +1411,6 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
               />
             </Form.Item>
           )}
-          <Form.Item name="duplicateFilter" label="重复过滤" valuePropName="checked">
-            <Checkbox>遇到已复制的记录，自动跳过</Checkbox>
-          </Form.Item>
-          <Form.Item name="autoSourceBinding" label="货源关联" valuePropName="checked">
-            <Checkbox>创建草稿后，把当前淘宝链接自动关联到微信商品</Checkbox>
-          </Form.Item>
-          <Form.Item name="productStatus" label="复制后商品状态">
-            <Select
-              disabled
-              options={[{ value: 'draftBox', label: '草稿箱' }]}
-            />
-          </Form.Item>
           <Form.Item label="运费模板" required>
             <Space.Compact style={{ width: '100%' }}>
               <Form.Item
@@ -1466,6 +1474,12 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
                   label: advancedSettingsTabLabel('基础配置', configuredCounts.basic),
                   children: (
                     <>
+                      <Form.Item name="productStatus" label="复制后商品状态">
+                        <Select
+                          disabled
+                          options={[{ value: 'draftBox', label: '草稿箱（固定）' }]}
+                        />
+                      </Form.Item>
                       <Form.Item name="afterSaleAddressId" label="售后地址">
                         <Select
                           allowClear
