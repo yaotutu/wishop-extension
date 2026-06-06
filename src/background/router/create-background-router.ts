@@ -72,6 +72,8 @@ const FEATURE_CHANNELS = {
   'products:getQrcode': 'orders',
   'productCopy:list': 'productCopy',
   'productCopy:remove': 'productCopy',
+  'productCopy:getDraftParameterOptions': 'productCopy',
+  'productCopy:getCreatedProduct': 'productCopy',
   'productCopy:open': 'productCopy',
   'productCopy:getCurrentTabSession': 'productCopy',
   'productCopy:markPageReady': 'productCopy',

@@ -62,6 +62,9 @@ function fakeListingClient(
       return { catId, allPass: true, failReasons: [] };
     },
     getCategoryProductRule: getRule,
+    async getFreightTemplates() {
+      return [];
+    },
     async getFreightTemplateIds() {
       return [];
     },

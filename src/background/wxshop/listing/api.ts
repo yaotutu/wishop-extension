@@ -9,6 +9,7 @@ import type {
   WxShopCategoryPrecheckResult,
   WxShopCategoryProductAttrRule,
   WxShopCategoryProductRule,
+  WxShopFreightTemplateSummary,
   WxShopListingClient,
   WxShopMerchantAddressDetail,
   WxShopProductImageUploadResult,
@@ -20,6 +21,63 @@ function normalizeIdList(value: unknown): string[] {
   return value
     .map(item => String(item ?? '').trim())
     .filter(Boolean);
+}
+
+function uniqueFreightTemplates(templates: WxShopFreightTemplateSummary[]): WxShopFreightTemplateSummary[] {
+  const seen = new Set<string>();
+  return templates.filter(template => {
+    if (seen.has(template.templateId)) return false;
+    seen.add(template.templateId);
+    return true;
+  });
+}
+
+function normalizeFreightTemplateItem(item: unknown): WxShopFreightTemplateSummary | null {
+  if (!item || typeof item !== 'object') return null;
+  const record = item as Record<string, unknown>;
+  const templateId = normalizeText(record.template_id ?? record.templateId ?? record.id);
+  if (!templateId) return null;
+  const valuationType = Number(record.valuation_type ?? record.valuationType);
+  return {
+    templateId,
+    name: normalizeText(record.name ?? record.template_name ?? record.templateName) || undefined,
+    valuationType: Number.isFinite(valuationType) ? valuationType : undefined,
+  };
+}
+
+function normalizeFreightTemplates(data: Record<string, unknown>): WxShopFreightTemplateSummary[] {
+  const list = Array.isArray(data.template_list)
+    ? data.template_list
+    : Array.isArray(data.freight_template_list)
+      ? data.freight_template_list
+      : [];
+  const templates = list
+    .map(normalizeFreightTemplateItem)
+    .filter((item): item is WxShopFreightTemplateSummary => Boolean(item));
+  if (templates.length > 0) return uniqueFreightTemplates(templates);
+
+  return normalizeIdList(data.template_id_list).map(templateId => ({ templateId }));
+}
+
+function normalizeFreightTemplateDetail(
+  data: Record<string, unknown>,
+  templateId: string,
+): WxShopFreightTemplateSummary {
+  const candidates = [
+    data.template_info,
+    data.freight_template,
+    data.freight_template_info,
+    data,
+  ];
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object') continue;
+    const normalized = normalizeFreightTemplateItem({
+      template_id: templateId,
+      ...(candidate as Record<string, unknown>),
+    });
+    if (normalized) return normalized;
+  }
+  return { templateId };
 }
 
 function normalizeFlag(value: unknown): boolean {
@@ -47,6 +105,10 @@ function normalizeFailReasons(value: unknown): string[] {
 
 function normalizeText(value: unknown): string {
   return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
 }
 
 function parseRuleValues(value: unknown): string[] {
@@ -243,23 +305,114 @@ export function createWxShopListingClient(accountId: string, domain: ActivityLog
     };
   }
 
-  async function getFreightTemplateIds(): Promise<string[]> {
-    const path = '/channels/ec/merchant/getfreighttemplatelist';
+  async function requestFreightTemplateList(): Promise<Record<string, unknown>> {
+    const path = '/channels/ec/logistics/merchant/freighttemplate/list/get';
     const stage = '获取运费模板列表';
-    const pageInput = { offset: 0, limit: 10 };
-    // 微信小店运费模板列表接口要求分页参数，之前传空对象会被微信按 limit=0 校验失败。
+    const pageInput = { page_size: 100 };
     wxshop.logger.info('按微信小店官方文档读取运费模板列表', {
       method: 'POST',
       path,
       body: pageInput,
     });
-    const data = await wxshop.request<any>(path, pageInput, stage);
+    const data = await wxshop.request<Record<string, unknown>>(path, pageInput, stage);
 
     if (data.errcode && data.errcode !== 0) {
       wxshop.throwWxApiError(path, stage, data);
     }
+    return data;
+  }
 
-    return normalizeIdList(data.template_id_list);
+  async function requestLegacyFreightTemplateList(): Promise<Record<string, unknown>> {
+    const path = '/channels/ec/merchant/getfreighttemplatelist';
+    const stage = '获取运费模板列表';
+    const pageInput = { offset: 0, limit: 100 };
+    // 旧接口要求分页参数，保留兜底路径，避免真实商家账号尚未切到新版物流接口时列表不可用。
+    wxshop.logger.info('按微信小店旧接口读取运费模板列表', {
+      method: 'POST',
+      path,
+      body: pageInput,
+    });
+    const data = await wxshop.request<Record<string, unknown>>(path, pageInput, stage);
+
+    if (data.errcode && data.errcode !== 0) {
+      wxshop.throwWxApiError(path, stage, data);
+    }
+    return data;
+  }
+
+  async function requestFreightTemplateDetail(templateId: string): Promise<Record<string, unknown>> {
+    const path = '/channels/ec/logistics/merchant/freighttemplate/get';
+    const stage = '获取运费模板详情';
+    const body = { template_id: templateId };
+    wxshop.logger.info('按微信小店官方文档读取运费模板详情', {
+      method: 'POST',
+      path,
+      body,
+    });
+    const data = await wxshop.request<Record<string, unknown>>(path, body, stage);
+
+    if (data.errcode && data.errcode !== 0) {
+      wxshop.throwWxApiError(path, stage, data);
+    }
+    return data;
+  }
+
+  async function requestLegacyFreightTemplateDetail(templateId: string): Promise<Record<string, unknown>> {
+    const path = '/channels/ec/merchant/getfreighttemplatedetail';
+    const stage = '获取运费模板详情';
+    const body = { template_id: templateId };
+    wxshop.logger.info('按微信小店旧接口读取运费模板详情', {
+      method: 'POST',
+      path,
+      body,
+    });
+    const data = await wxshop.request<Record<string, unknown>>(path, body, stage);
+
+    if (data.errcode && data.errcode !== 0) {
+      wxshop.throwWxApiError(path, stage, data);
+    }
+    return data;
+  }
+
+  async function fillFreightTemplateName(template: WxShopFreightTemplateSummary): Promise<WxShopFreightTemplateSummary> {
+    if (template.name?.trim()) return template;
+    // 有些账号的列表接口只返回 template_id_list，参数设置页必须继续查详情才能给用户展示可读名称。
+    try {
+      const detail = normalizeFreightTemplateDetail(await requestFreightTemplateDetail(template.templateId), template.templateId);
+      return { ...template, ...detail };
+    } catch (error) {
+      wxshop.logger.warn('新版微信小店运费模板详情读取失败，尝试旧接口兜底', {
+        templateId: template.templateId,
+        error: errorMessage(error, '新版运费模板详情读取失败'),
+      });
+      try {
+        const detail = normalizeFreightTemplateDetail(await requestLegacyFreightTemplateDetail(template.templateId), template.templateId);
+        return { ...template, ...detail };
+      } catch (legacyError) {
+        wxshop.logger.warn('微信小店运费模板详情读取失败，保留模板 ID 作为兜底显示', {
+          templateId: template.templateId,
+          error: errorMessage(legacyError, '运费模板详情读取失败'),
+        });
+        return template;
+      }
+    }
+  }
+
+  async function getFreightTemplates(): Promise<WxShopFreightTemplateSummary[]> {
+    let templates: WxShopFreightTemplateSummary[];
+    try {
+      templates = normalizeFreightTemplates(await requestFreightTemplateList());
+    } catch (error) {
+      wxshop.logger.warn('新版微信小店运费模板列表读取失败，尝试旧接口兜底', {
+        error: errorMessage(error, '新版运费模板列表读取失败'),
+      });
+      templates = normalizeFreightTemplates(await requestLegacyFreightTemplateList());
+    }
+    return Promise.all(templates.map(fillFreightTemplateName));
+  }
+
+  async function getFreightTemplateIds(): Promise<string[]> {
+    return (await getFreightTemplates()).map(template => template.templateId);
   }
 
   async function getMerchantAddressIds(): Promise<string[]> {
@@ -372,6 +525,7 @@ export function createWxShopListingClient(accountId: string, domain: ActivityLog
     getAllCategoryPaths,
     precheckProductCategory,
     getCategoryProductRule,
+    getFreightTemplates,
     getFreightTemplateIds,
     getMerchantAddressIds,
     getMerchantAddressDetail,

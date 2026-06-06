@@ -1,5 +1,7 @@
 import type {
   Account,
+  ProductCopyCreatedProductRecord,
+  ProductCopyDraftParameterOptions,
   ProductCopyRecord,
   Config,
   CreatePreparedWxDraftBoxProductInput,
@@ -209,6 +211,10 @@ export const extensionApi = {
   productCopy: {
     list: (): Promise<ProductCopyRecord[]> => invoke('productCopy:list'),
     remove: (copyId: string): Promise<void> => invoke('productCopy:remove', copyId),
+    getDraftParameterOptions: (accountId: string): Promise<ProductCopyDraftParameterOptions> =>
+      invoke('productCopy:getDraftParameterOptions', accountId),
+    getCreatedProduct: (accountId: string, copyId: string): Promise<ProductCopyCreatedProductRecord | null> =>
+      invoke('productCopy:getCreatedProduct', accountId, copyId),
     open: (input: CreateProductCopySessionInput): Promise<ProductCopySession> =>
       invoke('productCopy:open', input),
     getCurrentTabSession: (): Promise<ProductCopySession | null> =>

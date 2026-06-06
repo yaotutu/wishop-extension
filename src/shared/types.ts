@@ -473,6 +473,19 @@ export interface ProductCopyRecord extends TaobaoProductSnapshot {
   updatedAt: number;
 }
 
+export interface ProductCopyCreatedProductRecord {
+  id: string;
+  accountId: string;
+  copyId: string;
+  platform: 'taobao' | 'tmall';
+  itemId: string;
+  sourceUrl: string;
+  title: string;
+  productId: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface CreateProductCopySessionInput {
   url: string;
 }
@@ -530,6 +543,35 @@ export interface SyncWxCategoryProductRulesInput {
 
 export interface SyncWxCategoryProductRulesResult extends WxCategoryProductRuleCacheStatus {
   started: boolean;
+}
+
+export interface ProductCopyCategoryOption {
+  key: string;
+  catIds: string[];
+  names: string[];
+  path: string;
+}
+
+export interface ProductCopyFreightTemplateOption {
+  templateId: string;
+  name?: string;
+  label: string;
+}
+
+export interface ProductCopyAfterSaleAddressOption {
+  addressId: string;
+  label: string;
+  defaultSend: boolean;
+  defaultRecv: boolean;
+  sendAddr: boolean;
+  recvAddr: boolean;
+}
+
+export interface ProductCopyDraftParameterOptions {
+  categories: ProductCopyCategoryOption[];
+  freightTemplates: ProductCopyFreightTemplateOption[];
+  afterSaleAddresses: ProductCopyAfterSaleAddressOption[];
+  fetchedAt: number;
 }
 
 export interface WxProductCategoryPath {

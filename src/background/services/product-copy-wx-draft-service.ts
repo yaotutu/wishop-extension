@@ -14,6 +14,10 @@ import type { SiliconFlowJsonCompletionInput } from '../ai/siliconflow-client.ts
 import type { WxShopCategoryProductRule, WxShopListingClient } from '../wxshop/listing/types.ts';
 import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 import {
+  removeProductCopyCreatedProduct,
+  saveProductCopyCreatedProduct,
+} from '../store/product-copy-created-product-repository.ts';
+import {
   collectWxDraftSourceImages,
   mapProductCopyRecordToWxAddProductRequest,
 } from './product-copy-wx-draft-mapper.ts';
@@ -37,6 +41,8 @@ export interface WxDraftBoxProductDependencies {
   getSettings?: () => Promise<AppSettings>;
   completeJson?: CompleteJson;
   downloadImage?: (source: WxDraftImageUploadSource) => Promise<ProductCopyImageDownloadResult>;
+  recordCreatedProduct?: (result: WxProductDraftCreationResult, source?: ProductCopyRecord | null) => Promise<unknown>;
+  removeCreatedProduct?: (accountId: string, copyId: string) => Promise<unknown>;
   recordStarted?: ActivityRecorder;
   recordCompleted?: ActivityRecorder;
   recordFailed?: ActivityRecorder;
@@ -181,6 +187,17 @@ async function defaultRecordCompleted(input: Record<string, unknown>): Promise<u
 async function defaultRecordFailed(input: Record<string, unknown>): Promise<unknown> {
   const activityLog = await import('../activity-logs/activity-log-service.ts');
   return activityLog.recordActivityFailed(input as never);
+}
+
+async function defaultRecordCreatedProduct(
+  result: WxProductDraftCreationResult,
+  source?: ProductCopyRecord | null,
+): Promise<unknown> {
+  return saveProductCopyCreatedProduct(result, source ?? await defaultGetCopyRecord(result.copyId));
+}
+
+async function defaultRemoveCreatedProduct(accountId: string, copyId: string): Promise<unknown> {
+  return removeProductCopyCreatedProduct(accountId, copyId);
 }
 
 function summarizePreparedRequest(
@@ -359,9 +376,15 @@ export async function createPreparedWxDraftBoxProduct(
   }
 
   const runId = createRunId(input);
+  const logger = createDiagnosticLogger({
+    domain: 'productCopy',
+    component: 'WxDraftCreate',
+    accountId: input.accountId,
+  });
   const recordStarted = dependencies.recordStarted || defaultRecordStarted;
   const recordCompleted = dependencies.recordCompleted || defaultRecordCompleted;
   const recordFailed = dependencies.recordFailed || defaultRecordFailed;
+  const recordCreatedProduct = dependencies.recordCreatedProduct || defaultRecordCreatedProduct;
   const activityBase = {
     domain: 'productCopy' as const,
     scope: 'account' as const,
@@ -400,6 +423,15 @@ export async function createPreparedWxDraftBoxProduct(
         uploadedImages: input.uploadedImageCount,
       },
     });
+    try {
+      await recordCreatedProduct(result);
+    } catch (error) {
+      logger.warn('复制完成记录写入失败，微信小店草稿已创建', {
+        copyId: input.copyId,
+        productId: created.productId,
+        error: errorMessage(error, '复制完成记录写入失败'),
+      });
+    }
     return result;
   } catch (error) {
     const message = errorMessage(error, '微信小店商品草稿创建失败');
@@ -427,7 +459,7 @@ export async function createWxDraftBoxProductFromCopyRecord(
 
 export async function deleteCreatedWxDraftBoxProduct(
   input: DeleteCreatedWxDraftBoxProductInput,
-  dependencies: Pick<WxDraftBoxProductDependencies, 'getClient' | 'recordStarted' | 'recordCompleted' | 'recordFailed'> = {},
+  dependencies: Pick<WxDraftBoxProductDependencies, 'getClient' | 'removeCreatedProduct' | 'recordStarted' | 'recordCompleted' | 'recordFailed'> = {},
 ): Promise<DeleteCreatedWxDraftBoxProductResult> {
   validateDeleteInput(input);
 
@@ -442,6 +474,7 @@ export async function deleteCreatedWxDraftBoxProduct(
   const recordStarted = dependencies.recordStarted || defaultRecordStarted;
   const recordCompleted = dependencies.recordCompleted || defaultRecordCompleted;
   const recordFailed = dependencies.recordFailed || defaultRecordFailed;
+  const removeCreatedProduct = dependencies.removeCreatedProduct || defaultRemoveCreatedProduct;
   const activityBase = {
     domain: 'productCopy' as const,
     scope: 'account' as const,
@@ -475,6 +508,15 @@ export async function deleteCreatedWxDraftBoxProduct(
         title: '微信小店测试草稿删除完成',
         detail: productTitle,
       });
+      try {
+        await removeCreatedProduct(input.accountId, input.copyId);
+      } catch (error) {
+        logger.warn('复制完成记录移除失败，微信小店测试草稿已删除', {
+          copyId: input.copyId,
+          productId,
+          error: errorMessage(error, '复制完成记录移除失败'),
+        });
+      }
       return {
         accountId: input.accountId,
         copyId: input.copyId,

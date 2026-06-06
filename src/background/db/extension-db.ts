@@ -3,6 +3,7 @@ import type { NotificationPreference } from '../../shared/notification';
 import type { AppSettings } from '../../shared/settings';
 import type {
   Config,
+  ProductCopyCreatedProductRecord,
   ProductCopyRecord,
   Order,
   OrderAssociation,
@@ -89,6 +90,7 @@ export class ExtensionDb extends Dexie {
   accountLogs!: Table<AccountLogRecord, string>;
   accountSyncStates!: Table<AccountSyncStateRecord, string>;
   productCopyRecords!: Table<ProductCopyRecord, string>;
+  productCopyCreatedProducts!: Table<ProductCopyCreatedProductRecord, string>;
   wxCategoryProductRules!: Table<WxCategoryProductRuleCacheItem, string>;
 
   constructor() {
@@ -136,6 +138,16 @@ export class ExtensionDb extends Dexie {
       // Dexie 只能通过旧表名显式声明 null 来删除历史表；新代码只读写 productCopyRecords。
       collectedProductListings: null,
       productCopyRecords: 'id, updatedAt, collectedAt',
+      wxCategoryProductRules: 'id, catId, releaseMode, updatedAt, lastError',
+    });
+    this.version(6).stores({
+      accounts: 'id, appId, updatedAt',
+      orders: '[accountId+orderId], accountId, [accountId+status+updateTime], [accountId+createTime], [accountId+lastFetchedAt]',
+      accountWorkspaces: 'accountId, updatedAt',
+      accountLogs: 'id, accountId, kind, [accountId+kind+timestamp], timestamp',
+      accountSyncStates: 'accountId, appId, revision, updatedAt',
+      productCopyRecords: 'id, updatedAt, collectedAt',
+      productCopyCreatedProducts: 'id, accountId, copyId, productId, updatedAt',
       wxCategoryProductRules: 'id, catId, releaseMode, updatedAt, lastError',
     });
   }

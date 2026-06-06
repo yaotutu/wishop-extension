@@ -130,6 +130,12 @@ const migrations: Record<number, Migration> = {
       storageVersion: 12,
     };
   },
+  13(store) {
+    return {
+      ...store,
+      storageVersion: 13,
+    };
+  },
 };
 
 const LEGACY_BUSINESS_KEYS = [

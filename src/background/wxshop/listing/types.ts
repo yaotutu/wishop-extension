@@ -44,6 +44,12 @@ export interface WxShopMerchantAddressDetail {
   recvAddr: boolean;
 }
 
+export interface WxShopFreightTemplateSummary {
+  templateId: string;
+  name?: string;
+  valuationType?: number;
+}
+
 export interface WxShopCategoryPrecheckResult {
   catId: string;
   allPass: boolean;
@@ -73,6 +79,7 @@ export interface WxShopListingClient {
   getAllCategoryPaths(): Promise<WxProductCategoryPath[]>;
   precheckProductCategory(catId: string): Promise<WxShopCategoryPrecheckResult>;
   getCategoryProductRule(catId: string): Promise<WxShopCategoryProductRule>;
+  getFreightTemplates(): Promise<WxShopFreightTemplateSummary[]>;
   getFreightTemplateIds(): Promise<string[]>;
   getMerchantAddressIds(): Promise<string[]>;
   getMerchantAddressDetail(addressId: string): Promise<WxShopMerchantAddressDetail>;

@@ -44,6 +44,8 @@ export const queryKeys = {
   },
   productCopy: {
     list: ['productCopy', 'list'] as const,
+    draftParameterOptions: (accountId: string) => ['productCopy', 'draftParameterOptions', accountId] as const,
+    createdProduct: (accountId: string, copyId: string) => ['productCopy', 'createdProduct', accountId, copyId] as const,
   },
   wxCategoryData: {
     productRuleCacheStatus: ['wxCategoryData', 'productRuleCacheStatus'] as const,

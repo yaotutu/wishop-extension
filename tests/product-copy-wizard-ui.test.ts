@@ -5,6 +5,8 @@ import test from 'node:test';
 
 const layoutSource = readFileSync(resolve(import.meta.dirname, '../src/components/Layout.tsx'), 'utf8');
 const pageSource = readFileSync(resolve(import.meta.dirname, '../src/pages/product-copy/ProductCopyPage.tsx'), 'utf8');
+const parameterOptionsSource = readFileSync(resolve(import.meta.dirname, '../src/background/services/product-copy-parameter-options-service.ts'), 'utf8');
+const listingClientSource = readFileSync(resolve(import.meta.dirname, '../src/background/wxshop/listing/api.ts'), 'utf8');
 
 test('product copy is rendered inside the shared account workspace', () => {
   assert.match(
@@ -27,9 +29,10 @@ test('product copy is rendered inside the shared account workspace', () => {
 });
 
 test('product copy page is a page-level wizard that ends at draft box creation', () => {
-  assert.match(pageSource, /type ProductCopyWizardStep = 'input' \| 'collectionPreview' \| 'draftPreview' \| 'completed';/);
+  assert.match(pageSource, /type ProductCopyWizardStep = 'input' \| 'collectionPreview' \| 'parameterSettings' \| 'draftPreview' \| 'completed';/);
   assert.match(pageSource, /const DRAFT_BOX_LISTING_VALUE = 0;/);
   assert.match(pageSource, /setCurrentStep\('collectionPreview'\);/);
+  assert.match(pageSource, /setCurrentStep\('parameterSettings'\)/);
   assert.match(pageSource, /setCurrentStep\('draftPreview'\);/);
   assert.match(pageSource, /setCurrentStep\('completed'\);/);
 
@@ -45,6 +48,31 @@ test('product copy page is a page-level wizard that ends at draft box creation',
   assert.doesNotMatch(pageSource, /submitPreparedWxDraft\(/);
   assert.doesNotMatch(pageSource, /listing:\s*1/);
   assert.doesNotMatch(pageSource, /extensionApi\.drafts\.delete/);
+});
+
+test('product copy parameters are configured before draft preview generation', () => {
+  assert.match(pageSource, /title: '参数设置'/);
+  assert.match(pageSource, /getDraftParameterOptions\(accountId\)/);
+  assert.match(pageSource, /getCreatedProduct\(accountId, copyRecord\.id\)/);
+  assert.match(pageSource, /autoCategoryMatch/);
+  assert.match(pageSource, /autoCategoryMatch: true/);
+  assert.match(pageSource, /<Checkbox>AI 自动识别<\/Checkbox>/);
+  assert.match(pageSource, /\{!autoCategoryMatch && \(/);
+  assert.match(pageSource, /duplicateFilter/);
+  assert.match(pageSource, /expressTemplateId/);
+  assert.match(pageSource, /afterSaleAddressId/);
+  assert.match(pageSource, /defaultStockNum/);
+  assert.match(pageSource, /生成草稿预览/);
+  assert.match(
+    pageSource,
+    /prepareWxDraftBoxProduct\(\{[\s\S]*expressTemplateId: values\.expressTemplateId,[\s\S]*afterSaleAddressId: values\.afterSaleAddressId,[\s\S]*defaultStockNum: values\.defaultStockNum/,
+  );
+  assert.match(parameterOptionsSource, /client\.getFreightTemplates\(\)/);
+  assert.match(parameterOptionsSource, /\$\{name\}（ID：\$\{template\.templateId\}）/);
+  assert.match(parameterOptionsSource, /模板 ID：\$\{template\.templateId\}/);
+  assert.doesNotMatch(parameterOptionsSource, /未命名模[板版]/);
+  assert.match(listingClientSource, /fillFreightTemplateName/);
+  assert.match(listingClientSource, /requestFreightTemplateDetail/);
 });
 
 test('product copy preview images retry Taobao CDN images through local blob urls', () => {

@@ -1,17 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircleOutlined, ImportOutlined, RobotOutlined } from '@ant-design/icons';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { CheckCircleOutlined, ImportOutlined, ReloadOutlined, RobotOutlined } from '@ant-design/icons';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   Button,
   Card,
+  Checkbox,
   Collapse,
   Descriptions,
   Form,
   Image,
   Input,
+  InputNumber,
   message,
   Modal,
+  Select,
   Space,
   Steps,
   Table,
@@ -21,6 +24,7 @@ import type { TableProps } from 'antd';
 import { queryKeys } from '../../query/query-keys';
 import { extensionApi } from '../../shared/extension-api';
 import type {
+  ProductCopyCategoryOption,
   ProductCopyRecord,
   DeleteCreatedWxDraftBoxProductResult,
   ProductCopySession,
@@ -29,7 +33,7 @@ import type {
   WxProductDraftSuggestionResult,
 } from '../../shared/types';
 
-type ProductCopyWizardStep = 'input' | 'collectionPreview' | 'draftPreview' | 'completed';
+type ProductCopyWizardStep = 'input' | 'collectionPreview' | 'parameterSettings' | 'draftPreview' | 'completed';
 
 interface ProductCopyPageProps {
   accountId: string;
@@ -37,7 +41,19 @@ interface ProductCopyPageProps {
 }
 
 const DEFAULT_BRAND_ID = '2100000000';
+const DEFAULT_DRAFT_STOCK_NUM = 999;
 const DRAFT_BOX_LISTING_VALUE = 0;
+
+interface ProductCopyParameterFormValues {
+  autoCategoryMatch: boolean;
+  categoryKey?: string;
+  duplicateFilter: boolean;
+  productStatus: 'draftBox';
+  expressTemplateId?: string;
+  afterSaleAddressId?: string;
+  brandId?: string;
+  defaultStockNum?: number;
+}
 
 const missingFieldLabels: Record<string, string> = {
   title: '标题',
@@ -50,8 +66,9 @@ const missingFieldLabels: Record<string, string> = {
 const wizardStepIndex: Record<ProductCopyWizardStep, number> = {
   input: 0,
   collectionPreview: 1,
-  draftPreview: 2,
-  completed: 3,
+  parameterSettings: 2,
+  draftPreview: 3,
+  completed: 4,
 };
 
 const pageStyle: React.CSSProperties = {
@@ -142,6 +159,29 @@ function categoryCandidateSourceText(source?: WxProductDraftSuggestionResult['ca
 function normalizedCategoryText(suggestion: WxProductDraftSuggestionResult | null): string {
   if (!suggestion) return '-';
   return suggestion.categoryPath?.join(' / ') || suggestion.catIds.join(' / ') || '-';
+}
+
+function defaultParameterValues(): ProductCopyParameterFormValues {
+  return {
+    autoCategoryMatch: true,
+    duplicateFilter: true,
+    productStatus: 'draftBox',
+    brandId: DEFAULT_BRAND_ID,
+    defaultStockNum: DEFAULT_DRAFT_STOCK_NUM,
+  };
+}
+
+function manualCategorySuggestion(copyId: string, category: ProductCopyCategoryOption): WxProductDraftSuggestionResult {
+  return {
+    copyId,
+    catIds: category.catIds,
+    categoryPath: category.names,
+    categoryCandidateSource: 'wxStaticSnapshot',
+    attrs: [],
+    confidence: 1,
+    reason: '用户在复制商品参数设置中手动选择微信小店类目。',
+    warnings: [],
+  };
 }
 
 interface ProductCopyPreviewImageProps {
@@ -285,6 +325,7 @@ function renderCategorySuggestion(suggestion: WxProductDraftSuggestionResult | n
 
 const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountName }) => {
   const [form] = Form.useForm<{ url: string }>();
+  const [parameterForm] = Form.useForm<ProductCopyParameterFormValues>();
   const queryClient = useQueryClient();
   const [currentStep, setCurrentStep] = useState<ProductCopyWizardStep>('input');
   const [activeSession, setActiveSession] = useState<ProductCopySession | null>(null);
@@ -296,16 +337,57 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
   const [fullCategoryStatus, setFullCategoryStatus] = useState('');
 
   const activeCollectionUrl = activeSession?.url || '';
+  const autoCategoryMatch = Form.useWatch('autoCategoryMatch', parameterForm) ?? true;
+  const duplicateFilterEnabled = Form.useWatch('duplicateFilter', parameterForm) ?? true;
+
+  const parameterOptionsQuery = useQuery({
+    queryKey: queryKeys.productCopy.draftParameterOptions(accountId),
+    queryFn: () => extensionApi.productCopy.getDraftParameterOptions(accountId),
+    enabled: Boolean(accountId) && (currentStep === 'parameterSettings' || currentStep === 'draftPreview'),
+    staleTime: 5 * 60 * 1000,
+  });
+  const createdProductQuery = useQuery({
+    queryKey: queryKeys.productCopy.createdProduct(accountId, copyRecord?.id || ''),
+    queryFn: () => extensionApi.productCopy.getCreatedProduct(accountId, copyRecord?.id || ''),
+    enabled: Boolean(accountId && copyRecord?.id) && currentStep === 'parameterSettings',
+  });
+
+  const categoryByKey = useMemo(() => {
+    return new Map((parameterOptionsQuery.data?.categories || []).map(category => [category.key, category]));
+  }, [parameterOptionsQuery.data?.categories]);
+
+  const categoryOptions = useMemo(() => {
+    return (parameterOptionsQuery.data?.categories || []).map(category => ({
+      value: category.key,
+      label: category.path,
+    }));
+  }, [parameterOptionsQuery.data?.categories]);
+
+  const freightTemplateOptions = useMemo(() => {
+    return (parameterOptionsQuery.data?.freightTemplates || []).map(template => ({
+      value: template.templateId,
+      label: template.label,
+    }));
+  }, [parameterOptionsQuery.data?.freightTemplates]);
+
+  const afterSaleAddressOptions = useMemo(() => {
+    return (parameterOptionsQuery.data?.afterSaleAddresses || []).map(address => ({
+      value: address.addressId,
+      label: address.label,
+    }));
+  }, [parameterOptionsQuery.data?.afterSaleAddresses]);
 
   const wizardItems = useMemo<React.ComponentProps<typeof Steps>['items']>(() => [
     { title: '输入链接' },
     { title: '采集预览' },
+    { title: '参数设置' },
     { title: '草稿预览' },
     { title: '创建完成' },
   ], []);
 
   const resetWizard = useCallback(() => {
     form.resetFields();
+    parameterForm.setFieldsValue(defaultParameterValues());
     setCurrentStep('input');
     setActiveSession(null);
     setCopyRecord(null);
@@ -314,17 +396,32 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
     setDraftSubmittedResult(null);
     setDraftDeleteResult(null);
     setFullCategoryStatus('');
-  }, [form]);
+  }, [form, parameterForm]);
 
   // 左侧账号切换后必须清空当前向导，避免把上一个账号准备好的草稿请求提交到新账号下。
   useEffect(() => {
     resetWizard();
   }, [accountId, resetWizard]);
 
+  useEffect(() => {
+    const options = parameterOptionsQuery.data;
+    if (!options) return;
+    const currentValues = parameterForm.getFieldsValue();
+    const firstFreightTemplate = options.freightTemplates[0]?.templateId;
+    const preferredAddress = options.afterSaleAddresses.find(address => address.defaultRecv)
+      || options.afterSaleAddresses.find(address => address.recvAddr)
+      || options.afterSaleAddresses[0];
+    parameterForm.setFieldsValue({
+      expressTemplateId: currentValues.expressTemplateId || firstFreightTemplate,
+      afterSaleAddressId: currentValues.afterSaleAddressId || preferredAddress?.addressId,
+    });
+  }, [parameterForm, parameterOptionsQuery.data]);
+
   const collectMutation = useMutation({
     mutationFn: (url: string) => extensionApi.productCopy.open({ url }),
     onSuccess: session => {
       setActiveSession(session);
+      parameterForm.setFieldsValue(defaultParameterValues());
       setCurrentStep('input');
       setCopyRecord(null);
       setDraftPrepared(null);
@@ -370,25 +467,43 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
    */
   const generateDraftDataMutation = useMutation({
     onMutate: () => {
-      setFullCategoryStatus('正在转换微信类目并生成草稿箱数据，图片会同步上传到微信小店。');
+      setFullCategoryStatus('正在按参数设置生成草稿箱数据，图片会同步上传到微信小店。');
     },
     mutationFn: async () => {
       if (!copyRecord) throw new Error('请先完成商品采集');
-      const suggestion = await extensionApi.productCopy.suggestWxCategoryFromFullList({
-        accountId,
-        copyId: copyRecord.id,
-      });
+      const values = await parameterForm.validateFields();
+      if (values.duplicateFilter) {
+        const createdProduct = await extensionApi.productCopy.getCreatedProduct(accountId, copyRecord.id);
+        if (createdProduct) {
+          throw new Error(`该商品已复制为微信小店商品 ${createdProduct.productId}，如需再次复制请取消重复过滤`);
+        }
+      }
+
+      let suggestion: WxProductDraftSuggestionResult;
+      if (values.autoCategoryMatch) {
+        suggestion = await extensionApi.productCopy.suggestWxCategoryFromFullList({
+          accountId,
+          copyId: copyRecord.id,
+        });
+      } else {
+        const manualCategory = values.categoryKey ? categoryByKey.get(values.categoryKey) : undefined;
+        if (!manualCategory) throw new Error('请选择微信小店类目');
+        suggestion = manualCategorySuggestion(copyRecord.id, manualCategory);
+      }
       const catIds = suggestion.catIds;
 
       if (!isValidCategoryPathIds(catIds)) {
-        throw new Error('AI 返回的微信小店类目路径不完整，请重新生成');
+        throw new Error('微信小店类目路径不完整，请重新选择类目');
       }
 
       const prepared = await extensionApi.productCopy.prepareWxDraftBoxProduct({
         accountId,
         copyId: copyRecord.id,
         catIds,
-        brandId: DEFAULT_BRAND_ID,
+        brandId: values.brandId?.trim() || DEFAULT_BRAND_ID,
+        expressTemplateId: values.expressTemplateId,
+        afterSaleAddressId: values.afterSaleAddressId,
+        defaultStockNum: values.defaultStockNum ?? DEFAULT_DRAFT_STOCK_NUM,
       });
       return { suggestion, prepared, catIds };
     },
@@ -431,10 +546,11 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
           throw new Error(detail);
         }
         setDraftDeleteResult(deleteResult);
+        void queryClient.invalidateQueries({ queryKey: queryKeys.productCopy.createdProduct(result.accountId, result.copyId) });
         message.success('测试商品已删除');
       },
     });
-  }, []);
+  }, [queryClient]);
 
   const submitPreparedDraftMutation = useMutation({
     mutationFn: () => {
@@ -453,6 +569,7 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
       setDraftSubmittedResult(result);
       setDraftDeleteResult(null);
       setCurrentStep('completed');
+      void queryClient.invalidateQueries({ queryKey: queryKeys.productCopy.createdProduct(accountId, result.copyId) });
       message.success(`微信小店草稿已创建：${result.productId}`);
       showTestCompletionConfirm(result, draftPrepared?.request.title || result.productId);
     },
@@ -470,6 +587,7 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
       );
 
       if (activeCollectionUrl && listing.sourceUrl !== activeCollectionUrl) return;
+      parameterForm.setFieldsValue(defaultParameterValues());
       setActiveSession(null);
       setCopyRecord(listing);
       setCurrentStep('collectionPreview');
@@ -494,7 +612,7 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
       cleanupFailed();
       cleanupChallenge();
     };
-  }, [activeCollectionUrl, queryClient]);
+  }, [activeCollectionUrl, parameterForm, queryClient]);
 
   const handleCollect = async (values: { url: string }) => {
     const url = values.url.trim();
@@ -802,6 +920,146 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
     </Space>
   );
 
+  const renderParameterSettingsStep = (): React.ReactNode => {
+    const duplicateRecord = duplicateFilterEnabled ? createdProductQuery.data : null;
+    const categoryLoading = parameterOptionsQuery.isLoading || parameterOptionsQuery.isFetching;
+    const selectFilter = (input: string, option?: { label?: React.ReactNode; value?: string }) => {
+      const keyword = input.trim().toLowerCase();
+      if (!keyword) return true;
+      return String(option?.label || '').toLowerCase().includes(keyword)
+        || String(option?.value || '').toLowerCase().includes(keyword);
+    };
+
+    return (
+      <Space vertical size={16} style={{ width: '100%' }}>
+        <Alert
+          type="info"
+          showIcon
+          title="参数设置"
+          description="这些参数会参与生成草稿箱预览；修改参数后需要重新生成草稿预览。"
+        />
+        {parameterOptionsQuery.isError && (
+          <Alert
+            type="warning"
+            showIcon
+            title="参数选项读取失败"
+            description={parameterOptionsQuery.error instanceof Error ? parameterOptionsQuery.error.message : '请稍后重试'}
+          />
+        )}
+        {duplicateRecord && (
+          <Alert
+            type="warning"
+            showIcon
+            title="重复过滤已命中"
+            description={`当前账号已经复制过这个商品，微信小店商品 ID：${duplicateRecord.productId}。取消重复过滤后可以继续复制。`}
+          />
+        )}
+        <Form
+          form={parameterForm}
+          layout="horizontal"
+          labelCol={{ flex: '140px' }}
+          wrapperCol={{ flex: 1 }}
+          initialValues={defaultParameterValues()}
+        >
+          <Form.Item name="autoCategoryMatch" label="类目匹配" valuePropName="checked">
+            <Checkbox>AI 自动识别</Checkbox>
+          </Form.Item>
+          {!autoCategoryMatch && (
+            <Form.Item
+              name="categoryKey"
+              label="微信类目"
+              rules={[{ required: true, message: '请选择微信小店类目' }]}
+            >
+              <Select
+                allowClear
+                showSearch={{
+                  optionFilterProp: 'label',
+                  filterOption: selectFilter,
+                }}
+                loading={categoryLoading}
+                options={categoryOptions}
+                placeholder="搜索并选择微信小店类目"
+              />
+            </Form.Item>
+          )}
+          <Form.Item name="duplicateFilter" label="重复过滤" valuePropName="checked">
+            <Checkbox>遇到已复制的记录，自动跳过</Checkbox>
+          </Form.Item>
+          <Form.Item name="productStatus" label="复制后商品状态">
+            <Select
+              disabled
+              options={[{ value: 'draftBox', label: '草稿箱' }]}
+            />
+          </Form.Item>
+          <Form.Item label="运费模板" required>
+            <Space.Compact style={{ width: '100%' }}>
+              <Form.Item
+                name="expressTemplateId"
+                noStyle
+                rules={[{ required: true, message: '请选择运费模板' }]}
+              >
+                <Select
+                  allowClear
+                  loading={parameterOptionsQuery.isFetching}
+                  options={freightTemplateOptions}
+                  placeholder="请选择运费模板"
+                />
+              </Form.Item>
+              <Button
+                icon={<ReloadOutlined />}
+                loading={parameterOptionsQuery.isFetching}
+                onClick={() => parameterOptionsQuery.refetch()}
+              >
+                刷新
+              </Button>
+              <Button onClick={() => message.info('请在微信小店后台新增运费模板，新增后点击刷新')}>
+                添加
+              </Button>
+            </Space.Compact>
+          </Form.Item>
+          <Collapse
+            size="small"
+            items={[
+              {
+                key: 'advanced',
+                label: '更多选项',
+                children: (
+                  <>
+                    <Form.Item name="afterSaleAddressId" label="售后地址">
+                      <Select
+                        allowClear
+                        loading={parameterOptionsQuery.isFetching}
+                        options={afterSaleAddressOptions}
+                        placeholder="不选择时自动使用默认售后地址"
+                      />
+                    </Form.Item>
+                    <Form.Item name="brandId" label="品牌 ID">
+                      <Input placeholder={DEFAULT_BRAND_ID} />
+                    </Form.Item>
+                    <Form.Item name="defaultStockNum" label="默认库存">
+                      <InputNumber min={0} precision={0} style={{ width: '100%' }} />
+                    </Form.Item>
+                  </>
+                ),
+              },
+            ]}
+          />
+        </Form>
+        <div style={actionBarStyle}>
+          <Button onClick={() => setCurrentStep('collectionPreview')}>上一步</Button>
+          <Button
+            type="primary"
+            loading={generateDraftDataMutation.isPending}
+            disabled={Boolean(duplicateRecord)}
+            onClick={() => generateDraftDataMutation.mutate()}
+          >
+            生成草稿预览
+          </Button>
+        </div>
+      </Space>
+    );
+  };
+
   const renderStepContent = (): React.ReactNode => {
     if (currentStep === 'input') return renderInputStep();
 
@@ -825,9 +1083,8 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
               </Button>
               <Button
                 type="primary"
-                loading={generateDraftDataMutation.isPending}
                 disabled={categoryOnlyMutation.isPending}
-                onClick={() => generateDraftDataMutation.mutate()}
+                onClick={() => setCurrentStep('parameterSettings')}
               >
                 下一步
               </Button>
@@ -835,6 +1092,10 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
           </div>
         </Space>
       );
+    }
+
+    if (currentStep === 'parameterSettings') {
+      return renderParameterSettingsStep();
     }
 
     if (currentStep === 'draftPreview') {
@@ -845,7 +1106,7 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
         <Space vertical size={16} style={{ width: '100%' }}>
           {renderDraftPreview(draftPrepared)}
           <div style={actionBarStyle}>
-            <Button onClick={() => setCurrentStep('collectionPreview')}>上一步</Button>
+            <Button onClick={() => setCurrentStep('parameterSettings')}>上一步</Button>
             <Button
               type="primary"
               loading={submitPreparedDraftMutation.isPending}

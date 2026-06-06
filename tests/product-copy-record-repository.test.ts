@@ -7,7 +7,12 @@ import {
   removeProductCopyRecord,
   saveProductCopyRecord,
 } from '../src/background/store/product-copy-record-repository.ts';
-import type { ProductCopyRecord } from '../src/shared/types.ts';
+import {
+  getProductCopyCreatedProduct,
+  removeProductCopyCreatedProduct,
+  saveProductCopyCreatedProduct,
+} from '../src/background/store/product-copy-created-product-repository.ts';
+import type { ProductCopyRecord, WxProductDraftCreationResult } from '../src/shared/types.ts';
 import { sampleProductCopyRecord } from './product-copy-fixtures.ts';
 
 function sampleListing(patch: Partial<ProductCopyRecord> = {}): ProductCopyRecord {
@@ -50,4 +55,30 @@ test('product copy records are saved, listed newest first, overwritten by platfo
   await removeProductCopyRecord('taobao:1010211244888');
 
   assert.deepEqual((await listProductCopyRecords()).map(item => item.id), ['taobao:222']);
+});
+
+test('created product records track completed product copies per account and copy id', async () => {
+  await resetDb();
+
+  const source = sampleListing();
+  const result: WxProductDraftCreationResult = {
+    accountId: 'account-1',
+    copyId: source.id,
+    productId: '987654321',
+    createTime: '2026-06-01 12:00:00',
+    listing: 0,
+    uploadedImageCount: 5,
+  };
+
+  await saveProductCopyCreatedProduct(result, source);
+  const record = await getProductCopyCreatedProduct('account-1', source.id);
+
+  assert.equal(record?.productId, '987654321');
+  assert.equal(record?.platform, 'taobao');
+  assert.equal(record?.itemId, '1010211244888');
+  assert.equal(record?.title, source.title);
+
+  await removeProductCopyCreatedProduct('account-1', source.id);
+
+  assert.equal(await getProductCopyCreatedProduct('account-1', source.id), null);
 });

@@ -3,6 +3,8 @@ import type { NotificationEntry, NotificationPreference } from './notification';
 import type { AppSettings, AppSettingsPatch } from './settings';
 import type {
   Account,
+  ProductCopyCreatedProductRecord,
+  ProductCopyDraftParameterOptions,
   ProductCopyRecord,
   Config,
   CreatePreparedWxDraftBoxProductInput,
@@ -133,6 +135,8 @@ export interface RuntimeChannels {
 
   'productCopy:list': { args: []; result: ProductCopyRecord[] };
   'productCopy:remove': { args: [copyId: string]; result: void };
+  'productCopy:getDraftParameterOptions': { args: [accountId: string]; result: ProductCopyDraftParameterOptions };
+  'productCopy:getCreatedProduct': { args: [accountId: string, copyId: string]; result: ProductCopyCreatedProductRecord | null };
   'productCopy:open': { args: [input: CreateProductCopySessionInput]; result: ProductCopySession };
   'productCopy:getCurrentTabSession': { args: []; result: ProductCopySession | null };
   'productCopy:markPageReady': { args: [sessionId: string]; result: ProductCopySession };

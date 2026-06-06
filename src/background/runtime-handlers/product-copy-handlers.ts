@@ -9,6 +9,7 @@ import type {
   TaobaoSecurityChallengeSnapshot,
 } from '../../shared/types.ts';
 import type { RuntimeHandlerMap } from '../router/runtime-router.ts';
+import { getProductCopyCreatedProduct } from '../store/product-copy-created-product-repository.ts';
 import {
   completeProductCopySession,
   failProductCopySession,
@@ -25,6 +26,7 @@ import {
   deleteCreatedWxDraftBoxProduct,
   prepareWxDraftBoxProductFromCopyRecord,
 } from '../services/product-copy-wx-draft-service.ts';
+import { getProductCopyDraftParameterOptions } from '../services/product-copy-parameter-options-service.ts';
 
 type GetCurrentTabSession = (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
 
@@ -37,6 +39,12 @@ export function createProductCopyRuntimeHandlers(
     },
     async 'productCopy:remove'(args) {
       await productCopyRecordStore.remove(args[0] as string);
+    },
+    async 'productCopy:getDraftParameterOptions'(args) {
+      return getProductCopyDraftParameterOptions(args[0] as string);
+    },
+    async 'productCopy:getCreatedProduct'(args) {
+      return getProductCopyCreatedProduct(args[0] as string, args[1] as string);
     },
     async 'productCopy:open'(args) {
       return openProductCopySession(args[0] as CreateProductCopySessionInput);

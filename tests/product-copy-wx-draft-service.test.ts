@@ -93,6 +93,9 @@ function fakeListingClient(
     async getCategoryProductRule(catId: string) {
       return { catId, productAttrs: [], saleAttrs: [] };
     },
+    async getFreightTemplates() {
+      return (options.freightTemplateIds ?? ['47428464001']).map(templateId => ({ templateId }));
+    },
     async getFreightTemplateIds() {
       return options.freightTemplateIds ?? ['47428464001'];
     },
@@ -160,6 +163,7 @@ function fakeBlockedCategoryClient(uploaded: string[], addRequests: WxShopAddPro
 test('creates a WeChat draft-box product from a product copy record using uploaded WeChat images', async () => {
   const uploaded: string[] = [];
   const addRequests: WxShopAddProductRequest[] = [];
+  const createdRecords: string[] = [];
 
   const result = await createWxDraftBoxProductFromCopyRecord({
     accountId: 'account-1',
@@ -173,6 +177,7 @@ test('creates a WeChat draft-box product from a product copy record using upload
     recordStarted: async () => {},
     recordCompleted: async () => {},
     recordFailed: async () => {},
+    recordCreatedProduct: async result => { createdRecords.push(result.productId); },
   });
 
   assert.deepEqual(uploaded, [
@@ -197,6 +202,7 @@ test('creates a WeChat draft-box product from a product copy record using upload
     listing: 0,
     uploadedImageCount: 5,
   });
+  assert.deepEqual(createdRecords, ['987654321']);
 });
 
 test('prepares a WeChat draft-box product without submitting it to the add-product API', async () => {
@@ -455,6 +461,7 @@ test('rejects AI product attributes that do not satisfy local enum rules before 
 test('creates a prepared WeChat draft-box product without re-uploading images', async () => {
   const uploaded: string[] = [];
   const addRequests: WxShopAddProductRequest[] = [];
+  const createdRecords: string[] = [];
   const prepared = await prepareWxDraftBoxProductFromCopyRecord({
     accountId: 'account-1',
     copyId: 'taobao:1010211244888',
@@ -480,6 +487,7 @@ test('creates a prepared WeChat draft-box product without re-uploading images', 
     recordStarted: async () => {},
     recordCompleted: async () => {},
     recordFailed: async () => {},
+    recordCreatedProduct: async result => { createdRecords.push(result.productId); },
   });
 
   assert.deepEqual(uploaded, []);
@@ -493,6 +501,7 @@ test('creates a prepared WeChat draft-box product without re-uploading images', 
     listing: 0,
     uploadedImageCount: 5,
   });
+  assert.deepEqual(createdRecords, ['987654321']);
 });
 
 test('skips the WeChat category precheck when creating a draft-box product', async () => {
@@ -524,6 +533,7 @@ test('skips the WeChat category precheck when creating a draft-box product', asy
     recordStarted: async () => {},
     recordCompleted: async () => {},
     recordFailed: async input => { failedLogs.push(input); },
+    recordCreatedProduct: async () => {},
   });
 
   assert.deepEqual(uploaded, []);
@@ -536,6 +546,7 @@ test('skips the WeChat category precheck when creating a draft-box product', asy
 
 test('deletes the draft-box product created by the product copy test flow', async () => {
   const deletedProductIds: string[] = [];
+  const removedCreatedRecords: string[] = [];
   const completedLogs: Record<string, unknown>[] = [];
 
   const result = await deleteCreatedWxDraftBoxProduct({
@@ -548,6 +559,7 @@ test('deletes the draft-box product created by the product copy test flow', asyn
     recordStarted: async () => {},
     recordCompleted: async input => { completedLogs.push(input); },
     recordFailed: async () => {},
+    removeCreatedProduct: async (_accountId, copyId) => { removedCreatedRecords.push(copyId); },
   });
 
   assert.deepEqual(deletedProductIds, ['987654321']);
@@ -557,6 +569,7 @@ test('deletes the draft-box product created by the product copy test flow', asyn
     productId: '987654321',
     deleted: true,
   });
+  assert.deepEqual(removedCreatedRecords, ['taobao:1010211244888']);
   assert.equal(completedLogs.length, 1);
   assert.equal((completedLogs[0].metadata as Record<string, unknown>).submitMode, 'draftBoxCleanup');
 });
