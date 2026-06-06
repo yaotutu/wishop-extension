@@ -62,6 +62,11 @@ test('product copy parameters are configured before draft preview generation', (
   assert.match(pageSource, /autoSourceBinding/);
   assert.match(pageSource, /创建草稿后，把当前淘宝链接自动关联到微信商品/);
   assert.match(pageSource, /expressTemplateId/);
+  assert.match(pageSource, /setDefaultFreightTemplateMutation/);
+  assert.match(pageSource, /设为默认/);
+  assert.match(pageSource, /默认运费模板已保存/);
+  assert.match(pageSource, /isFieldTouched\('expressTemplateId'\)/);
+  assert.match(pageSource, /defaultSettingsQuery\.data\?\.expressTemplateId \|\| currentValues\.expressTemplateId \|\| firstFreightTemplate/);
   assert.match(pageSource, /afterSaleAddressId/);
   assert.match(pageSource, /defaultStockNum/);
   assert.match(pageSource, /getDefaultSettings\(accountId\)/);

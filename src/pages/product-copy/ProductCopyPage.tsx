@@ -248,6 +248,16 @@ function buildDefaultSettingsPatch(values: ProductCopyParameterFormValues): Prod
   };
 }
 
+function buildDefaultFreightTemplatePatch(
+  settings: ProductCopyDefaultSettings | null | undefined,
+  expressTemplateId: string,
+): ProductCopyDefaultSettingsPatch {
+  return {
+    ...buildDefaultSettingsPatch(defaultParameterValues(settings)),
+    expressTemplateId,
+  };
+}
+
 function manualCategorySuggestion(copyId: string, category: ProductCopyCategoryOption): WxProductDraftSuggestionResult {
   return {
     copyId,
@@ -404,6 +414,7 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
   const [form] = Form.useForm<{ url: string }>();
   const [parameterForm] = Form.useForm<ProductCopyParameterFormValues>();
   const queryClient = useQueryClient();
+  const defaultSettingsAppliedAccountRef = useRef<string | null>(null);
   const [currentStep, setCurrentStep] = useState<ProductCopyWizardStep>('input');
   const [activeSession, setActiveSession] = useState<ProductCopySession | null>(null);
   const [copyRecord, setCopyRecord] = useState<ProductCopyRecord | null>(null);
@@ -417,6 +428,7 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
   const activeCollectionUrl = activeSession?.url || '';
   const autoCategoryMatch = Form.useWatch('autoCategoryMatch', parameterForm) ?? true;
   const duplicateFilterEnabled = Form.useWatch('duplicateFilter', parameterForm) ?? true;
+  const selectedExpressTemplateId = Form.useWatch('expressTemplateId', parameterForm);
 
   const parameterOptionsQuery = useQuery({
     queryKey: queryKeys.productCopy.draftParameterOptions(accountId),
@@ -448,11 +460,12 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
   }, [parameterOptionsQuery.data?.categories]);
 
   const freightTemplateOptions = useMemo(() => {
+    const defaultExpressTemplateId = defaultSettingsQuery.data?.expressTemplateId;
     return (parameterOptionsQuery.data?.freightTemplates || []).map(template => ({
       value: template.templateId,
-      label: template.label,
+      label: template.templateId === defaultExpressTemplateId ? `${template.label}（默认）` : template.label,
     }));
-  }, [parameterOptionsQuery.data?.freightTemplates]);
+  }, [defaultSettingsQuery.data?.expressTemplateId, parameterOptionsQuery.data?.freightTemplates]);
 
   const afterSaleAddressOptions = useMemo(() => {
     return (parameterOptionsQuery.data?.afterSaleAddresses || []).map(address => ({
@@ -478,6 +491,26 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
     },
   });
 
+  const setDefaultFreightTemplateMutation = useMutation({
+    mutationFn: async () => {
+      const expressTemplateId = parameterForm.getFieldValue('expressTemplateId');
+      if (!expressTemplateId) throw new Error('请先选择运费模板');
+      return extensionApi.productCopy.saveDefaultSettings(
+        accountId,
+        buildDefaultFreightTemplatePatch(defaultSettingsQuery.data, expressTemplateId),
+      );
+    },
+    onSuccess: settings => {
+      queryClient.setQueryData(queryKeys.productCopy.defaultSettings(accountId), settings);
+      parameterForm.setFieldsValue({ expressTemplateId: settings.expressTemplateId });
+      message.success('默认运费模板已保存');
+    },
+    onError: error => {
+      const detail = error instanceof Error ? error.message : '保存默认运费模板失败';
+      message.error(detail);
+    },
+  });
+
   const wizardItems = useMemo<React.ComponentProps<typeof Steps>['items']>(() => [
     { title: '输入链接' },
     { title: '采集预览' },
@@ -487,6 +520,7 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
   ], []);
 
   const resetWizard = useCallback(() => {
+    defaultSettingsAppliedAccountRef.current = null;
     form.resetFields();
     parameterForm.setFieldsValue(defaultParameterValues());
     setCurrentStep('input');
@@ -506,22 +540,28 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
 
   useEffect(() => {
     if (!defaultSettingsQuery.data) return;
+    if (defaultSettingsAppliedAccountRef.current === accountId) return;
+    defaultSettingsAppliedAccountRef.current = accountId;
     parameterForm.setFieldsValue(defaultParameterValues(defaultSettingsQuery.data));
-  }, [defaultSettingsQuery.data, parameterForm]);
+  }, [accountId, defaultSettingsQuery.data, parameterForm]);
 
   useEffect(() => {
     const options = parameterOptionsQuery.data;
     if (!options) return;
     const currentValues = parameterForm.getFieldsValue();
     const firstFreightTemplate = options.freightTemplates[0]?.templateId;
+    const hasUserSelectedFreightTemplate = parameterForm.isFieldTouched('expressTemplateId');
+    const preferredFreightTemplateId = hasUserSelectedFreightTemplate
+      ? currentValues.expressTemplateId
+      : defaultSettingsQuery.data?.expressTemplateId || currentValues.expressTemplateId || firstFreightTemplate;
     const preferredAddress = options.afterSaleAddresses.find(address => address.defaultRecv)
       || options.afterSaleAddresses.find(address => address.recvAddr)
       || options.afterSaleAddresses[0];
     parameterForm.setFieldsValue({
-      expressTemplateId: currentValues.expressTemplateId || firstFreightTemplate,
+      expressTemplateId: preferredFreightTemplateId,
       afterSaleAddressId: currentValues.afterSaleAddressId || preferredAddress?.addressId,
     });
-  }, [parameterForm, parameterOptionsQuery.data]);
+  }, [defaultSettingsQuery.data?.expressTemplateId, parameterForm, parameterOptionsQuery.data]);
 
   const collectMutation = useMutation({
     mutationFn: (url: string) => extensionApi.productCopy.open({ url }),
@@ -1169,6 +1209,13 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
               </Button>
               <Button onClick={() => message.info('请在微信小店后台新增运费模板，新增后点击刷新')}>
                 添加
+              </Button>
+              <Button
+                disabled={!selectedExpressTemplateId}
+                loading={setDefaultFreightTemplateMutation.isPending}
+                onClick={() => setDefaultFreightTemplateMutation.mutate()}
+              >
+                设为默认
               </Button>
             </Space.Compact>
           </Form.Item>
