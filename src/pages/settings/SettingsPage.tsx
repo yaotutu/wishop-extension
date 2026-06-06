@@ -13,7 +13,7 @@ import {
 import wechatQrcode from '../../assets/wechat-qrcode.png';
 import douyinQrcode from '../../assets/douyin-qrcode.png';
 import type { Account, LicenseState } from '../../shared/types';
-import { DEFAULT_AI_PRODUCT_COPY_SETTINGS } from '../../shared/settings';
+import { DEFAULT_AI_SERVICE_SETTINGS } from '../../shared/settings';
 import { useAppSettingsQuery, useUpdateAppSettingsMutation } from '../../hooks/useOrderQueries';
 import type { SettingsTab } from '../../stores/dashboard-ui-preferences-store';
 import { queryKeys } from '../../query/query-keys';
@@ -31,7 +31,7 @@ const MENU_ITEMS = [
   { key: 'about', label: '关于/更新', icon: <InfoCircleOutlined /> },
   { key: 'product', label: '产品介绍', icon: <AppstoreOutlined /> },
   { key: 'license', label: '授权状态', icon: <SafetyCertificateOutlined /> },
-  { key: 'aiProductCopy', label: 'AI 复制商品', icon: <RobotOutlined /> },
+  { key: 'aiService', label: 'AI 服务', icon: <RobotOutlined /> },
   { key: 'baseData', label: '基础数据', icon: <CloudDownloadOutlined /> },
   { key: 'contact', label: '联系我们', icon: <CustomerServiceOutlined /> },
 ];
@@ -164,58 +164,67 @@ const LicensePanel: React.FC = () => {
   );
 };
 
-interface AiProductCopyFormValues {
-  siliconFlowApiKey: string;
-  siliconFlowModel: string;
+interface AiServiceFormValues {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
 }
 
-const AiProductCopyPanel: React.FC = () => {
-  const [form] = Form.useForm<AiProductCopyFormValues>();
+const AiServicePanel: React.FC = () => {
+  const [form] = Form.useForm<AiServiceFormValues>();
   const settingsQuery = useAppSettingsQuery();
   const updateSettingsMutation = useUpdateAppSettingsMutation();
 
   useEffect(() => {
-    const settings = settingsQuery.data?.aiProductCopy;
+    const settings = settingsQuery.data?.aiService;
     if (!settings) return;
     form.setFieldsValue(settings);
-  }, [form, settingsQuery.data?.aiProductCopy]);
+  }, [form, settingsQuery.data?.aiService]);
 
-  const save = async (values: AiProductCopyFormValues) => {
+  const save = async (values: AiServiceFormValues) => {
     await updateSettingsMutation.mutateAsync({
-      aiProductCopy: {
-        siliconFlowApiKey: values.siliconFlowApiKey,
-        siliconFlowModel: values.siliconFlowModel,
+      aiService: {
+        baseUrl: values.baseUrl,
+        apiKey: values.apiKey,
+        model: values.model,
       },
     });
-    message.success('AI 复制商品设置已保存');
+    message.success('AI 服务设置已保存');
   };
 
   return (
-    <Card title="AI 复制商品">
+    <Card title="AI 服务">
       <Alert
         type="info"
         showIcon
         style={{ marginBottom: 16 }}
-        title="SiliconFlow Key 仅保存在本机浏览器存储"
+        title="OpenAI 兼容配置仅保存在本机浏览器存储"
+        description="复制商品等模块会统一调用这里配置的 AI 服务。地址请填写 API 根地址，例如 https://api.openai.com/v1。"
       />
       <Form
         form={form}
         layout="vertical"
-        initialValues={DEFAULT_AI_PRODUCT_COPY_SETTINGS}
+        initialValues={DEFAULT_AI_SERVICE_SETTINGS}
         onFinish={save}
         style={{ maxWidth: 620 }}
       >
         <Form.Item
-          name="siliconFlowApiKey"
-          label="SiliconFlow API Key"
+          name="baseUrl"
+          label="OpenAI 兼容地址"
         >
-          <Input.Password allowClear placeholder="sk-..." />
+          <Input allowClear placeholder="https://api.openai.com/v1" />
         </Form.Item>
         <Form.Item
-          name="siliconFlowModel"
-          label="模型"
+          name="model"
+          label="模型名称"
         >
-          <Input allowClear placeholder={DEFAULT_AI_PRODUCT_COPY_SETTINGS.siliconFlowModel} />
+          <Input allowClear placeholder="gpt-4o-mini" />
+        </Form.Item>
+        <Form.Item
+          name="apiKey"
+          label="API Key"
+        >
+          <Input.Password allowClear placeholder="sk-..." />
         </Form.Item>
         <Button
           type="primary"
@@ -376,7 +385,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ accounts, activeAccountId, 
         {activeTab === 'about' && <AboutPanel />}
         {activeTab === 'product' && <ProductPanel />}
         {activeTab === 'license' && <LicensePanel />}
-        {activeTab === 'aiProductCopy' && <AiProductCopyPanel />}
+        {activeTab === 'aiService' && <AiServicePanel />}
         {activeTab === 'baseData' && <BaseDataPanel accounts={accounts} activeAccountId={activeAccountId} />}
         {activeTab === 'contact' && <ContactPanel />}
       </div>

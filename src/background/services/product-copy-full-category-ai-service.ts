@@ -4,15 +4,15 @@ import type {
   CreateWxProductDraftSuggestionInput,
   WxProductDraftSuggestionResult,
 } from '../../shared/types.ts';
-import type { SiliconFlowJsonCompletionInput } from '../ai/siliconflow-client.ts';
-import { createSiliconFlowJsonCompletion, createSiliconFlowTimeoutFetcher } from '../ai/siliconflow-client.ts';
+import type { OpenAiCompatibleJsonCompletionInput } from '../ai/openai-compatible-client.ts';
+import { createOpenAiCompatibleJsonCompletion, createOpenAiCompatibleTimeoutFetcher } from '../ai/openai-compatible-client.ts';
 import { recordActivityCompleted, recordActivityFailed, recordActivityStarted } from '../activity-logs/activity-log-service.ts';
 import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 import { selectWxCategoryWithTwoStageAi } from './product-copy-category-ai-selection.ts';
 import type { RuntimeCategoryPath } from './product-copy-category-shortlist.ts';
 import { loadRuntimeWxCategoryPaths } from './wxshop-category-path-cache.ts';
 
-type CompleteJson = (input: SiliconFlowJsonCompletionInput) => Promise<unknown>;
+type CompleteJson = (input: OpenAiCompatibleJsonCompletionInput) => Promise<unknown>;
 
 interface NormalizedInput {
   accountId: string;
@@ -85,31 +85,33 @@ export async function createWxProductFullCategorySuggestion(
     const categoryPaths = await loadCategoryPaths();
     if (categoryPaths.length === 0) throw new Error('微信小店类目缓存为空，请先生成全量类目缓存');
 
-    logger.info('开始读取 AI 设置');
+    logger.info('开始读取全局 AI 服务设置');
     const settings = await (dependencies.getSettings || defaultGetSettings)();
-    const aiSettings = settings.aiProductCopy;
-    if (!aiSettings.siliconFlowApiKey.trim()) throw new Error('请先在设置里填写 SiliconFlow API Key');
+    const aiSettings = settings.aiService;
+    if (!aiSettings.apiKey.trim()) throw new Error('请先在设置里填写 AI 服务 API Key');
+    if (!aiSettings.baseUrl.trim()) throw new Error('请先在设置里填写 OpenAI 兼容地址');
 
-    logger.info('开始调用 SiliconFlow 进行两轮全量类目选择', {
+    logger.info('开始调用 AI 服务进行两轮全量类目选择', {
       categoryCount: categoryPaths.length,
       timeoutMs: LLM_TIMEOUT_MS,
-      model: aiSettings.siliconFlowModel,
+      model: aiSettings.model,
     });
-    const completeJson = dependencies.completeJson || createSiliconFlowJsonCompletion;
+    const completeJson = dependencies.completeJson || createOpenAiCompatibleJsonCompletion;
     const selection = await selectWxCategoryWithTwoStageAi({
       copyId: input.copyId,
       listing,
       categoryPaths,
       completeJson,
-      apiKey: aiSettings.siliconFlowApiKey,
-      model: aiSettings.siliconFlowModel,
-      fetcher: dependencies.completeJson ? undefined : createSiliconFlowTimeoutFetcher({
+      baseUrl: aiSettings.baseUrl,
+      apiKey: aiSettings.apiKey,
+      model: aiSettings.model,
+      fetcher: dependencies.completeJson ? undefined : createOpenAiCompatibleTimeoutFetcher({
         timeoutMs: LLM_TIMEOUT_MS,
-        timeoutMessage: `SiliconFlow 类目选择请求超过 ${Math.round(LLM_TIMEOUT_MS / 1000)} 秒未返回，已取消`,
+        timeoutMessage: `AI 服务类目选择请求超过 ${Math.round(LLM_TIMEOUT_MS / 1000)} 秒未返回，已取消`,
       }),
     });
     const result = selection.result;
-    logger.info('SiliconFlow 两轮类目选择完成', {
+    logger.info('AI 服务两轮类目选择完成', {
       categoryCount: categoryPaths.length,
       localCandidateCount: selection.localCandidateCount,
       aiScreenedCandidateCount: selection.aiScreenedCandidateCount,

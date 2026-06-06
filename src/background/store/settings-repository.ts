@@ -17,9 +17,9 @@ export async function updateAppSettings(patch: AppSettingsPatch): Promise<AppSet
       ...current.shipmentCheck,
       ...patch.shipmentCheck,
     },
-    aiProductCopy: {
-      ...current.aiProductCopy,
-      ...patch.aiProductCopy,
+    aiService: {
+      ...current.aiService,
+      ...patch.aiService,
     },
   });
   await updateAccountWorkspace(APP_SETTINGS_WORKSPACE_ID, workspace => {

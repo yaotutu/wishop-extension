@@ -12,22 +12,34 @@ export interface ShipmentCheckSettings {
   failureCooldownMinutes: number;
 }
 
-export interface AiProductCopySettings {
-  /** SiliconFlow API Key 仅保存在本地 chrome.storage，不进入日志和草稿请求。 */
-  siliconFlowApiKey: string;
-  /** 默认使用 SiliconFlow 文档里的聊天补全示例模型，设置页允许用户按账号额度自行替换。 */
-  siliconFlowModel: string;
+export interface AiServiceSettings {
+  /** OpenAI 兼容接口地址仅保存在本地配置中，由后台统一拼接 chat completions 路径。 */
+  baseUrl: string;
+  /** API Key 只允许进入后台请求 Authorization header，不得进入日志、通知或业务数据。 */
+  apiKey: string;
+  /** 模型名称由用户按所选 OpenAI 兼容服务填写，系统不替用户猜测供应商模型。 */
+  model: string;
 }
 
 export interface AppSettings {
   shipmentCheck: ShipmentCheckSettings;
-  aiProductCopy: AiProductCopySettings;
+  aiService: AiServiceSettings;
 }
 
 export interface AppSettingsPatch {
   shipmentCheck?: Partial<ShipmentCheckSettings>;
-  aiProductCopy?: Partial<AiProductCopySettings>;
+  aiService?: Partial<AiServiceSettings>;
 }
+
+interface LegacyAiProductCopySettings {
+  siliconFlowApiKey?: string;
+  siliconFlowModel?: string;
+}
+
+type LegacyAppSettingsPatch = AppSettingsPatch & {
+  aiProductCopy?: Partial<LegacyAiProductCopySettings>;
+  aiListing?: Partial<LegacyAiProductCopySettings>;
+};
 
 export const MAX_SHIPMENT_CHECK_ORDER_LOOKBACK_DAYS = 7;
 
@@ -45,14 +57,15 @@ export const DEFAULT_SHIPMENT_CHECK_SETTINGS: ShipmentCheckSettings = {
   failureCooldownMinutes: 60,
 };
 
-export const DEFAULT_AI_PRODUCT_COPY_SETTINGS: AiProductCopySettings = {
-  siliconFlowApiKey: '',
-  siliconFlowModel: 'Qwen/QwQ-32B',
+export const DEFAULT_AI_SERVICE_SETTINGS: AiServiceSettings = {
+  baseUrl: '',
+  apiKey: '',
+  model: '',
 };
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   shipmentCheck: DEFAULT_SHIPMENT_CHECK_SETTINGS,
-  aiProductCopy: DEFAULT_AI_PRODUCT_COPY_SETTINGS,
+  aiService: DEFAULT_AI_SERVICE_SETTINGS,
 };
 
 function boundedNumber(value: unknown, fallback: number, min: number, max: number): number {
@@ -102,19 +115,35 @@ function normalizeOptionalText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-export function normalizeAiProductCopySettings(input?: Partial<AiProductCopySettings>): AiProductCopySettings {
-  const model = normalizeOptionalText(input?.siliconFlowModel);
+function normalizeBaseUrl(value: unknown): string {
+  return normalizeOptionalText(value).replace(/\/+$/u, '');
+}
+
+function normalizeLegacyAiServiceSettings(input?: Partial<LegacyAiProductCopySettings>): AiServiceSettings | null {
+  if (!input) return null;
+  const apiKey = normalizeOptionalText(input.siliconFlowApiKey);
+  const model = normalizeOptionalText(input.siliconFlowModel);
   return {
-    siliconFlowApiKey: normalizeOptionalText(input?.siliconFlowApiKey),
-    siliconFlowModel: model || DEFAULT_AI_PRODUCT_COPY_SETTINGS.siliconFlowModel,
+    baseUrl: 'https://api.siliconflow.cn/v1',
+    apiKey,
+    model: model || 'Qwen/QwQ-32B',
   };
 }
 
-export function normalizeAppSettings(input?: AppSettingsPatch): AppSettings {
-  // 只在存储迁移和旧本地数据归一化时读取 aiListing，运行期设置统一使用 aiProductCopy。
-  const legacyInput = input as AppSettingsPatch & { aiListing?: Partial<AiProductCopySettings> } | undefined;
+export function normalizeAiServiceSettings(input?: Partial<AiServiceSettings>): AiServiceSettings {
+  return {
+    baseUrl: normalizeBaseUrl(input?.baseUrl),
+    apiKey: normalizeOptionalText(input?.apiKey),
+    model: normalizeOptionalText(input?.model),
+  };
+}
+
+export function normalizeAppSettings(input?: AppSettingsPatch | LegacyAppSettingsPatch): AppSettings {
+  // 旧版本把 AI 配置挂在复制商品或更早的 listing 语义下；归一化时统一提升到系统级 aiService。
+  const legacyInput = input as LegacyAppSettingsPatch | undefined;
+  const legacyAiService = normalizeLegacyAiServiceSettings(legacyInput?.aiProductCopy || legacyInput?.aiListing);
   return {
     shipmentCheck: normalizeShipmentCheckSettings(input?.shipmentCheck),
-    aiProductCopy: normalizeAiProductCopySettings(input?.aiProductCopy || legacyInput?.aiListing),
+    aiService: normalizeAiServiceSettings(input?.aiService || legacyAiService || DEFAULT_AI_SERVICE_SETTINGS),
   };
 }

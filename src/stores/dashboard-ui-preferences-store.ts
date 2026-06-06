@@ -3,7 +3,7 @@ import { create } from 'zustand';
 export type DashboardModuleType = 'orders' | 'storeManagement' | 'productCopy' | 'commonFunctions' | 'scheduledJobs' | 'violation' | 'settings';
 export type ProductReviewScope = 'global' | 'account';
 export type ProductReviewGlobalView = 'tasks' | 'rules';
-export type SettingsTab = 'about' | 'product' | 'license' | 'aiProductCopy' | 'baseData' | 'contact';
+export type SettingsTab = 'about' | 'product' | 'license' | 'aiService' | 'baseData' | 'contact';
 
 interface DashboardUiPreferences {
   activeModule: DashboardModuleType;
@@ -31,10 +31,13 @@ const DEFAULT_PREFERENCES: DashboardUiPreferences = {
 const MODULES = new Set<DashboardModuleType>(['orders', 'storeManagement', 'productCopy', 'commonFunctions', 'scheduledJobs', 'violation', 'settings']);
 const REVIEW_SCOPES = new Set<ProductReviewScope>(['global', 'account']);
 const REVIEW_GLOBAL_VIEWS = new Set<ProductReviewGlobalView>(['tasks', 'rules']);
-const SETTINGS_TABS = new Set<SettingsTab>(['about', 'product', 'license', 'aiProductCopy', 'baseData', 'contact']);
+const SETTINGS_TABS = new Set<SettingsTab>(['about', 'product', 'license', 'aiService', 'baseData', 'contact']);
 
 function parsePreferences(value: unknown): DashboardUiPreferences {
   const saved = value as Partial<DashboardUiPreferences> | undefined;
+  const savedSettingsTab = (saved as { settingsTab?: string } | undefined)?.settingsTab;
+  // 旧版本设置页把 AI 配置称为 AI 复制商品；本地偏好读取时静默落到新的系统级 AI 服务页。
+  const normalizedSettingsTab = savedSettingsTab === 'aiProductCopy' ? 'aiService' : savedSettingsTab;
   return {
     activeModule: saved?.activeModule && MODULES.has(saved.activeModule)
       ? saved.activeModule
@@ -45,8 +48,8 @@ function parsePreferences(value: unknown): DashboardUiPreferences {
     productReviewGlobalView: saved?.productReviewGlobalView && REVIEW_GLOBAL_VIEWS.has(saved.productReviewGlobalView)
       ? saved.productReviewGlobalView
       : DEFAULT_PREFERENCES.productReviewGlobalView,
-    settingsTab: saved?.settingsTab && SETTINGS_TABS.has(saved.settingsTab)
-      ? saved.settingsTab
+    settingsTab: normalizedSettingsTab && SETTINGS_TABS.has(normalizedSettingsTab as SettingsTab)
+      ? normalizedSettingsTab as SettingsTab
       : DEFAULT_PREFERENCES.settingsTab,
   };
 }

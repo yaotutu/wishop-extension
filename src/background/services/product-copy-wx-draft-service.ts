@@ -10,7 +10,7 @@ import type {
   WxProductDraftBoxPreparedRequest,
 } from '../../shared/types.ts';
 import type { AppSettings } from '../../shared/settings.ts';
-import type { SiliconFlowJsonCompletionInput } from '../ai/siliconflow-client.ts';
+import type { OpenAiCompatibleJsonCompletionInput } from '../ai/openai-compatible-client.ts';
 import type { WxShopCategoryProductRule, WxShopListingClient } from '../wxshop/listing/types.ts';
 import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 import {
@@ -31,7 +31,7 @@ import {
 import { getCachedWxCategoryProductRule } from './wx-category-product-rule-cache-service.ts';
 
 type ActivityRecorder = (input: Record<string, unknown>) => Promise<unknown>;
-type CompleteJson = (input: SiliconFlowJsonCompletionInput) => Promise<unknown>;
+type CompleteJson = (input: OpenAiCompatibleJsonCompletionInput) => Promise<unknown>;
 
 const DEFAULT_DRAFT_STOCK_NUM = 999;
 

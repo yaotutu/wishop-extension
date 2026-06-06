@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { selectWxCategoryWithTwoStageAi } from '../src/background/services/product-copy-category-ai-selection.ts';
-import type { SiliconFlowJsonCompletionInput } from '../src/background/ai/siliconflow-client.ts';
+import type { OpenAiCompatibleJsonCompletionInput } from '../src/background/ai/openai-compatible-client.ts';
 import { sampleProductCopyRecord } from './product-copy-fixtures.ts';
 
 function fillerCategory(index: number) {
@@ -31,7 +31,7 @@ function chargerCategory() {
   };
 }
 
-test('selects WeChat category with two SiliconFlow rounds after local full-category retrieval', async () => {
+test('selects WeChat category with two AI service rounds after local full-category retrieval', async () => {
   const listing = sampleProductCopyRecord({
     title: '适用kindle充电传输数据线paperwhite电子书配件',
   });
@@ -42,14 +42,15 @@ test('selects WeChat category with two SiliconFlow rounds after local full-categ
     target,
     secondCandidate,
   ];
-  const calls: SiliconFlowJsonCompletionInput[] = [];
+  const calls: OpenAiCompatibleJsonCompletionInput[] = [];
 
   const selection = await selectWxCategoryWithTwoStageAi({
     copyId: listing.id,
     listing,
     categoryPaths,
+    baseUrl: 'https://llm.example.test/v1',
     apiKey: 'sk-test',
-    model: 'Qwen/QwQ-32B',
+    model: 'gpt-compatible',
     completeJson: async input => {
       calls.push(input);
       if (calls.length === 1) {

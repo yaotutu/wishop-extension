@@ -3,14 +3,14 @@ import type {
   ProductCopyRecord,
   WxProductDraftAttribute,
 } from '../../shared/types.ts';
-import type { SiliconFlowChatMessage, SiliconFlowJsonCompletionInput } from '../ai/siliconflow-client.ts';
-import { createSiliconFlowJsonCompletion, createSiliconFlowTimeoutFetcher } from '../ai/siliconflow-client.ts';
+import type { OpenAiCompatibleChatMessage, OpenAiCompatibleJsonCompletionInput } from '../ai/openai-compatible-client.ts';
+import { createOpenAiCompatibleJsonCompletion, createOpenAiCompatibleTimeoutFetcher } from '../ai/openai-compatible-client.ts';
 import type {
   WxShopCategoryProductAttrRule,
   WxShopCategoryProductRule,
 } from '../wxshop/listing/types.ts';
 
-type CompleteJson = (input: SiliconFlowJsonCompletionInput) => Promise<unknown>;
+type CompleteJson = (input: OpenAiCompatibleJsonCompletionInput) => Promise<unknown>;
 
 export interface GenerateRuleDrivenWxProductAttributesInput {
   copyId: string;
@@ -108,7 +108,7 @@ function productFactsForPrompt(input: GenerateRuleDrivenWxProductAttributesInput
  * 参数补齐只把“必填规则”交给 AI。可选参数不进入本轮输出范围，
  * 这样可以把提交给微信的参数面控制在真正会阻断发品的字段上。
  */
-function buildAttributeMessages(input: GenerateRuleDrivenWxProductAttributesInput): SiliconFlowChatMessage[] {
+function buildAttributeMessages(input: GenerateRuleDrivenWxProductAttributesInput): OpenAiCompatibleChatMessage[] {
   const requiredRules = requiredProductRules(input.categoryRule);
   return [
     {
@@ -147,7 +147,7 @@ function normalizeWarnings(value: unknown): string[] {
 function normalizeAiAttrs(payload: unknown): WxProductDraftAttribute[] {
   const record = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
   if (!Array.isArray(record.attrs)) {
-    throw new Error('SiliconFlow 商品参数补齐结果缺少 attrs 数组');
+    throw new Error('AI 服务商品参数补齐结果缺少 attrs 数组');
   }
 
   const attrs: WxProductDraftAttribute[] = [];
@@ -157,7 +157,7 @@ function normalizeAiAttrs(payload: unknown): WxProductDraftAttribute[] {
     const attrKey = normalizeText(attrRecord.attrKey);
     const attrValue = normalizeText(attrRecord.attrValue);
     if (!attrKey || !attrValue) {
-      throw new Error('SiliconFlow 商品参数补齐结果包含空参数名或空参数值');
+      throw new Error('AI 服务商品参数补齐结果包含空参数名或空参数值');
     }
     attrs.push({ attrKey, attrValue });
   }
@@ -221,8 +221,8 @@ function validateRuleDrivenAttrs(input: {
     const attrKey = normalizeText(attr.attrKey);
     const attrValue = normalizeText(attr.attrValue);
     const rule = rulesByName.get(attrKey);
-    if (!rule) throw new Error(`SiliconFlow 返回了类目规则外的商品参数「${attrKey}」`);
-    if (attrsByName.has(attrKey)) throw new Error(`SiliconFlow 重复返回商品参数「${attrKey}」`);
+    if (!rule) throw new Error(`AI 服务返回了类目规则外的商品参数「${attrKey}」`);
+    if (attrsByName.has(attrKey)) throw new Error(`AI 服务重复返回商品参数「${attrKey}」`);
     validateEnumValue(rule, attrValue);
     validateUnitValue(rule, attrValue);
     attrsByName.set(attrKey, { attrKey, attrValue });
@@ -230,7 +230,7 @@ function validateRuleDrivenAttrs(input: {
 
   const missingRequiredNames = requiredNames.filter(name => !attrsByName.has(name));
   if (missingRequiredNames.length > 0) {
-    throw new Error(`SiliconFlow 未补齐微信必填商品参数：${missingRequiredNames.join('、')}`);
+    throw new Error(`AI 服务未补齐微信必填商品参数：${missingRequiredNames.join('、')}`);
   }
 
   return requiredNames.map(name => attrsByName.get(name)).filter((attr): attr is WxProductDraftAttribute => Boolean(attr));
@@ -264,25 +264,27 @@ export async function generateRuleDrivenWxProductAttributes(
   }
 
   const settings = await (dependencies.getSettings || defaultGetSettings)();
-  const aiSettings = settings.aiProductCopy;
-  if (!aiSettings.siliconFlowApiKey.trim()) throw new Error('请先在设置里填写 SiliconFlow API Key');
+  const aiSettings = settings.aiService;
+  if (!aiSettings.apiKey.trim()) throw new Error('请先在设置里填写 AI 服务 API Key');
+  if (!aiSettings.baseUrl.trim()) throw new Error('请先在设置里填写 OpenAI 兼容地址');
 
   let payload: unknown;
   try {
-    const completeJson = dependencies.completeJson || createSiliconFlowJsonCompletion;
+    const completeJson = dependencies.completeJson || createOpenAiCompatibleJsonCompletion;
     payload = await completeJson({
-      apiKey: aiSettings.siliconFlowApiKey,
-      model: aiSettings.siliconFlowModel,
+      baseUrl: aiSettings.baseUrl,
+      apiKey: aiSettings.apiKey,
+      model: aiSettings.model,
       messages: buildAttributeMessages(input),
       temperature: 0.1,
       maxTokens: 1800,
-      fetcher: dependencies.completeJson ? undefined : createSiliconFlowTimeoutFetcher({
+      fetcher: dependencies.completeJson ? undefined : createOpenAiCompatibleTimeoutFetcher({
         timeoutMs: LLM_TIMEOUT_MS,
-        timeoutMessage: `SiliconFlow 商品参数补齐请求超过 ${Math.round(LLM_TIMEOUT_MS / 1000)} 秒未返回，已取消`,
+        timeoutMessage: `AI 服务商品参数补齐请求超过 ${Math.round(LLM_TIMEOUT_MS / 1000)} 秒未返回，已取消`,
       }),
     });
   } catch (error) {
-    throw new Error(`SiliconFlow 商品参数补齐失败：${errorMessage(error, '未知错误')}`);
+    throw new Error(`AI 服务商品参数补齐失败：${errorMessage(error, '未知错误')}`);
   }
 
   const attrs = validateRuleDrivenAttrs({

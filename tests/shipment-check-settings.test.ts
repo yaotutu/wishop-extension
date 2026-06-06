@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  DEFAULT_AI_PRODUCT_COPY_SETTINGS,
+  DEFAULT_AI_SERVICE_SETTINGS,
   DEFAULT_SHIPMENT_CHECK_SETTINGS,
   normalizeAppSettings,
-  normalizeAiProductCopySettings,
+  normalizeAiServiceSettings,
   normalizeShipmentCheckSettings,
 } from '../src/shared/settings.ts';
 
@@ -52,25 +52,45 @@ test('app settings normalize nested shipment check settings', () => {
   assert.equal(settings.shipmentCheck.maxChecksPerAccountPerWindow, 3);
 });
 
-test('AI product copy settings keep SiliconFlow credentials local and normalize optional defaults', () => {
-  const settings = normalizeAiProductCopySettings({
-    siliconFlowApiKey: '  sk-test-123  ',
-    siliconFlowModel: '  Qwen/QwQ-32B  ',
+test('AI service settings keep OpenAI-compatible credentials local and normalize text fields', () => {
+  const settings = normalizeAiServiceSettings({
+    baseUrl: '  https://llm.example.test/v1/  ',
+    apiKey: '  sk-test-123  ',
+    model: '  gpt-compatible  ',
   });
 
-  assert.equal(settings.siliconFlowApiKey, 'sk-test-123');
-  assert.equal(settings.siliconFlowModel, 'Qwen/QwQ-32B');
+  assert.equal(settings.baseUrl, 'https://llm.example.test/v1');
+  assert.equal(settings.apiKey, 'sk-test-123');
+  assert.equal(settings.model, 'gpt-compatible');
 });
 
-test('AI product copy settings fall back to a documented SiliconFlow chat model when model is empty', () => {
+test('AI service settings default to empty values until the user configures a compatible endpoint', () => {
   const settings = normalizeAppSettings({
-    aiProductCopy: {
-      siliconFlowApiKey: '',
-      siliconFlowModel: '',
+    aiService: {
+      baseUrl: '',
+      apiKey: '',
+      model: '',
     },
   });
 
-  assert.deepEqual(settings.aiProductCopy, DEFAULT_AI_PRODUCT_COPY_SETTINGS);
+  assert.deepEqual(settings.aiService, DEFAULT_AI_SERVICE_SETTINGS);
+});
+
+test('app settings migrate legacy AI product copy settings into the global AI service shape', () => {
+  const settings = normalizeAppSettings({
+    aiProductCopy: {
+      siliconFlowApiKey: '  sk-legacy  ',
+      siliconFlowModel: '  Qwen/QwQ-32B  ',
+    },
+  } as Parameters<typeof normalizeAppSettings>[0] & {
+    aiProductCopy: { siliconFlowApiKey: string; siliconFlowModel: string };
+  });
+
+  assert.deepEqual(settings.aiService, {
+    baseUrl: 'https://api.siliconflow.cn/v1',
+    apiKey: 'sk-legacy',
+    model: 'Qwen/QwQ-32B',
+  });
 });
 
 test('shipment check dispatch delay stays inside the configured window', () => {

@@ -3,16 +3,17 @@ import type {
   WxProductCategoryCandidate,
   WxProductDraftSuggestionResult,
 } from '../../shared/types.ts';
-import type { SiliconFlowChatMessage, SiliconFlowJsonCompletionInput } from '../ai/siliconflow-client.ts';
+import type { OpenAiCompatibleChatMessage, OpenAiCompatibleJsonCompletionInput } from '../ai/openai-compatible-client.ts';
 import { shortlistCategoryPaths, type RuntimeCategoryPath } from './product-copy-category-shortlist.ts';
 
-type CompleteJson = (input: SiliconFlowJsonCompletionInput) => Promise<unknown>;
+type CompleteJson = (input: OpenAiCompatibleJsonCompletionInput) => Promise<unknown>;
 
 interface SelectCategoryWithAiInput {
   copyId: string;
   listing: ProductCopyRecord;
   categoryPaths: RuntimeCategoryPath[];
   completeJson: CompleteJson;
+  baseUrl: string;
   apiKey: string;
   model: string;
   fetcher?: typeof fetch;
@@ -92,7 +93,7 @@ function productFactsForPrompt(
 function buildScreeningMessages(
   listing: ProductCopyRecord,
   categoryPaths: RuntimeCategoryPath[],
-): SiliconFlowChatMessage[] {
+): OpenAiCompatibleChatMessage[] {
   const facts = productFactsForPrompt(listing, categoryPaths);
   return [
     {
@@ -115,7 +116,7 @@ function buildScreeningMessages(
 function buildFinalMessages(
   listing: ProductCopyRecord,
   categoryPaths: RuntimeCategoryPath[],
-): SiliconFlowChatMessage[] {
+): OpenAiCompatibleChatMessage[] {
   const facts = productFactsForPrompt(listing, categoryPaths);
   return [
     {
@@ -219,6 +220,7 @@ export async function selectWxCategoryWithTwoStageAi(
   let screeningPayload: unknown;
   try {
     screeningPayload = await input.completeJson({
+      baseUrl: input.baseUrl,
       apiKey: input.apiKey,
       model: input.model,
       messages: buildScreeningMessages(input.listing, localCandidates),
@@ -227,7 +229,7 @@ export async function selectWxCategoryWithTwoStageAi(
       fetcher: input.fetcher,
     });
   } catch (error) {
-    throw new Error(`SiliconFlow 类目第一轮筛选失败：${errorMessage(error, '未知错误')}`);
+    throw new Error(`AI 服务类目第一轮筛选失败：${errorMessage(error, '未知错误')}`);
   }
 
   const screenedCandidates = normalizeScreenedCategoryPaths(screeningPayload, localCandidates);
@@ -235,6 +237,7 @@ export async function selectWxCategoryWithTwoStageAi(
   let finalPayload: unknown;
   try {
     finalPayload = await input.completeJson({
+      baseUrl: input.baseUrl,
       apiKey: input.apiKey,
       model: input.model,
       messages: buildFinalMessages(input.listing, screenedCandidates),
@@ -243,7 +246,7 @@ export async function selectWxCategoryWithTwoStageAi(
       fetcher: input.fetcher,
     });
   } catch (error) {
-    throw new Error(`SiliconFlow 类目第二轮终选失败：${errorMessage(error, '未知错误')}`);
+    throw new Error(`AI 服务类目第二轮终选失败：${errorMessage(error, '未知错误')}`);
   }
 
   return {

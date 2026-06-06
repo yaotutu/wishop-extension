@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { ProductCopyRecord } from '../src/shared/types.ts';
 import { DEFAULT_APP_SETTINGS, type AppSettings } from '../src/shared/settings.ts';
-import type { SiliconFlowJsonCompletionInput } from '../src/background/ai/siliconflow-client.ts';
+import type { OpenAiCompatibleJsonCompletionInput } from '../src/background/ai/openai-compatible-client.ts';
 import {
   createPreparedWxDraftBoxProduct,
   createWxDraftBoxProductFromCopyRecord,
@@ -45,9 +45,10 @@ async function emptyCachedCategoryProductRule(catId: string): Promise<WxShopCate
 function aiSettings(): AppSettings {
   return {
     ...DEFAULT_APP_SETTINGS,
-    aiProductCopy: {
-      siliconFlowApiKey: 'sk-test',
-      siliconFlowModel: 'Qwen/QwQ-32B',
+    aiService: {
+      baseUrl: 'https://llm.example.test/v1',
+      apiKey: 'sk-test',
+      model: 'gpt-compatible',
     },
   };
 }
@@ -348,7 +349,7 @@ test('fills required product attributes with AI and local WeChat category rules 
   const uploaded: string[] = [];
   const addRequests: WxShopAddProductRequest[] = [];
   const client = fakeListingClient(uploaded, addRequests);
-  const aiCalls: SiliconFlowJsonCompletionInput[] = [];
+  const aiCalls: OpenAiCompatibleJsonCompletionInput[] = [];
 
   const prepared = await prepareWxDraftBoxProductFromCopyRecord({
     accountId: 'account-1',

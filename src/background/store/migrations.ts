@@ -142,6 +142,16 @@ const migrations: Record<number, Migration> = {
       storageVersion: 14,
     };
   },
+  15(store) {
+    const appSettings = store.appSettings && typeof store.appSettings === 'object'
+      ? store.appSettings as unknown as Record<string, unknown>
+      : {};
+    return {
+      ...store,
+      appSettings: normalizeAppSettings(appSettings),
+      storageVersion: 15,
+    };
+  },
 };
 
 const LEGACY_BUSINESS_KEYS = [
