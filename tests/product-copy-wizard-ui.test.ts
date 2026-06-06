@@ -71,6 +71,10 @@ test('product copy parameters are configured before draft preview generation', (
   assert.match(pageSource, /titlePrefix/);
   assert.match(pageSource, /mainImageSkipFirst/);
   assert.match(pageSource, /minSkuPriceYuan/);
+  assert.match(pageSource, /isAdvancedSettingsModalOpen/);
+  assert.match(pageSource, /<Modal[\s\S]*title="更多选项"[\s\S]*open=\{isAdvancedSettingsModalOpen\}/);
+  assert.match(pageSource, /setIsAdvancedSettingsModalOpen\(true\)/);
+  assert.doesNotMatch(pageSource, /label: '更多选项'/);
   assert.match(pageSource, /保存为默认参数/);
   assert.match(pageSource, /生成草稿预览/);
   assert.match(

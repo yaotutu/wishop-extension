@@ -412,6 +412,7 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
   const [draftSubmittedResult, setDraftSubmittedResult] = useState<WxProductDraftCreationResult | null>(null);
   const [draftDeleteResult, setDraftDeleteResult] = useState<DeleteCreatedWxDraftBoxProductResult | null>(null);
   const [fullCategoryStatus, setFullCategoryStatus] = useState('');
+  const [isAdvancedSettingsModalOpen, setIsAdvancedSettingsModalOpen] = useState(false);
 
   const activeCollectionUrl = activeSession?.url || '';
   const autoCategoryMatch = Form.useWatch('autoCategoryMatch', parameterForm) ?? true;
@@ -462,7 +463,8 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
 
   const saveDefaultSettingsMutation = useMutation({
     mutationFn: async () => {
-      const values = await parameterForm.validateFields();
+      await parameterForm.validateFields();
+      const values = parameterForm.getFieldsValue(true) as ProductCopyParameterFormValues;
       return extensionApi.productCopy.saveDefaultSettings(accountId, buildDefaultSettingsPatch(values));
     },
     onSuccess: settings => {
@@ -533,6 +535,7 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
       setDraftSubmittedResult(null);
       setDraftDeleteResult(null);
       setFullCategoryStatus('');
+      setIsAdvancedSettingsModalOpen(false);
       message.success('已打开淘宝工作页采集商品');
     },
     onError: error => {
@@ -575,7 +578,8 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
     },
     mutationFn: async () => {
       if (!copyRecord) throw new Error('请先完成商品采集');
-      const values = await parameterForm.validateFields();
+      await parameterForm.validateFields();
+      const values = parameterForm.getFieldsValue(true) as ProductCopyParameterFormValues;
       if (values.duplicateFilter) {
         const createdProduct = await extensionApi.productCopy.getCreatedProduct(accountId, copyRecord.id);
         if (createdProduct) {
@@ -838,7 +842,7 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
 
   const renderDraftPreview = (prepared: WxDraftBoxProductPrepareResult): React.ReactNode => {
     const request = prepared.request;
-    const parameterValues = parameterForm.getFieldsValue();
+    const parameterValues = parameterForm.getFieldsValue(true) as ProductCopyParameterFormValues;
     const attrRows = (request.attrs || []).map((attr, index) => ({ ...attr, key: `${attr.attr_key}:${index}` }));
     const skuRows = request.skus.map((sku, index) => ({ ...sku, key: sku.sku_code || `${index}` }));
     const attrColumns: TableProps<typeof attrRows[number]>['columns'] = [
@@ -1168,134 +1172,139 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
               </Button>
             </Space.Compact>
           </Form.Item>
-          <Collapse
-            size="small"
-            items={[
-              {
-                key: 'advanced',
-                label: '更多选项',
-                children: (
-                  <Tabs
-                    size="small"
-                    items={[
-                      {
-                        key: 'basic',
-                        label: '基础配置',
-                        children: (
-                          <>
-                            <Form.Item name="afterSaleAddressId" label="售后地址">
-                              <Select
-                                allowClear
-                                loading={parameterOptionsQuery.isFetching}
-                                options={afterSaleAddressOptions}
-                                placeholder="不选择时自动使用默认售后地址"
-                              />
-                            </Form.Item>
-                            <Form.Item name="brandId" label="品牌 ID">
-                              <Input placeholder={DEFAULT_BRAND_ID} />
-                            </Form.Item>
-                          </>
-                        ),
-                      },
-                      {
-                        key: 'pricing-content',
-                        label: '价格与内容',
-                        children: (
-                          <>
-                            <Form.Item label="售价调整">
-                              <Space.Compact block>
-                                <Space.Addon>源价 x</Space.Addon>
-                                <Form.Item name="priceMultiplier" noStyle>
-                                  <InputNumber min={0.01} precision={2} step={0.1} style={{ width: 120 }} />
-                                </Form.Item>
-                                <Space.Addon>+</Space.Addon>
-                                <Form.Item name="priceAddAmountYuan" noStyle>
-                                  <InputNumber min={0} precision={2} step={0.1} style={{ width: 120 }} />
-                                </Form.Item>
-                                <Space.Addon>元</Space.Addon>
-                                <Form.Item name="priceRounding" noStyle>
-                                  <Select
-                                    style={{ width: 140 }}
-                                    options={[
-                                      { value: 'cent', label: '保留分' },
-                                      { value: 'jiao', label: '抹到角' },
-                                      { value: 'yuan', label: '抹到元' },
-                                    ]}
-                                  />
-                                </Form.Item>
-                              </Space.Compact>
-                            </Form.Item>
-                            <Form.Item name="titlePrefix" label="标题前缀">
-                              <Input placeholder="不添加前缀" maxLength={20} showCount />
-                            </Form.Item>
-                            <Form.Item name="titleSuffix" label="标题后缀">
-                              <Input placeholder="不添加后缀" maxLength={20} showCount />
-                            </Form.Item>
-                            <Form.Item label="主图处理">
-                              <Space.Compact block>
-                                <Space.Addon>忽略前</Space.Addon>
-                                <Form.Item name="mainImageSkipFirst" noStyle>
-                                  <InputNumber min={0} precision={0} style={{ width: 120 }} />
-                                </Form.Item>
-                                <Space.Addon>张，忽略后</Space.Addon>
-                                <Form.Item name="mainImageSkipLast" noStyle>
-                                  <InputNumber min={0} precision={0} style={{ width: 120 }} />
-                                </Form.Item>
-                                <Space.Addon>张</Space.Addon>
-                              </Space.Compact>
-                            </Form.Item>
-                            <Form.Item label="详情图处理">
-                              <Space.Compact block>
-                                <Space.Addon>忽略前</Space.Addon>
-                                <Form.Item name="detailImageSkipFirst" noStyle>
-                                  <InputNumber min={0} precision={0} style={{ width: 110 }} />
-                                </Form.Item>
-                                <Space.Addon>张，忽略后</Space.Addon>
-                                <Form.Item name="detailImageSkipLast" noStyle>
-                                  <InputNumber min={0} precision={0} style={{ width: 110 }} />
-                                </Form.Item>
-                                <Space.Addon>张，最多</Space.Addon>
-                                <Form.Item name="maxDetailImages" noStyle>
-                                  <InputNumber min={0} precision={0} style={{ width: 110 }} />
-                                </Form.Item>
-                                <Space.Addon>张</Space.Addon>
-                              </Space.Compact>
-                            </Form.Item>
-                          </>
-                        ),
-                      },
-                      {
-                        key: 'sku',
-                        label: '库存与 SKU',
-                        children: (
-                          <>
-                            <Form.Item name="defaultStockNum" label="默认库存">
-                              <InputNumber min={0} precision={0} style={{ width: '100%' }} />
-                            </Form.Item>
-                            <Form.Item name="unifiedStockNum" label="统一库存">
-                              <InputNumber min={0} precision={0} placeholder="不统一库存" style={{ width: '100%' }} />
-                            </Form.Item>
-                            <Form.Item name="zeroStockReplacement" label="0 库存替换">
-                              <InputNumber min={0} precision={0} placeholder="保持 0 库存" style={{ width: '100%' }} />
-                            </Form.Item>
-                            <Form.Item label="删除低价 SKU">
-                              <Space.Compact block>
-                                <Space.Addon>复制后售价 &lt;</Space.Addon>
-                                <Form.Item name="minSkuPriceYuan" noStyle>
-                                  <InputNumber min={0} precision={2} placeholder="不删除" style={{ width: 180 }} />
-                                </Form.Item>
-                                <Space.Addon>元</Space.Addon>
-                              </Space.Compact>
-                            </Form.Item>
-                          </>
-                        ),
-                      },
-                    ]}
-                  />
-                ),
-              },
+          <Form.Item label="更多选项">
+            <Button onClick={() => setIsAdvancedSettingsModalOpen(true)}>更多选项</Button>
+          </Form.Item>
+          <Modal
+            title="更多选项"
+            open={isAdvancedSettingsModalOpen}
+            width={860}
+            forceRender
+            footer={[
+              <Button key="done" type="primary" onClick={() => setIsAdvancedSettingsModalOpen(false)}>
+                完成
+              </Button>,
             ]}
-          />
+            onCancel={() => setIsAdvancedSettingsModalOpen(false)}
+          >
+            <Tabs
+              size="small"
+              items={[
+                {
+                  key: 'basic',
+                  label: '基础配置',
+                  children: (
+                    <>
+                      <Form.Item name="afterSaleAddressId" label="售后地址">
+                        <Select
+                          allowClear
+                          loading={parameterOptionsQuery.isFetching}
+                          options={afterSaleAddressOptions}
+                          placeholder="不选择时自动使用默认售后地址"
+                        />
+                      </Form.Item>
+                      <Form.Item name="brandId" label="品牌 ID">
+                        <Input placeholder={DEFAULT_BRAND_ID} />
+                      </Form.Item>
+                    </>
+                  ),
+                },
+                {
+                  key: 'pricing-content',
+                  label: '价格与内容',
+                  children: (
+                    <>
+                      <Form.Item label="售价调整">
+                        <Space.Compact block>
+                          <Space.Addon>源价 x</Space.Addon>
+                          <Form.Item name="priceMultiplier" noStyle>
+                            <InputNumber min={0.01} precision={2} step={0.1} style={{ width: 120 }} />
+                          </Form.Item>
+                          <Space.Addon>+</Space.Addon>
+                          <Form.Item name="priceAddAmountYuan" noStyle>
+                            <InputNumber min={0} precision={2} step={0.1} style={{ width: 120 }} />
+                          </Form.Item>
+                          <Space.Addon>元</Space.Addon>
+                          <Form.Item name="priceRounding" noStyle>
+                            <Select
+                              style={{ width: 140 }}
+                              options={[
+                                { value: 'cent', label: '保留分' },
+                                { value: 'jiao', label: '抹到角' },
+                                { value: 'yuan', label: '抹到元' },
+                              ]}
+                            />
+                          </Form.Item>
+                        </Space.Compact>
+                      </Form.Item>
+                      <Form.Item name="titlePrefix" label="标题前缀">
+                        <Input placeholder="不添加前缀" maxLength={20} showCount />
+                      </Form.Item>
+                      <Form.Item name="titleSuffix" label="标题后缀">
+                        <Input placeholder="不添加后缀" maxLength={20} showCount />
+                      </Form.Item>
+                      <Form.Item label="主图处理">
+                        <Space.Compact block>
+                          <Space.Addon>忽略前</Space.Addon>
+                          <Form.Item name="mainImageSkipFirst" noStyle>
+                            <InputNumber min={0} precision={0} style={{ width: 120 }} />
+                          </Form.Item>
+                          <Space.Addon>张，忽略后</Space.Addon>
+                          <Form.Item name="mainImageSkipLast" noStyle>
+                            <InputNumber min={0} precision={0} style={{ width: 120 }} />
+                          </Form.Item>
+                          <Space.Addon>张</Space.Addon>
+                        </Space.Compact>
+                      </Form.Item>
+                      <Form.Item label="详情图处理">
+                        <Space.Compact block>
+                          <Space.Addon>忽略前</Space.Addon>
+                          <Form.Item name="detailImageSkipFirst" noStyle>
+                            <InputNumber min={0} precision={0} style={{ width: 110 }} />
+                          </Form.Item>
+                          <Space.Addon>张，忽略后</Space.Addon>
+                          <Form.Item name="detailImageSkipLast" noStyle>
+                            <InputNumber min={0} precision={0} style={{ width: 110 }} />
+                          </Form.Item>
+                          <Space.Addon>张，最多</Space.Addon>
+                          <Form.Item name="maxDetailImages" noStyle>
+                            <InputNumber min={0} precision={0} style={{ width: 110 }} />
+                          </Form.Item>
+                          <Space.Addon>张</Space.Addon>
+                        </Space.Compact>
+                      </Form.Item>
+                    </>
+                  ),
+                },
+                {
+                  key: 'sku',
+                  label: '库存与 SKU',
+                  children: (
+                    <>
+                      <Form.Item name="defaultStockNum" label="默认库存">
+                        <InputNumber min={0} precision={0} style={{ width: '100%' }} />
+                      </Form.Item>
+                      <Form.Item name="unifiedStockNum" label="统一库存">
+                        <InputNumber min={0} precision={0} placeholder="不统一库存" style={{ width: '100%' }} />
+                      </Form.Item>
+                      <Form.Item name="zeroStockReplacement" label="0 库存替换">
+                        <InputNumber min={0} precision={0} placeholder="保持 0 库存" style={{ width: '100%' }} />
+                      </Form.Item>
+                      <Form.Item label="删除低价 SKU">
+                        <Space.Compact block>
+                          <Space.Addon>复制后售价 &lt;</Space.Addon>
+                          <Form.Item name="minSkuPriceYuan" noStyle>
+                            <InputNumber min={0} precision={2} placeholder="不删除" style={{ width: 180 }} />
+                          </Form.Item>
+                          <Space.Addon>元</Space.Addon>
+                        </Space.Compact>
+                      </Form.Item>
+                    </>
+                  ),
+                },
+              ]}
+            />
+          </Modal>
         </Form>
         <div style={actionBarStyle}>
           <Button onClick={() => setCurrentStep('collectionPreview')}>上一步</Button>
