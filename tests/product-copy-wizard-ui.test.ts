@@ -86,6 +86,9 @@ test('product copy parameters are configured before draft preview generation', (
   assert.match(pageSource, /buildProductCopyImageUploadPlan/);
   assert.match(pageSource, /renderUploadImagePlan/);
   assert.match(pageSource, /实际上传图片清单/);
+  assert.match(pageSource, /key: 'upload-image-plan'/);
+  assert.match(pageSource, /children: renderUploadImagePlan\(uploadImagePlan\)/);
+  assert.doesNotMatch(pageSource, /defaultActiveKey=\{(?:\['upload-image-plan'\]|'upload-image-plan')\}/);
   assert.match(pageSource, /fallbackUrls=\{record\.candidates\.filter/);
   assert.match(pageSource, /advancedSettingsConfiguredCounts/);
   assert.match(pageSource, /advancedSettingsTabLabel\('价格与内容'/);

@@ -1600,15 +1600,20 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
             title="当前参数摘要"
             items={parameterSummaryItems}
           />
-          <div>
-            {renderSectionTitle('实际上传图片清单', (
-              <Space size={4}>
-                <Tag>{uploadImagePlan.length} 张</Tag>
-                <Tag>{uploadImagePlan.reduce((sum, item) => sum + item.candidates.length, 0)} 个候选地址</Tag>
-              </Space>
-            ))}
-            {renderUploadImagePlan(uploadImagePlan)}
-          </div>
+          <Collapse
+            size="small"
+            items={[{
+              key: 'upload-image-plan',
+              label: (
+                <Space size={8} wrap>
+                  <span style={{ fontWeight: 600 }}>实际上传图片清单</span>
+                  <Tag>{uploadImagePlan.length} 张</Tag>
+                  <Tag>{uploadImagePlan.reduce((sum, item) => sum + item.candidates.length, 0)} 个候选地址</Tag>
+                </Space>
+              ),
+              children: renderUploadImagePlan(uploadImagePlan),
+            }]}
+          />
           <Form.Item label="高级参数">
             <Button onClick={() => setIsAdvancedSettingsModalOpen(true)}>高级参数</Button>
           </Form.Item>
