@@ -24,6 +24,10 @@ import {
 import type { TableProps } from 'antd';
 import { queryKeys } from '../../query/query-keys';
 import { extensionApi } from '../../shared/extension-api';
+import {
+  buildProductCopyImageUploadPlan,
+  type ProductCopyImageUploadPlanSource,
+} from '../../shared/product-copy-image-upload-plan';
 import type {
   ProductCopyCategoryOption,
   ProductCopyDefaultSettings,
@@ -487,18 +491,29 @@ interface ProductCopyPreviewImageProps {
   url: string;
   alt: string;
   detail?: boolean;
+  fallbackUrls?: string[];
 }
 
-const ProductCopyPreviewImage: React.FC<ProductCopyPreviewImageProps> = ({ url, alt, detail = false }) => {
+const EMPTY_PREVIEW_FALLBACK_URLS: string[] = [];
+
+const ProductCopyPreviewImage: React.FC<ProductCopyPreviewImageProps> = ({
+  url,
+  alt,
+  detail = false,
+  fallbackUrls = EMPTY_PREVIEW_FALLBACK_URLS,
+}) => {
   const objectUrlRef = useRef<string | null>(null);
   const fallbackRequestedRef = useRef(false);
+  const candidateUrls = useMemo(() => Array.from(new Set([url, ...fallbackUrls].filter(Boolean))), [fallbackUrls, url]);
+  const [candidateIndex, setCandidateIndex] = useState(0);
   const [displaySrc, setDisplaySrc] = useState(url);
   const [failed, setFailed] = useState(false);
   const height = detail ? 128 : 72;
 
   useEffect(() => {
+    setCandidateIndex(0);
     fallbackRequestedRef.current = false;
-    setDisplaySrc(url);
+    setDisplaySrc(candidateUrls[0] || url);
     setFailed(false);
     return () => {
       if (objectUrlRef.current) {
@@ -506,9 +521,17 @@ const ProductCopyPreviewImage: React.FC<ProductCopyPreviewImageProps> = ({ url, 
         objectUrlRef.current = null;
       }
     };
-  }, [url]);
+  }, [candidateUrls, url]);
 
   const handleImageError = useCallback(async () => {
+    const nextCandidate = candidateUrls[candidateIndex + 1];
+    if (nextCandidate) {
+      setCandidateIndex(candidateIndex + 1);
+      setDisplaySrc(nextCandidate);
+      setFailed(false);
+      return;
+    }
+
     if (fallbackRequestedRef.current) {
       setFailed(true);
       return;
@@ -516,7 +539,8 @@ const ProductCopyPreviewImage: React.FC<ProductCopyPreviewImageProps> = ({ url, 
     fallbackRequestedRef.current = true;
 
     try {
-      const response = await fetch(url, { credentials: 'include' });
+      const currentUrl = candidateUrls[candidateIndex] || url;
+      const response = await fetch(currentUrl, { credentials: 'include' });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const blob = await response.blob();
       if (!blob.type.startsWith('image/')) throw new Error('响应不是图片');
@@ -529,7 +553,7 @@ const ProductCopyPreviewImage: React.FC<ProductCopyPreviewImageProps> = ({ url, 
     } catch {
       setFailed(true);
     }
-  }, [url]);
+  }, [candidateIndex, candidateUrls, url]);
 
   if (failed) {
     return <div aria-label={alt} style={{ ...previewImageTileStyle, height }} />;
@@ -565,6 +589,75 @@ function renderImageGroup(urls: string[], alt: string, detail = false): React.Re
         ))}
       </div>
     </Image.PreviewGroup>
+  );
+}
+
+function uploadImageRoleLabel(role: ProductCopyImageUploadPlanSource['role']): string {
+  if (role === 'main') return '主图';
+  if (role === 'detail') return '详情图';
+  if (role === 'sku') return 'SKU 图';
+  if (role === 'fallback') return '页面图';
+  return '未知';
+}
+
+function shortImageUrl(url: string): string {
+  const filename = url.split('/').pop() || url;
+  return filename.length > 56 ? `${filename.slice(0, 28)}...${filename.slice(-20)}` : filename;
+}
+
+function renderUploadImagePlan(plan: ProductCopyImageUploadPlanSource[]): React.ReactNode {
+  const columns: TableProps<ProductCopyImageUploadPlanSource & { key: string; index: number }>['columns'] = [
+    { title: '#', dataIndex: 'index', width: 56 },
+    {
+      title: '用途',
+      dataIndex: 'role',
+      width: 90,
+      render: (role: ProductCopyImageUploadPlanSource['role']) => uploadImageRoleLabel(role),
+    },
+    {
+      title: '预览',
+      key: 'preview',
+      width: 110,
+      render: (_: unknown, record) => (
+        <ProductCopyPreviewImage
+          url={record.sourceUrl}
+          fallbackUrls={record.candidates.filter(candidate => candidate !== record.sourceUrl)}
+          alt={`实际上传图片 ${record.index}`}
+        />
+      ),
+    },
+    {
+      title: '上传源图',
+      dataIndex: 'sourceUrl',
+      render: (url: string) => (
+        <a href={url} target="_blank" rel="noreferrer">{shortImageUrl(url)}</a>
+      ),
+    },
+    {
+      title: '候选地址',
+      key: 'candidates',
+      width: 260,
+      render: (_: unknown, record) => (
+        <Space size={[4, 4]} wrap>
+          <Tag>{record.candidates.length} 个候选</Tag>
+          {record.candidates.slice(0, 2).map(candidate => (
+            <a key={candidate} href={candidate} target="_blank" rel="noreferrer">{shortImageUrl(candidate)}</a>
+          ))}
+          {record.candidates.length > 2 && <Tag>+{record.candidates.length - 2}</Tag>}
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <Table
+      rowKey="key"
+      size="small"
+      pagination={{ pageSize: 8, showSizeChanger: false }}
+      dataSource={plan.map((source, index) => ({ ...source, key: `${index}:${source.sourceUrl}`, index: index + 1 }))}
+      columns={columns}
+      scroll={{ x: 860 }}
+    />
   );
 }
 
@@ -1034,12 +1127,12 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
         />
 
         <div>
-          {renderSectionTitle('主图', <Tag>{listing.images.main.length} 张</Tag>)}
+          {renderSectionTitle('采集主图（原始）', <Tag>{listing.images.main.length} 张</Tag>)}
           {renderImageGroup(listing.images.main, '商品主图')}
         </div>
 
         <div>
-          {renderSectionTitle('图文详情', <Tag>{listing.images.detail.length} 张</Tag>)}
+          {renderSectionTitle('采集图文详情（原始）', <Tag>{listing.images.detail.length} 张</Tag>)}
           {renderImageGroup(listing.images.detail, '商品详情图', true)}
         </div>
 
@@ -1343,6 +1436,14 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
       parameterOptionsQuery.data?.freightTemplates || [],
       defaultSettingsQuery.data?.expressTemplateId,
     );
+    const currentSettingsPatch = buildDefaultSettingsPatch(currentParameterValues);
+    const uploadImagePlan = copyRecord
+      ? buildProductCopyImageUploadPlan(copyRecord, {
+        pricing: currentSettingsPatch.pricing,
+        content: currentSettingsPatch.content,
+        sku: currentSettingsPatch.sku,
+      })
+      : [];
     const selectFilter = (input: string, option?: { label?: React.ReactNode; value?: string }) => {
       const keyword = input.trim().toLowerCase();
       if (!keyword) return true;
@@ -1451,6 +1552,15 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
             title="当前参数摘要"
             items={parameterSummaryItems}
           />
+          <div>
+            {renderSectionTitle('实际上传图片清单', (
+              <Space size={4}>
+                <Tag>{uploadImagePlan.length} 张</Tag>
+                <Tag>{uploadImagePlan.reduce((sum, item) => sum + item.candidates.length, 0)} 个候选地址</Tag>
+              </Space>
+            ))}
+            {renderUploadImagePlan(uploadImagePlan)}
+          </div>
           <Form.Item label="高级参数">
             <Button onClick={() => setIsAdvancedSettingsModalOpen(true)}>高级参数</Button>
           </Form.Item>

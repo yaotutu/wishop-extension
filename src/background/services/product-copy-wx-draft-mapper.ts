@@ -11,6 +11,7 @@ import type {
   WxShopAddProductRequest,
   WxShopAddProductSku,
 } from '../wxshop/listing/types.ts';
+import { collectProductCopyUploadSourceImages } from '../../shared/product-copy-image-upload-plan.ts';
 
 const WX_TITLE_MAX_LENGTH = 60;
 const WX_SHORT_TITLE_MAX_LENGTH = 20;
@@ -367,15 +368,7 @@ export function collectWxDraftSourceImages(
   listing: ProductCopyRecord,
   options: ProductCopyWxDraftSourceImageOptions = {},
 ): string[] {
-  const mainImages = resolveMainSourceImages(listing, options.content);
-  const detailImages = resolveDetailSourceImages(listing, mainImages, options.content);
-  const skuSettings = normalizeSkuSettings(options.sku?.defaultStockNum, options.sku);
-  const resolvedSkus = resolveSkuInputs(listing, skuSettings, options.pricing);
-  return uniqueStrings([
-    ...mainImages,
-    ...detailImages,
-    ...resolvedSkus.map(item => item.sku.imageUrl).filter(Boolean),
-  ]);
+  return collectProductCopyUploadSourceImages(listing, options);
 }
 
 export function mapProductCopyRecordToWxAddProductRequest(

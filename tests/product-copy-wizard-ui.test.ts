@@ -35,6 +35,8 @@ test('product copy page is a page-level wizard that ends at draft box creation',
   assert.match(pageSource, /setCurrentStep\('parameterSettings'\)/);
   assert.match(pageSource, /setCurrentStep\('draftPreview'\);/);
   assert.match(pageSource, /setCurrentStep\('completed'\);/);
+  assert.match(pageSource, /采集主图（原始）/);
+  assert.match(pageSource, /采集图文详情（原始）/);
 
   assert.match(
     pageSource,
@@ -81,6 +83,10 @@ test('product copy parameters are configured before draft preview generation', (
   assert.match(pageSource, /parameterSummaryItems/);
   assert.match(pageSource, /title="当前参数摘要"/);
   assert.match(pageSource, /renderParameterSummaryValue/);
+  assert.match(pageSource, /buildProductCopyImageUploadPlan/);
+  assert.match(pageSource, /renderUploadImagePlan/);
+  assert.match(pageSource, /实际上传图片清单/);
+  assert.match(pageSource, /fallbackUrls=\{record\.candidates\.filter/);
   assert.match(pageSource, /advancedSettingsConfiguredCounts/);
   assert.match(pageSource, /advancedSettingsTabLabel\('价格与内容'/);
   assert.match(pageSource, /已配置 \$\{count\} 项/);
@@ -106,7 +112,7 @@ test('product copy parameters are configured before draft preview generation', (
 
 test('product copy preview images retry Taobao CDN images through local blob urls', () => {
   assert.match(pageSource, /const ProductCopyPreviewImage: React\.FC<ProductCopyPreviewImageProps>/);
-  assert.match(pageSource, /fetch\(url, \{ credentials: 'include' \}\)/);
+  assert.match(pageSource, /fetch\(currentUrl, \{ credentials: 'include' \}\)/);
   assert.match(pageSource, /URL\.createObjectURL\(blob\)/);
   assert.match(pageSource, /URL\.revokeObjectURL\(objectUrlRef\.current\)/);
   assert.match(pageSource, /<ProductCopyPreviewImage[\s\S]*url=\{url\}[\s\S]*detail=\{detail\}/);

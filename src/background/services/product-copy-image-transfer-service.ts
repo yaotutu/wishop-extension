@@ -3,19 +3,16 @@ import type {
   ProductCopyPricingSettings,
   ProductCopyRecord,
   ProductCopySkuSettings,
-  TaobaoProductImageAsset,
-  TaobaoProductImageRole,
 } from '../../shared/types.ts';
+import {
+  buildProductCopyImageUploadPlan,
+  type ProductCopyImageUploadPlanSource,
+} from '../../shared/product-copy-image-upload-plan.ts';
 import type { WxShopListingClient } from '../wxshop/listing/types.ts';
-import { collectWxDraftSourceImages } from './product-copy-wx-draft-mapper.ts';
 
 type ImageTransferLogger = Pick<ReturnType<typeof import('../logging/diagnostic-logger.ts').createDiagnosticLogger>, 'info' | 'warn' | 'error'>;
 
-export interface WxDraftImageUploadSource {
-  sourceUrl: string;
-  role: TaobaoProductImageRole;
-  candidates: string[];
-}
+export type WxDraftImageUploadSource = ProductCopyImageUploadPlanSource;
 
 export interface ProductCopyImageDownloadResult {
   sourceUrl: string;
@@ -37,73 +34,11 @@ export interface UploadWxDraftSourceImagesOptions {
   downloadImage?: (source: WxDraftImageUploadSource) => Promise<ProductCopyImageDownloadResult>;
 }
 
-function uniqueStrings(values: string[]): string[] {
-  return Array.from(new Set(values.map(value => value.trim()).filter(Boolean)));
-}
-
-function normalizeImageCandidate(rawUrl: string): string {
-  const trimmed = rawUrl.trim();
-  if (!trimmed) return '';
-  return trimmed.startsWith('//') ? `https:${trimmed}` : trimmed.replace(/^http:\/\//i, 'https://');
-}
-
-function normalizeTaobaoImageIdentity(rawUrl: string): string {
-  return normalizeImageCandidate(rawUrl)
-    .replace(/~(?:crop|tplv|resize|q\d+|webp)[^~?#]*~/iu, '')
-    .replace(/(\.(?:jpe?g|png|webp|gif))_(?:\d+x\d+(?:q\d+)?|q\d+|sum|webp)\.(?:jpe?g|png|webp|gif)_?(?:\.(?:webp))?(?=$|[?#])/iu, '$1')
-    .replace(/_(?:\d+x\d+(?:q\d+)?|sum|webp)\.(jpe?g|png|webp|gif)(?=$|[?#])/iu, '.$1');
-}
-
-function assetMatchesSource(asset: TaobaoProductImageAsset, sourceUrl: string): boolean {
-  const normalizedSourceUrl = normalizeImageCandidate(sourceUrl);
-  const sourceImageIdentity = normalizeTaobaoImageIdentity(sourceUrl);
-  if (normalizeImageCandidate(asset.url) === normalizedSourceUrl) return true;
-  if (normalizeImageCandidate(asset.normalizedUrl) === normalizedSourceUrl) return true;
-  if (Object.values(asset.lazyAttrs || {}).some(value => normalizeImageCandidate(value) === normalizedSourceUrl)) return true;
-  if (normalizeTaobaoImageIdentity(asset.url) === sourceImageIdentity) return true;
-  if (normalizeTaobaoImageIdentity(asset.normalizedUrl) === sourceImageIdentity) return true;
-  return Object.values(asset.lazyAttrs || {}).some(value => normalizeTaobaoImageIdentity(value) === sourceImageIdentity);
-}
-
-function candidatesFromAsset(asset: TaobaoProductImageAsset): string[] {
-  return uniqueStrings([
-    // 页面真实记录的原始 URL 往往是浏览器实际加载过的尺寸图，比强行还原出的“原图”更稳定。
-    normalizeImageCandidate(asset.url),
-    normalizeImageCandidate(asset.lazyAttrs?.src || ''),
-    normalizeImageCandidate(asset.lazyAttrs?.['data-src'] || ''),
-    normalizeImageCandidate(asset.lazyAttrs?.['data-ks-lazyload'] || ''),
-    normalizeImageCandidate(asset.lazyAttrs?.['data-original'] || ''),
-    normalizeImageCandidate(asset.lazyAttrs?.['data-lazy-src'] || ''),
-    normalizeImageCandidate(asset.normalizedUrl),
-  ]);
-}
-
-function resolveImageRole(listing: ProductCopyRecord, sourceUrl: string): TaobaoProductImageRole {
-  const matchedAsset = listing.images.assets.find(asset => assetMatchesSource(asset, sourceUrl));
-  if (matchedAsset?.role) return matchedAsset.role;
-  if (listing.images.main.includes(sourceUrl)) return 'main';
-  if (listing.images.detail.includes(sourceUrl)) return 'detail';
-  if (listing.sku.matrix.some(sku => sku.imageUrl === sourceUrl)) return 'sku';
-  return 'unknown';
-}
-
-function resolveImageCandidates(listing: ProductCopyRecord, sourceUrl: string): string[] {
-  const matchedAssets = listing.images.assets.filter(asset => assetMatchesSource(asset, sourceUrl));
-  return uniqueStrings([
-    ...matchedAssets.flatMap(candidatesFromAsset),
-    normalizeImageCandidate(sourceUrl),
-  ]);
-}
-
 export function buildWxDraftImageUploadSources(
   listing: ProductCopyRecord,
   options: Pick<UploadWxDraftSourceImagesOptions, 'pricing' | 'content' | 'sku'> = {},
 ): WxDraftImageUploadSource[] {
-  return collectWxDraftSourceImages(listing, options).map(sourceUrl => ({
-    sourceUrl,
-    role: resolveImageRole(listing, sourceUrl),
-    candidates: resolveImageCandidates(listing, sourceUrl),
-  }));
+  return buildProductCopyImageUploadPlan(listing, options);
 }
 
 function extensionFromMimeType(mimeType: string): string {
@@ -126,6 +61,10 @@ function filenameForImage(source: WxDraftImageUploadSource, mimeType: string): s
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
+}
+
+function uniqueUploadUrls(values: string[]): string[] {
+  return Array.from(new Set(values.map(value => value.trim()).filter(Boolean)));
 }
 
 function normalizeMimeType(value: string | null, url: string): string {
@@ -190,7 +129,7 @@ async function resolveUploadCandidateUrls(
   try {
     const downloaded = await downloadImage(source);
     return {
-      urls: uniqueStrings([downloaded.fetchedUrl, ...source.candidates]),
+      urls: uniqueUploadUrls([downloaded.fetchedUrl, ...source.candidates]),
     };
   } catch (error) {
     const localDownloadFailure = errorMessage(error, '图片下载失败');
@@ -204,7 +143,7 @@ async function resolveUploadCandidateUrls(
     // 淘宝 CDN 有时会拒绝扩展后台 fetch，但微信小店服务端仍可能可以按 URL 拉取。
     // 本地下载失败时不能直接中断，应把页面采集到的候选链接逐个交给微信上传接口验证。
     return {
-      urls: uniqueStrings([...source.candidates, source.sourceUrl]),
+      urls: uniqueUploadUrls([...source.candidates, source.sourceUrl]),
       localDownloadFailure,
     };
   }
