@@ -73,6 +73,14 @@ interface ProductCopyParameterFormValues {
   minSkuPriceYuan?: number;
 }
 
+type ParameterSummaryStatus = 'default' | 'configured' | 'localDefault';
+
+type AdvancedSettingsConfiguredCounts = {
+  basic: number;
+  pricingContent: number;
+  sku: number;
+};
+
 const missingFieldLabels: Record<string, string> = {
   title: '标题',
   mainImages: '主图',
@@ -258,6 +266,198 @@ function buildDefaultFreightTemplatePatch(
   };
 }
 
+function formatOptionalYuan(value?: number): string {
+  return value === undefined || value === null || !Number.isFinite(Number(value))
+    ? ''
+    : Number(value).toFixed(2).replace(/\.00$/, '');
+}
+
+function isPositiveConfigured(value?: number): boolean {
+  return value !== undefined && value !== null && Number.isFinite(Number(value)) && Number(value) > 0;
+}
+
+function renderParameterSummaryValue(value: string, status: ParameterSummaryStatus): React.ReactNode {
+  const tag = status === 'configured'
+    ? { color: 'blue', text: '已配置' }
+    : status === 'localDefault'
+      ? { color: 'cyan', text: '本地默认' }
+      : { color: 'default', text: '默认' };
+  return (
+    <Space size={6} wrap>
+      <span>{value}</span>
+      <Tag color={tag.color}>{tag.text}</Tag>
+    </Space>
+  );
+}
+
+function priceRoundingText(rounding: ProductCopyPriceRounding): string {
+  if (rounding === 'jiao') return '抹到角';
+  if (rounding === 'yuan') return '抹到元';
+  return '保留分';
+}
+
+function priceRuleText(values: ProductCopyParameterFormValues): string {
+  const multiplier = values.priceMultiplier && values.priceMultiplier > 0 ? values.priceMultiplier : 1;
+  const addAmount = values.priceAddAmountYuan || 0;
+  return `源价 x ${multiplier} + ${formatOptionalYuan(addAmount) || '0'} 元，${priceRoundingText(values.priceRounding || 'cent')}`;
+}
+
+function hasConfiguredPriceRule(values: ProductCopyParameterFormValues): boolean {
+  return (values.priceMultiplier ?? 1) !== 1
+    || (values.priceAddAmountYuan ?? 0) !== 0
+    || (values.priceRounding || 'cent') !== 'cent';
+}
+
+function titleRuleText(values: ProductCopyParameterFormValues): string {
+  const prefix = values.titlePrefix?.trim();
+  const suffix = values.titleSuffix?.trim();
+  if (!prefix && !suffix) return '未添加前后缀';
+  return [
+    prefix ? `前缀：${prefix}` : '',
+    suffix ? `后缀：${suffix}` : '',
+  ].filter(Boolean).join('，');
+}
+
+function imageRuleText(values: ProductCopyParameterFormValues): string {
+  const mainSkipFirst = values.mainImageSkipFirst || 0;
+  const mainSkipLast = values.mainImageSkipLast || 0;
+  const detailSkipFirst = values.detailImageSkipFirst || 0;
+  const detailSkipLast = values.detailImageSkipLast || 0;
+  const maxDetailImages = values.maxDetailImages;
+  const mainText = mainSkipFirst || mainSkipLast
+    ? `主图忽略前 ${mainSkipFirst} 张、后 ${mainSkipLast} 张`
+    : '主图不处理';
+  const detailText = detailSkipFirst || detailSkipLast || maxDetailImages !== undefined
+    ? `详情图忽略前 ${detailSkipFirst} 张、后 ${detailSkipLast} 张${maxDetailImages === undefined ? '' : `，最多 ${maxDetailImages} 张`}`
+    : '详情图不处理';
+  return `${mainText}；${detailText}`;
+}
+
+function hasConfiguredImageRule(values: ProductCopyParameterFormValues): boolean {
+  return Boolean(
+    values.mainImageSkipFirst
+    || values.mainImageSkipLast
+    || values.detailImageSkipFirst
+    || values.detailImageSkipLast
+    || values.maxDetailImages !== undefined,
+  );
+}
+
+function stockRuleText(values: ProductCopyParameterFormValues): string {
+  const stockParts = [`默认库存 ${values.defaultStockNum ?? DEFAULT_DRAFT_STOCK_NUM}`];
+  if (values.unifiedStockNum !== undefined) stockParts.push(`统一库存 ${values.unifiedStockNum}`);
+  if (values.zeroStockReplacement !== undefined) stockParts.push(`0 库存替换为 ${values.zeroStockReplacement}`);
+  return stockParts.join('，');
+}
+
+function hasConfiguredStockRule(values: ProductCopyParameterFormValues): boolean {
+  return (values.defaultStockNum ?? DEFAULT_DRAFT_STOCK_NUM) !== DEFAULT_DRAFT_STOCK_NUM
+    || values.unifiedStockNum !== undefined
+    || values.zeroStockReplacement !== undefined;
+}
+
+function skuRuleText(values: ProductCopyParameterFormValues): string {
+  if (!isPositiveConfigured(values.minSkuPriceYuan)) return '不删除低价 SKU';
+  return `删除复制后售价 < ${formatOptionalYuan(values.minSkuPriceYuan)} 元的 SKU`;
+}
+
+function advancedSettingsConfiguredCounts(values: ProductCopyParameterFormValues): AdvancedSettingsConfiguredCounts {
+  return {
+    basic: Number(Boolean(values.afterSaleAddressId)) + Number(Boolean(values.brandId && values.brandId !== DEFAULT_BRAND_ID)),
+    pricingContent: Number(hasConfiguredPriceRule(values))
+      + Number(Boolean(values.titlePrefix?.trim() || values.titleSuffix?.trim()))
+      + Number(hasConfiguredImageRule(values)),
+    sku: Number((values.defaultStockNum ?? DEFAULT_DRAFT_STOCK_NUM) !== DEFAULT_DRAFT_STOCK_NUM)
+      + Number(values.unifiedStockNum !== undefined)
+      + Number(values.zeroStockReplacement !== undefined)
+      + Number(isPositiveConfigured(values.minSkuPriceYuan)),
+  };
+}
+
+function advancedSettingsTabLabel(label: string, count: number): React.ReactNode {
+  return (
+    <Space size={6}>
+      <span>{label}</span>
+      <Tag color={count > 0 ? 'blue' : 'default'}>{count > 0 ? `已配置 ${count} 项` : '未修改'}</Tag>
+    </Space>
+  );
+}
+
+function buildParameterSummaryItems(
+  values: ProductCopyParameterFormValues,
+  categoryByKey: Map<string, ProductCopyCategoryOption>,
+  freightTemplates: Array<{ templateId: string; label: string }>,
+  defaultExpressTemplateId?: string,
+): React.ComponentProps<typeof Descriptions>['items'] {
+  const selectedFreightTemplate = values.expressTemplateId
+    ? freightTemplates.find(template => template.templateId === values.expressTemplateId)
+    : undefined;
+  const freightTemplateText = selectedFreightTemplate?.label
+    || (values.expressTemplateId ? `模板 ID：${values.expressTemplateId}` : '未选择');
+  const manualCategory = values.categoryKey ? categoryByKey.get(values.categoryKey) : undefined;
+  const categoryText = values.autoCategoryMatch === false
+    ? manualCategory?.path || '手动选择类目'
+    : 'AI 自动识别';
+
+  return [
+    {
+      key: 'category',
+      label: '类目',
+      children: renderParameterSummaryValue(categoryText, values.autoCategoryMatch === false ? 'configured' : 'default'),
+    },
+    {
+      key: 'freightTemplate',
+      label: '运费模板',
+      children: renderParameterSummaryValue(
+        freightTemplateText,
+        values.expressTemplateId
+          ? (values.expressTemplateId === defaultExpressTemplateId ? 'localDefault' : 'configured')
+          : 'default',
+      ),
+    },
+    {
+      key: 'price',
+      label: '价格',
+      children: renderParameterSummaryValue(priceRuleText(values), hasConfiguredPriceRule(values) ? 'configured' : 'default'),
+    },
+    {
+      key: 'title',
+      label: '标题',
+      children: renderParameterSummaryValue(titleRuleText(values), values.titlePrefix?.trim() || values.titleSuffix?.trim() ? 'configured' : 'default'),
+    },
+    {
+      key: 'images',
+      label: '图片',
+      children: renderParameterSummaryValue(imageRuleText(values), hasConfiguredImageRule(values) ? 'configured' : 'default'),
+    },
+    {
+      key: 'stock',
+      label: '库存',
+      children: renderParameterSummaryValue(stockRuleText(values), hasConfiguredStockRule(values) ? 'configured' : 'default'),
+    },
+    {
+      key: 'sku',
+      label: 'SKU',
+      children: renderParameterSummaryValue(skuRuleText(values), isPositiveConfigured(values.minSkuPriceYuan) ? 'configured' : 'default'),
+    },
+    {
+      key: 'duplicateFilter',
+      label: '重复过滤',
+      children: renderParameterSummaryValue(values.duplicateFilter === false ? '允许重复复制' : '遇到已复制记录自动跳过', values.duplicateFilter === false ? 'configured' : 'default'),
+    },
+    {
+      key: 'productStatus',
+      label: '商品状态',
+      children: renderParameterSummaryValue('草稿箱', 'default'),
+    },
+    {
+      key: 'sourceBinding',
+      label: '货源',
+      children: renderParameterSummaryValue(values.autoSourceBinding === false ? '不自动关联淘宝链接' : '创建后自动关联淘宝链接', values.autoSourceBinding === false ? 'configured' : 'default'),
+    },
+  ];
+}
+
 function manualCategorySuggestion(copyId: string, category: ProductCopyCategoryOption): WxProductDraftSuggestionResult {
   return {
     copyId,
@@ -424,11 +624,16 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
   const [draftDeleteResult, setDraftDeleteResult] = useState<DeleteCreatedWxDraftBoxProductResult | null>(null);
   const [fullCategoryStatus, setFullCategoryStatus] = useState('');
   const [isAdvancedSettingsModalOpen, setIsAdvancedSettingsModalOpen] = useState(false);
+  const [, refreshParameterSummary] = useState(0);
 
   const activeCollectionUrl = activeSession?.url || '';
   const autoCategoryMatch = Form.useWatch('autoCategoryMatch', parameterForm) ?? true;
   const duplicateFilterEnabled = Form.useWatch('duplicateFilter', parameterForm) ?? true;
   const selectedExpressTemplateId = Form.useWatch('expressTemplateId', parameterForm);
+
+  const handleParameterValuesChange = useCallback(() => {
+    refreshParameterSummary(version => version + 1);
+  }, []);
 
   const parameterOptionsQuery = useQuery({
     queryKey: queryKeys.productCopy.draftParameterOptions(accountId),
@@ -1115,6 +1320,17 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
   const renderParameterSettingsStep = (): React.ReactNode => {
     const duplicateRecord = duplicateFilterEnabled ? createdProductQuery.data : null;
     const categoryLoading = parameterOptionsQuery.isLoading || parameterOptionsQuery.isFetching;
+    const currentParameterValues = {
+      ...defaultParameterValues(defaultSettingsQuery.data),
+      ...(parameterForm.getFieldsValue(true) as Partial<ProductCopyParameterFormValues>),
+    } as ProductCopyParameterFormValues;
+    const configuredCounts = advancedSettingsConfiguredCounts(currentParameterValues);
+    const parameterSummaryItems = buildParameterSummaryItems(
+      currentParameterValues,
+      categoryByKey,
+      parameterOptionsQuery.data?.freightTemplates || [],
+      defaultSettingsQuery.data?.expressTemplateId,
+    );
     const selectFilter = (input: string, option?: { label?: React.ReactNode; value?: string }) => {
       const keyword = input.trim().toLowerCase();
       if (!keyword) return true;
@@ -1152,6 +1368,7 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
           labelCol={{ flex: '140px' }}
           wrapperCol={{ flex: 1 }}
           initialValues={defaultParameterValues()}
+          onValuesChange={handleParameterValuesChange}
         >
           <Form.Item name="autoCategoryMatch" label="类目匹配" valuePropName="checked">
             <Checkbox>AI 自动识别</Checkbox>
@@ -1219,11 +1436,18 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
               </Button>
             </Space.Compact>
           </Form.Item>
-          <Form.Item label="更多选项">
-            <Button onClick={() => setIsAdvancedSettingsModalOpen(true)}>更多选项</Button>
+          <Descriptions
+            bordered
+            column={2}
+            size="small"
+            title="当前参数摘要"
+            items={parameterSummaryItems}
+          />
+          <Form.Item label="高级参数">
+            <Button onClick={() => setIsAdvancedSettingsModalOpen(true)}>高级参数</Button>
           </Form.Item>
           <Modal
-            title="更多选项"
+            title="高级参数"
             open={isAdvancedSettingsModalOpen}
             width={860}
             forceRender
@@ -1239,7 +1463,7 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
               items={[
                 {
                   key: 'basic',
-                  label: '基础配置',
+                  label: advancedSettingsTabLabel('基础配置', configuredCounts.basic),
                   children: (
                     <>
                       <Form.Item name="afterSaleAddressId" label="售后地址">
@@ -1258,7 +1482,7 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
                 },
                 {
                   key: 'pricing-content',
-                  label: '价格与内容',
+                  label: advancedSettingsTabLabel('价格与内容', configuredCounts.pricingContent),
                   children: (
                     <>
                       <Form.Item label="售价调整">
@@ -1325,7 +1549,7 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
                 },
                 {
                   key: 'sku',
-                  label: '库存与 SKU',
+                  label: advancedSettingsTabLabel('库存与 SKU', configuredCounts.sku),
                   children: (
                     <>
                       <Form.Item name="defaultStockNum" label="默认库存">

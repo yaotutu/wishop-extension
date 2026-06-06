@@ -76,10 +76,17 @@ test('product copy parameters are configured before draft preview generation', (
   assert.match(pageSource, /titlePrefix/);
   assert.match(pageSource, /mainImageSkipFirst/);
   assert.match(pageSource, /minSkuPriceYuan/);
+  assert.match(pageSource, /parameterSummaryItems/);
+  assert.match(pageSource, /title="当前参数摘要"/);
+  assert.match(pageSource, /renderParameterSummaryValue/);
+  assert.match(pageSource, /advancedSettingsConfiguredCounts/);
+  assert.match(pageSource, /advancedSettingsTabLabel\('价格与内容'/);
+  assert.match(pageSource, /已配置 \$\{count\} 项/);
   assert.match(pageSource, /isAdvancedSettingsModalOpen/);
-  assert.match(pageSource, /<Modal[\s\S]*title="更多选项"[\s\S]*open=\{isAdvancedSettingsModalOpen\}/);
+  assert.match(pageSource, /<Modal[\s\S]*title="高级参数"[\s\S]*open=\{isAdvancedSettingsModalOpen\}/);
   assert.match(pageSource, /setIsAdvancedSettingsModalOpen\(true\)/);
   assert.doesNotMatch(pageSource, /label: '更多选项'/);
+  assert.doesNotMatch(pageSource, /<Form\.Item label="更多选项">/);
   assert.match(pageSource, /保存为默认参数/);
   assert.match(pageSource, /生成草稿预览/);
   assert.match(
