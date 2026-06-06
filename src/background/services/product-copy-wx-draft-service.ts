@@ -17,6 +17,7 @@ import {
   removeProductCopyCreatedProduct,
   saveProductCopyCreatedProduct,
 } from '../store/product-copy-created-product-repository.ts';
+import { addProductCopySourceBinding, setProductSources } from '../store/product-source-repository.ts';
 import {
   collectWxDraftSourceImages,
   mapProductCopyRecordToWxAddProductRequest,
@@ -43,6 +44,8 @@ export interface WxDraftBoxProductDependencies {
   downloadImage?: (source: WxDraftImageUploadSource) => Promise<ProductCopyImageDownloadResult>;
   recordCreatedProduct?: (result: WxProductDraftCreationResult, source?: ProductCopyRecord | null) => Promise<unknown>;
   removeCreatedProduct?: (accountId: string, copyId: string) => Promise<unknown>;
+  recordProductSource?: (result: WxProductDraftCreationResult, source?: ProductCopyRecord | null) => Promise<unknown>;
+  removeProductSourceBinding?: (accountId: string, productId: string) => Promise<unknown>;
   recordStarted?: ActivityRecorder;
   recordCompleted?: ActivityRecorder;
   recordFailed?: ActivityRecorder;
@@ -145,17 +148,25 @@ async function resolveWxDraftSystemDefaults(
 
 async function uploadCopyRecordImages(
   listing: ProductCopyRecord,
+  input: CreateWxDraftBoxProductPrepareInput,
   client: WxShopListingClient,
   dependencies: Pick<WxDraftBoxProductDependencies, 'downloadImage'>,
   logger = createDiagnosticLogger({ domain: 'productCopy', component: 'WxDraftPrepare' }),
 ): Promise<Map<string, string>> {
-  const sourceImages = collectWxDraftSourceImages(listing);
+  const sourceImages = collectWxDraftSourceImages(listing, {
+    pricing: input.pricing,
+    content: input.content,
+    sku: input.sku,
+  });
   logger.info('开始上传微信小店商品图片', {
     copyId: listing.id,
     imageCount: sourceImages.length,
   });
   return uploadWxDraftSourceImages(listing, client, {
     logger,
+    pricing: input.pricing,
+    content: input.content,
+    sku: input.sku,
     downloadImage: dependencies.downloadImage,
   });
 }
@@ -198,6 +209,19 @@ async function defaultRecordCreatedProduct(
 
 async function defaultRemoveCreatedProduct(accountId: string, copyId: string): Promise<unknown> {
   return removeProductCopyCreatedProduct(accountId, copyId);
+}
+
+async function defaultRemoveProductSourceBinding(accountId: string, productId: string): Promise<unknown> {
+  return setProductSources(accountId, productId, []);
+}
+
+async function defaultRecordProductSource(
+  result: WxProductDraftCreationResult,
+  source?: ProductCopyRecord | null,
+): Promise<unknown> {
+  const copyRecord = source ?? await defaultGetCopyRecord(result.copyId);
+  if (!copyRecord) throw new Error('采集商品不存在或已删除，无法自动关联货源');
+  return addProductCopySourceBinding(result, copyRecord);
 }
 
 function summarizePreparedRequest(
@@ -314,7 +338,7 @@ export async function prepareWxDraftBoxProductFromCopyRecord(
     const client = await getClient(input.accountId);
     const attrResult = await resolveWxDraftProductAttributes(input, listing, dependencies, logger);
     const defaults = await resolveWxDraftSystemDefaults(input, client, logger);
-    const uploadedImages = await uploadCopyRecordImages(listing, client, dependencies, logger);
+    const uploadedImages = await uploadCopyRecordImages(listing, input, client, dependencies, logger);
     logger.info('开始生成微信小店新增商品请求体', {
       copyId: input.copyId,
       uploadedImageCount: uploadedImages.size,
@@ -328,6 +352,9 @@ export async function prepareWxDraftBoxProductFromCopyRecord(
       afterSaleAddressId: defaults.afterSaleAddressId,
       brandId: input.brandId,
       defaultStockNum: defaults.defaultStockNum,
+      pricing: input.pricing,
+      content: input.content,
+      sku: input.sku,
       attrs: attrResult.attrs,
       uploadedImages,
     }) as WxProductDraftBoxPreparedRequest;
@@ -385,6 +412,7 @@ export async function createPreparedWxDraftBoxProduct(
   const recordCompleted = dependencies.recordCompleted || defaultRecordCompleted;
   const recordFailed = dependencies.recordFailed || defaultRecordFailed;
   const recordCreatedProduct = dependencies.recordCreatedProduct || defaultRecordCreatedProduct;
+  const recordProductSource = dependencies.recordProductSource || defaultRecordProductSource;
   const activityBase = {
     domain: 'productCopy' as const,
     scope: 'account' as const,
@@ -432,6 +460,19 @@ export async function createPreparedWxDraftBoxProduct(
         error: errorMessage(error, '复制完成记录写入失败'),
       });
     }
+    if (input.autoSourceBinding === true) {
+      const loadCopyRecord = dependencies.getCopyRecord || defaultGetCopyRecord;
+      const source = await loadCopyRecord(input.copyId);
+      try {
+        await recordProductSource(result, source);
+      } catch (error) {
+        logger.warn('复制商品货源自动关联失败，微信小店草稿已创建', {
+          copyId: input.copyId,
+          productId: created.productId,
+          error: errorMessage(error, '复制商品货源自动关联失败'),
+        });
+      }
+    }
     return result;
   } catch (error) {
     const message = errorMessage(error, '微信小店商品草稿创建失败');
@@ -454,12 +495,13 @@ export async function createWxDraftBoxProductFromCopyRecord(
     copyId: prepared.copyId,
     request: prepared.request,
     uploadedImageCount: prepared.uploadedImageCount,
+    autoSourceBinding: input.autoSourceBinding,
   }, dependencies);
 }
 
 export async function deleteCreatedWxDraftBoxProduct(
   input: DeleteCreatedWxDraftBoxProductInput,
-  dependencies: Pick<WxDraftBoxProductDependencies, 'getClient' | 'removeCreatedProduct' | 'recordStarted' | 'recordCompleted' | 'recordFailed'> = {},
+  dependencies: Pick<WxDraftBoxProductDependencies, 'getClient' | 'removeCreatedProduct' | 'removeProductSourceBinding' | 'recordStarted' | 'recordCompleted' | 'recordFailed'> = {},
 ): Promise<DeleteCreatedWxDraftBoxProductResult> {
   validateDeleteInput(input);
 
@@ -475,6 +517,7 @@ export async function deleteCreatedWxDraftBoxProduct(
   const recordCompleted = dependencies.recordCompleted || defaultRecordCompleted;
   const recordFailed = dependencies.recordFailed || defaultRecordFailed;
   const removeCreatedProduct = dependencies.removeCreatedProduct || defaultRemoveCreatedProduct;
+  const removeProductSourceBinding = dependencies.removeProductSourceBinding || defaultRemoveProductSourceBinding;
   const activityBase = {
     domain: 'productCopy' as const,
     scope: 'account' as const,
@@ -515,6 +558,15 @@ export async function deleteCreatedWxDraftBoxProduct(
           copyId: input.copyId,
           productId,
           error: errorMessage(error, '复制完成记录移除失败'),
+        });
+      }
+      try {
+        await removeProductSourceBinding(input.accountId, productId);
+      } catch (error) {
+        logger.warn('复制商品货源关联移除失败，微信小店测试草稿已删除', {
+          copyId: input.copyId,
+          productId,
+          error: errorMessage(error, '复制商品货源关联移除失败'),
         });
       }
       return {

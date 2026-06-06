@@ -462,6 +462,7 @@ test('creates a prepared WeChat draft-box product without re-uploading images', 
   const uploaded: string[] = [];
   const addRequests: WxShopAddProductRequest[] = [];
   const createdRecords: string[] = [];
+  const sourceBindings: Array<{ productId: string; sourceTitle?: string }> = [];
   const prepared = await prepareWxDraftBoxProductFromCopyRecord({
     accountId: 'account-1',
     copyId: 'taobao:1010211244888',
@@ -482,12 +483,17 @@ test('creates a prepared WeChat draft-box product without re-uploading images', 
     copyId: 'taobao:1010211244888',
     request: prepared.request,
     uploadedImageCount: prepared.uploadedImageCount,
+    autoSourceBinding: true,
   }, {
+    getCopyRecord: async () => sampleListing(),
     getClient: async () => fakeListingClient(uploaded, addRequests),
     recordStarted: async () => {},
     recordCompleted: async () => {},
     recordFailed: async () => {},
     recordCreatedProduct: async result => { createdRecords.push(result.productId); },
+    recordProductSource: async (result, source) => {
+      sourceBindings.push({ productId: result.productId, sourceTitle: source?.title });
+    },
   });
 
   assert.deepEqual(uploaded, []);
@@ -502,6 +508,7 @@ test('creates a prepared WeChat draft-box product without re-uploading images', 
     uploadedImageCount: 5,
   });
   assert.deepEqual(createdRecords, ['987654321']);
+  assert.deepEqual(sourceBindings, [{ productId: '987654321', sourceTitle: sampleListing().title }]);
 });
 
 test('skips the WeChat category precheck when creating a draft-box product', async () => {
@@ -547,6 +554,7 @@ test('skips the WeChat category precheck when creating a draft-box product', asy
 test('deletes the draft-box product created by the product copy test flow', async () => {
   const deletedProductIds: string[] = [];
   const removedCreatedRecords: string[] = [];
+  const removedSourceBindings: string[] = [];
   const completedLogs: Record<string, unknown>[] = [];
 
   const result = await deleteCreatedWxDraftBoxProduct({
@@ -560,6 +568,7 @@ test('deletes the draft-box product created by the product copy test flow', asyn
     recordCompleted: async input => { completedLogs.push(input); },
     recordFailed: async () => {},
     removeCreatedProduct: async (_accountId, copyId) => { removedCreatedRecords.push(copyId); },
+    removeProductSourceBinding: async (_accountId, productId) => { removedSourceBindings.push(productId); },
   });
 
   assert.deepEqual(deletedProductIds, ['987654321']);
@@ -570,6 +579,7 @@ test('deletes the draft-box product created by the product copy test flow', asyn
     deleted: true,
   });
   assert.deepEqual(removedCreatedRecords, ['taobao:1010211244888']);
+  assert.deepEqual(removedSourceBindings, ['987654321']);
   assert.equal(completedLogs.length, 1);
   assert.equal((completedLogs[0].metadata as Record<string, unknown>).submitMode, 'draftBoxCleanup');
 });

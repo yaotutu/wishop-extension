@@ -234,6 +234,11 @@ export interface ProductSourceItem {
   url: string;
   quantity: number;
   remark: string;
+  sourceType?: 'manual' | 'productCopy' | '1688';
+  sourcePlatform?: 'taobao' | 'tmall' | '1688' | 'manual';
+  sourceItemId?: string;
+  sourceTitle?: string;
+  createdBy?: 'manual' | 'productCopy';
   createdAt: number;
   updatedAt: number;
 }
@@ -574,6 +579,45 @@ export interface ProductCopyDraftParameterOptions {
   fetchedAt: number;
 }
 
+export type ProductCopyPriceRounding = 'cent' | 'jiao' | 'yuan';
+
+export interface ProductCopyPricingSettings {
+  multiplier: number;
+  addAmountFen: number;
+  rounding: ProductCopyPriceRounding;
+}
+
+export interface ProductCopyContentSettings {
+  titlePrefix: string;
+  titleSuffix: string;
+  mainImageSkipFirst: number;
+  mainImageSkipLast: number;
+  detailImageSkipFirst: number;
+  detailImageSkipLast: number;
+  maxDetailImages?: number;
+}
+
+export interface ProductCopySkuSettings {
+  defaultStockNum: number;
+  unifiedStockNum?: number;
+  zeroStockReplacement?: number;
+  minSkuPriceFen?: number;
+}
+
+export interface ProductCopyDefaultSettings {
+  accountId: string;
+  expressTemplateId?: string;
+  afterSaleAddressId?: string;
+  brandId?: string;
+  autoSourceBinding: boolean;
+  pricing: ProductCopyPricingSettings;
+  content: ProductCopyContentSettings;
+  sku: ProductCopySkuSettings;
+  updatedAt: number;
+}
+
+export type ProductCopyDefaultSettingsPatch = Partial<Omit<ProductCopyDefaultSettings, 'accountId' | 'updatedAt'>>;
+
 export interface WxProductCategoryPath {
   catIds: string[];
   names: string[];
@@ -653,6 +697,10 @@ export interface CreateWxDraftBoxProductInput {
   afterSaleAddressId?: string;
   brandId?: string;
   defaultStockNum?: number;
+  pricing?: ProductCopyPricingSettings;
+  content?: ProductCopyContentSettings;
+  sku?: ProductCopySkuSettings;
+  autoSourceBinding?: boolean;
   attrs?: WxProductDraftAttribute[];
 }
 
@@ -683,6 +731,7 @@ export interface CreatePreparedWxDraftBoxProductInput {
   copyId: string;
   request: WxProductDraftBoxPreparedRequest;
   uploadedImageCount: number;
+  autoSourceBinding?: boolean;
 }
 
 export interface WxProductDraftCreationResult {

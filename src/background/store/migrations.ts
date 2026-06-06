@@ -136,6 +136,12 @@ const migrations: Record<number, Migration> = {
       storageVersion: 13,
     };
   },
+  14(store) {
+    return {
+      ...store,
+      storageVersion: 14,
+    };
+  },
 };
 
 const LEGACY_BUSINESS_KEYS = [

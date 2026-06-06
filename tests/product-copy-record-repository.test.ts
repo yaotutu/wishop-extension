@@ -12,7 +12,11 @@ import {
   removeProductCopyCreatedProduct,
   saveProductCopyCreatedProduct,
 } from '../src/background/store/product-copy-created-product-repository.ts';
-import type { ProductCopyRecord, WxProductDraftCreationResult } from '../src/shared/types.ts';
+import {
+  getProductCopyDefaultSettings,
+  saveProductCopyDefaultSettings,
+} from '../src/background/store/product-copy-default-settings-repository.ts';
+import type { ProductCopyRecord, ProductCopyDefaultSettingsPatch, WxProductDraftCreationResult } from '../src/shared/types.ts';
 import { sampleProductCopyRecord } from './product-copy-fixtures.ts';
 
 function sampleListing(patch: Partial<ProductCopyRecord> = {}): ProductCopyRecord {
@@ -81,4 +85,51 @@ test('created product records track completed product copies per account and cop
   await removeProductCopyCreatedProduct('account-1', source.id);
 
   assert.equal(await getProductCopyCreatedProduct('account-1', source.id), null);
+});
+
+test('product copy default settings are normalized and saved per account', async () => {
+  await resetDb();
+
+  const patch: ProductCopyDefaultSettingsPatch = {
+    expressTemplateId: '977666108004',
+    afterSaleAddressId: '123456',
+    brandId: '2100000000',
+    autoSourceBinding: true,
+    pricing: {
+      multiplier: 1.5,
+      addAmountFen: 123,
+      rounding: 'yuan',
+    },
+    content: {
+      titlePrefix: '现货',
+      titleSuffix: '包邮',
+      mainImageSkipFirst: 1,
+      mainImageSkipLast: 2,
+      detailImageSkipFirst: 3,
+      detailImageSkipLast: 4,
+      maxDetailImages: 20,
+    },
+    sku: {
+      defaultStockNum: 99,
+      unifiedStockNum: 88,
+      zeroStockReplacement: 66,
+      minSkuPriceFen: 500,
+    },
+  };
+
+  await saveProductCopyDefaultSettings('account-1', patch);
+  const settings = await getProductCopyDefaultSettings('account-1');
+
+  assert.equal(settings.accountId, 'account-1');
+  assert.equal(settings.expressTemplateId, '977666108004');
+  assert.equal(settings.autoSourceBinding, true);
+  assert.deepEqual(settings.pricing, patch.pricing);
+  assert.deepEqual(settings.content, patch.content);
+  assert.deepEqual(settings.sku, patch.sku);
+
+  const otherAccountSettings = await getProductCopyDefaultSettings('account-2');
+
+  assert.equal(otherAccountSettings.accountId, 'account-2');
+  assert.equal(otherAccountSettings.pricing.multiplier, 1);
+  assert.equal(otherAccountSettings.autoSourceBinding, true);
 });

@@ -1,6 +1,7 @@
 import type {
   CreatePreparedWxDraftBoxProductInput,
   CreateProductCopySessionInput,
+  ProductCopyDefaultSettingsPatch,
   CreateWxDraftBoxProductInput,
   CreateWxDraftBoxProductPrepareInput,
   CreateWxProductDraftSuggestionInput,
@@ -10,6 +11,10 @@ import type {
 } from '../../shared/types.ts';
 import type { RuntimeHandlerMap } from '../router/runtime-router.ts';
 import { getProductCopyCreatedProduct } from '../store/product-copy-created-product-repository.ts';
+import {
+  getProductCopyDefaultSettings,
+  saveProductCopyDefaultSettings,
+} from '../store/product-copy-default-settings-repository.ts';
 import {
   completeProductCopySession,
   failProductCopySession,
@@ -45,6 +50,12 @@ export function createProductCopyRuntimeHandlers(
     },
     async 'productCopy:getCreatedProduct'(args) {
       return getProductCopyCreatedProduct(args[0] as string, args[1] as string);
+    },
+    async 'productCopy:getDefaultSettings'(args) {
+      return getProductCopyDefaultSettings(args[0] as string);
+    },
+    async 'productCopy:saveDefaultSettings'(args) {
+      return saveProductCopyDefaultSettings(args[0] as string, args[1] as ProductCopyDefaultSettingsPatch);
     },
     async 'productCopy:open'(args) {
       return openProductCopySession(args[0] as CreateProductCopySessionInput);

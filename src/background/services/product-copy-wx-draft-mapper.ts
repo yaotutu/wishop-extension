@@ -1,5 +1,8 @@
 import type {
+  ProductCopyContentSettings,
+  ProductCopyPricingSettings,
   ProductCopyRecord,
+  ProductCopySkuSettings,
   TaobaoProductSkuMatrixItem,
   WxProductDraftAttribute,
 } from '../../shared/types.ts';
@@ -27,8 +30,23 @@ export interface ProductCopyWxDraftMappingOptions {
   afterSaleAddressId?: string;
   brandId?: string;
   defaultStockNum?: number;
+  pricing?: ProductCopyPricingSettings;
+  content?: ProductCopyContentSettings;
+  sku?: ProductCopySkuSettings;
   attrs?: WxProductDraftAttribute[];
   uploadedImages: Map<string, string> | Record<string, string>;
+}
+
+interface ProductCopyWxDraftSourceImageOptions {
+  pricing?: ProductCopyPricingSettings;
+  content?: ProductCopyContentSettings;
+  sku?: ProductCopySkuSettings;
+}
+
+interface ResolvedSkuInput {
+  sku: TaobaoProductSkuMatrixItem;
+  salePrice: number;
+  stockNum: number;
 }
 
 function normalizeText(value: string): string {
@@ -132,27 +150,117 @@ function normalizeRequiredNumericId(value: string | undefined, label: string): n
   return numericId;
 }
 
-function normalizeDefaultStock(defaultStockNum?: number): number {
-  if (defaultStockNum === undefined) return DEFAULT_WX_STOCK_NUM;
-  if (!Number.isInteger(defaultStockNum) || defaultStockNum < 0) {
-    throw new Error('默认库存必须是大于等于 0 的整数');
+function normalizeNonNegativeInteger(value: number | undefined, label: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`${label}必须是大于等于 0 的整数`);
   }
-  return defaultStockNum;
+  return value;
 }
 
-function resolveMainImages(listing: ProductCopyRecord, uploadedImages: ProductCopyWxDraftMappingOptions['uploadedImages']): string[] {
-  const sourceImages = uniqueStrings(listing.images.main).slice(0, WX_HEAD_IMAGE_MAX_COUNT);
+function normalizeSkuSettings(defaultStockNum?: number, settings?: ProductCopySkuSettings): Required<Pick<ProductCopySkuSettings, 'defaultStockNum'>>
+  & Partial<Pick<ProductCopySkuSettings, 'unifiedStockNum' | 'zeroStockReplacement' | 'minSkuPriceFen'>> {
+  const resolvedDefaultStock = settings?.defaultStockNum ?? defaultStockNum ?? DEFAULT_WX_STOCK_NUM;
+  if (!Number.isInteger(resolvedDefaultStock) || resolvedDefaultStock < 0) {
+    throw new Error('默认库存必须是大于等于 0 的整数');
+  }
+  return {
+    defaultStockNum: resolvedDefaultStock,
+    unifiedStockNum: normalizeNonNegativeInteger(settings?.unifiedStockNum, '统一库存'),
+    zeroStockReplacement: normalizeNonNegativeInteger(settings?.zeroStockReplacement, '0 库存替换值'),
+    minSkuPriceFen: normalizeNonNegativeInteger(settings?.minSkuPriceFen, '最低 SKU 价格'),
+  };
+}
+
+function normalizeImageCount(value: number | undefined): number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : 0;
+}
+
+function selectImages(
+  sourceImages: string[],
+  options: {
+    skipFirst?: number;
+    skipLast?: number;
+    max?: number;
+  },
+): string[] {
+  const unique = uniqueStrings(sourceImages);
+  const skipFirst = normalizeImageCount(options.skipFirst);
+  const skipLast = normalizeImageCount(options.skipLast);
+  const end = skipLast > 0 ? Math.max(skipFirst, unique.length - skipLast) : unique.length;
+  const selected = unique.slice(skipFirst, end);
+  return options.max === undefined ? selected : selected.slice(0, Math.max(0, options.max));
+}
+
+function resolveMainSourceImages(listing: ProductCopyRecord, content?: ProductCopyContentSettings): string[] {
+  return selectImages(listing.images.main, {
+    skipFirst: content?.mainImageSkipFirst,
+    skipLast: content?.mainImageSkipLast,
+    max: WX_HEAD_IMAGE_MAX_COUNT,
+  });
+}
+
+function resolveDetailSourceImages(listing: ProductCopyRecord, mainSourceImages: string[], content?: ProductCopyContentSettings): string[] {
+  const mainImageSet = new Set(mainSourceImages);
+  return selectImages(listing.images.detail, {
+    skipFirst: content?.detailImageSkipFirst,
+    skipLast: content?.detailImageSkipLast,
+    max: content?.maxDetailImages ?? WX_DETAIL_IMAGE_MAX_COUNT,
+  }).filter(url => !mainImageSet.has(url)).slice(0, WX_DETAIL_IMAGE_MAX_COUNT);
+}
+
+function normalizePricing(settings?: ProductCopyPricingSettings): ProductCopyPricingSettings {
+  return {
+    multiplier: Number.isFinite(settings?.multiplier) && Number(settings?.multiplier) > 0 ? Number(settings?.multiplier) : 1,
+    addAmountFen: Number.isInteger(settings?.addAmountFen) && Number(settings?.addAmountFen) >= 0 ? Number(settings?.addAmountFen) : 0,
+    rounding: settings?.rounding === 'jiao' || settings?.rounding === 'yuan' ? settings.rounding : 'cent',
+  };
+}
+
+function roundPriceFen(priceFen: number, rounding: ProductCopyPricingSettings['rounding']): number {
+  if (rounding === 'yuan') return Math.floor(priceFen / 100) * 100;
+  if (rounding === 'jiao') return Math.floor(priceFen / 10) * 10;
+  return Math.round(priceFen);
+}
+
+function adjustedPriceInFen(priceFen: number, pricing?: ProductCopyPricingSettings): number {
+  const normalized = normalizePricing(pricing);
+  const adjusted = priceFen * normalized.multiplier + normalized.addAmountFen;
+  const rounded = roundPriceFen(adjusted, normalized.rounding);
+  if (!Number.isFinite(rounded) || rounded <= 0) {
+    throw new Error('复制后 SKU 价格必须大于 0');
+  }
+  return rounded;
+}
+
+function buildTitle(listing: ProductCopyRecord, content?: ProductCopyContentSettings): string {
+  const sourceTitle = listing.title || listing.identity.itemId;
+  const title = normalizeWxText(`${content?.titlePrefix || ''}${sourceTitle}${content?.titleSuffix || ''}`);
+  return truncateText(title, WX_TITLE_MAX_LENGTH);
+}
+
+function resolveMainImagesWithSettings(
+  listing: ProductCopyRecord,
+  uploadedImages: ProductCopyWxDraftMappingOptions['uploadedImages'],
+  content?: ProductCopyContentSettings,
+): { sourceImages: string[]; uploadedImages: string[] } {
+  const sourceImages = resolveMainSourceImages(listing, content);
   if (sourceImages.length < WX_HEAD_IMAGE_MIN_COUNT) {
     throw new Error('微信小店商品主图至少需要 3 张');
   }
-  return sourceImages.map(url => lookupUploadedImage(uploadedImages, url));
+  return {
+    sourceImages,
+    uploadedImages: sourceImages.map(url => lookupUploadedImage(uploadedImages, url)),
+  };
 }
 
-function resolveDetailImages(listing: ProductCopyRecord, uploadedImages: ProductCopyWxDraftMappingOptions['uploadedImages']): string[] {
-  const mainImageSet = new Set(uniqueStrings(listing.images.main).slice(0, WX_HEAD_IMAGE_MAX_COUNT));
-  return uniqueStrings(listing.images.detail)
-    .filter(url => !mainImageSet.has(url))
-    .slice(0, WX_DETAIL_IMAGE_MAX_COUNT)
+function resolveDetailImagesWithSettings(
+  listing: ProductCopyRecord,
+  mainSourceImages: string[],
+  uploadedImages: ProductCopyWxDraftMappingOptions['uploadedImages'],
+  content?: ProductCopyContentSettings,
+): string[] {
+  return resolveDetailSourceImages(listing, mainSourceImages, content)
     .map(url => lookupUploadedImage(uploadedImages, url));
 }
 
@@ -169,6 +277,13 @@ function skuStockNum(sku: TaobaoProductSkuMatrixItem, defaultStockNum: number): 
   return parseStockNum(sku.stockText) ?? defaultStockNum;
 }
 
+function resolvedSkuStockNum(sku: TaobaoProductSkuMatrixItem, skuSettings: ReturnType<typeof normalizeSkuSettings>): number {
+  if (skuSettings.unifiedStockNum !== undefined) return skuSettings.unifiedStockNum;
+  const stockNum = skuStockNum(sku, skuSettings.defaultStockNum);
+  if (stockNum === 0 && skuSettings.zeroStockReplacement !== undefined) return skuSettings.zeroStockReplacement;
+  return stockNum;
+}
+
 function skuAttrs(sku: TaobaoProductSkuMatrixItem): WxShopAddProductAttr[] {
   return sku.specs
     .map(spec => ({
@@ -180,17 +295,17 @@ function skuAttrs(sku: TaobaoProductSkuMatrixItem): WxShopAddProductAttr[] {
 
 function buildSku(
   listing: ProductCopyRecord,
-  sku: TaobaoProductSkuMatrixItem,
+  resolvedSku: ResolvedSkuInput,
   index: number,
-  defaultStockNum: number,
   uploadedImages: ProductCopyWxDraftMappingOptions['uploadedImages'],
   fallbackThumbImg: string,
 ): WxShopAddProductSku {
+  const sku = resolvedSku.sku;
   const skuCode = sanitizeCode(sku.skuId || sku.id, `${listing.identity.platform}-${listing.identity.itemId}-${index + 1}`);
   return {
     thumb_img: sku.imageUrl ? lookupUploadedImage(uploadedImages, sku.imageUrl) : fallbackThumbImg,
-    sale_price: skuPriceInFen(sku, listing),
-    stock_num: skuStockNum(sku, defaultStockNum),
+    sale_price: resolvedSku.salePrice,
+    stock_num: resolvedSku.stockNum,
     sku_code: skuCode,
     sku_attrs: skuAttrs(sku),
     sku_deliver_info: { stock_type: 0 },
@@ -199,39 +314,67 @@ function buildSku(
 
 function buildDefaultSku(
   listing: ProductCopyRecord,
-  defaultStockNum: number,
+  skuSettings: ReturnType<typeof normalizeSkuSettings>,
+  pricing: ProductCopyPricingSettings | undefined,
   fallbackThumbImg: string,
 ): WxShopAddProductSku {
   const price = parseMoneyToFen(listing.price.rangeText);
   if (!price || price <= 0) {
     throw new Error('采集商品缺少有效价格，无法创建微信小店默认 SKU');
   }
+  const salePrice = adjustedPriceInFen(price, pricing);
+  if (skuSettings.minSkuPriceFen !== undefined && salePrice < skuSettings.minSkuPriceFen) {
+    throw new Error('SKU 过滤后没有可复制规格，请调整最低 SKU 价格');
+  }
   return {
     thumb_img: fallbackThumbImg,
-    sale_price: price,
-    stock_num: defaultStockNum,
+    sale_price: salePrice,
+    stock_num: skuSettings.unifiedStockNum ?? skuSettings.defaultStockNum,
     sku_code: sanitizeCode(`${listing.identity.platform}-${listing.identity.itemId}-default`, `${listing.identity.itemId}-default`),
     sku_attrs: [],
     sku_deliver_info: { stock_type: 0 },
   };
 }
 
+function resolveSkuInputs(
+  listing: ProductCopyRecord,
+  skuSettings: ReturnType<typeof normalizeSkuSettings>,
+  pricing?: ProductCopyPricingSettings,
+): ResolvedSkuInput[] {
+  return listing.sku.matrix.slice(0, WX_SKU_MAX_COUNT)
+    .map(sku => ({
+      sku,
+      salePrice: adjustedPriceInFen(skuPriceInFen(sku, listing), pricing),
+      stockNum: resolvedSkuStockNum(sku, skuSettings),
+    }))
+    .filter(sku => skuSettings.minSkuPriceFen === undefined || sku.salePrice >= skuSettings.minSkuPriceFen);
+}
+
 function buildSkus(
   listing: ProductCopyRecord,
-  defaultStockNum: number,
+  skuSettings: ReturnType<typeof normalizeSkuSettings>,
+  pricing: ProductCopyPricingSettings | undefined,
   uploadedImages: ProductCopyWxDraftMappingOptions['uploadedImages'],
   fallbackThumbImg: string,
 ): WxShopAddProductSku[] {
-  const matrix = listing.sku.matrix.slice(0, WX_SKU_MAX_COUNT);
-  if (matrix.length === 0) return [buildDefaultSku(listing, defaultStockNum, fallbackThumbImg)];
-  return matrix.map((sku, index) => buildSku(listing, sku, index, defaultStockNum, uploadedImages, fallbackThumbImg));
+  const resolvedSkus = resolveSkuInputs(listing, skuSettings, pricing);
+  if (listing.sku.matrix.length === 0) return [buildDefaultSku(listing, skuSettings, pricing, fallbackThumbImg)];
+  if (resolvedSkus.length === 0) throw new Error('SKU 过滤后没有可复制规格，请调整最低 SKU 价格');
+  return resolvedSkus.map((sku, index) => buildSku(listing, sku, index, uploadedImages, fallbackThumbImg));
 }
 
-export function collectWxDraftSourceImages(listing: ProductCopyRecord): string[] {
+export function collectWxDraftSourceImages(
+  listing: ProductCopyRecord,
+  options: ProductCopyWxDraftSourceImageOptions = {},
+): string[] {
+  const mainImages = resolveMainSourceImages(listing, options.content);
+  const detailImages = resolveDetailSourceImages(listing, mainImages, options.content);
+  const skuSettings = normalizeSkuSettings(options.sku?.defaultStockNum, options.sku);
+  const resolvedSkus = resolveSkuInputs(listing, skuSettings, options.pricing);
   return uniqueStrings([
-    ...listing.images.main.slice(0, WX_HEAD_IMAGE_MAX_COUNT),
-    ...listing.images.detail.slice(0, WX_DETAIL_IMAGE_MAX_COUNT),
-    ...listing.sku.matrix.map(sku => sku.imageUrl).filter(Boolean),
+    ...mainImages,
+    ...detailImages,
+    ...resolvedSkus.map(item => item.sku.imageUrl).filter(Boolean),
   ]);
 }
 
@@ -239,7 +382,7 @@ export function mapProductCopyRecordToWxAddProductRequest(
   listing: ProductCopyRecord,
   options: ProductCopyWxDraftMappingOptions,
 ): WxShopAddProductRequest {
-  const title = truncateText(listing.title || listing.identity.itemId, WX_TITLE_MAX_LENGTH);
+  const title = buildTitle(listing, options.content);
   if (Array.from(title).length < 5) {
     throw new Error('微信小店商品标题至少需要 5 个有效字符');
   }
@@ -247,9 +390,13 @@ export function mapProductCopyRecordToWxAddProductRequest(
   const catIds = normalizeCategoryIds(options.catIds);
   const expressTemplateId = normalizeRequiredText(options.expressTemplateId, '运费模板 ID');
   const afterSaleAddressId = normalizeRequiredNumericId(options.afterSaleAddressId, '售后地址 ID');
-  const defaultStockNum = normalizeDefaultStock(options.defaultStockNum);
-  const headImgs = resolveMainImages(listing, options.uploadedImages);
-  const detailImgs = resolveDetailImages(listing, options.uploadedImages);
+  const skuSettings = normalizeSkuSettings(options.defaultStockNum, options.sku);
+  const { sourceImages: mainSourceImages, uploadedImages: headImgs } = resolveMainImagesWithSettings(
+    listing,
+    options.uploadedImages,
+    options.content,
+  );
+  const detailImgs = resolveDetailImagesWithSettings(listing, mainSourceImages, options.uploadedImages, options.content);
   const resolvedDetailImgs = detailImgs.length > 0 ? detailImgs : [headImgs[0]];
   const attrs = buildOverrideAttrs(options.attrs) ?? buildAttrs(listing);
   const request: WxShopAddProductRequest = {
@@ -270,7 +417,7 @@ export function mapProductCopyRecordToWxAddProductRequest(
     // 微信小店部分类目强制要求七天无理由退货。这里默认开启七天无理由，
     // 运费险保持关闭，避免把非必需付费服务隐式打开。
     extra_service: { is_open_cod: 0, seven_day_return: 1, freight_insurance: 0 },
-    skus: buildSkus(listing, defaultStockNum, options.uploadedImages, headImgs[0]),
+    skus: buildSkus(listing, skuSettings, options.pricing, options.uploadedImages, headImgs[0]),
     // 复制商品只创建微信小店草稿箱商品。提审和正式上架由商品提审模块接管，
     // 因此这里从请求体转换层开始就固定 listing=0，避免业务层误传 listing=1。
     listing: 0,

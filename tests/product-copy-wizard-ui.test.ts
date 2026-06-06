@@ -59,13 +59,23 @@ test('product copy parameters are configured before draft preview generation', (
   assert.match(pageSource, /<Checkbox>AI 自动识别<\/Checkbox>/);
   assert.match(pageSource, /\{!autoCategoryMatch && \(/);
   assert.match(pageSource, /duplicateFilter/);
+  assert.match(pageSource, /autoSourceBinding/);
+  assert.match(pageSource, /创建草稿后，把当前淘宝链接自动关联到微信商品/);
   assert.match(pageSource, /expressTemplateId/);
   assert.match(pageSource, /afterSaleAddressId/);
   assert.match(pageSource, /defaultStockNum/);
+  assert.match(pageSource, /getDefaultSettings\(accountId\)/);
+  assert.match(pageSource, /saveDefaultSettings\(accountId, buildDefaultSettingsPatch\(values\)\)/);
+  assert.match(pageSource, /priceMultiplier/);
+  assert.match(pageSource, /priceAddAmountYuan/);
+  assert.match(pageSource, /titlePrefix/);
+  assert.match(pageSource, /mainImageSkipFirst/);
+  assert.match(pageSource, /minSkuPriceYuan/);
+  assert.match(pageSource, /保存为默认参数/);
   assert.match(pageSource, /生成草稿预览/);
   assert.match(
     pageSource,
-    /prepareWxDraftBoxProduct\(\{[\s\S]*expressTemplateId: values\.expressTemplateId,[\s\S]*afterSaleAddressId: values\.afterSaleAddressId,[\s\S]*defaultStockNum: values\.defaultStockNum/,
+    /prepareWxDraftBoxProduct\(\{[\s\S]*expressTemplateId: settingsPatch\.expressTemplateId,[\s\S]*afterSaleAddressId: settingsPatch\.afterSaleAddressId,[\s\S]*pricing: settingsPatch\.pricing,[\s\S]*content: settingsPatch\.content,[\s\S]*sku: settingsPatch\.sku/,
   );
   assert.match(parameterOptionsSource, /client\.getFreightTemplates\(\)/);
   assert.match(parameterOptionsSource, /\$\{name\}（ID：\$\{template\.templateId\}）/);

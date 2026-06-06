@@ -150,6 +150,106 @@ test('maps a Taobao product copy record to a WeChat add-product draft request', 
   });
 });
 
+test('applies product copy pricing, title, image, and stock settings before building the WeChat draft request', () => {
+  const listing = sampleListing({
+    images: {
+      ...sampleListing().images,
+      main: [
+        'https://img.alicdn.com/main-0.jpg',
+        'https://img.alicdn.com/main-1.jpg',
+        'https://img.alicdn.com/main-2.jpg',
+        'https://img.alicdn.com/main-3.jpg',
+        'https://img.alicdn.com/main-4.jpg',
+      ],
+      detail: [
+        'https://img.alicdn.com/detail-0.jpg',
+        'https://img.alicdn.com/detail-1.jpg',
+        'https://img.alicdn.com/detail-2.jpg',
+        'https://img.alicdn.com/detail-3.jpg',
+      ],
+    },
+    detail: {
+      text: '',
+      source: 'detailDom',
+      images: [
+        'https://img.alicdn.com/detail-0.jpg',
+        'https://img.alicdn.com/detail-1.jpg',
+        'https://img.alicdn.com/detail-2.jpg',
+        'https://img.alicdn.com/detail-3.jpg',
+      ],
+    },
+  });
+  const imageMap = new Map(collectWxDraftSourceImages(listing, {
+    content: {
+      titlePrefix: '现货 ',
+      titleSuffix: ' 包邮',
+      mainImageSkipFirst: 1,
+      mainImageSkipLast: 1,
+      detailImageSkipFirst: 1,
+      detailImageSkipLast: 1,
+      maxDetailImages: 1,
+    },
+  }).map((url, index) => [url, `https://mmecimage.cn/p/uploaded-${index}.jpg`]));
+
+  const request = mapProductCopyRecordToWxAddProductRequest(listing, {
+    catIds: ['10000111', '10000113', '6091'],
+    expressTemplateId: '47428464001',
+    afterSaleAddressId: '123456',
+    uploadedImages: imageMap,
+    pricing: {
+      multiplier: 2,
+      addAmountFen: 9,
+      rounding: 'jiao',
+    },
+    content: {
+      titlePrefix: '现货 ',
+      titleSuffix: ' 包邮',
+      mainImageSkipFirst: 1,
+      mainImageSkipLast: 1,
+      detailImageSkipFirst: 1,
+      detailImageSkipLast: 1,
+      maxDetailImages: 1,
+    },
+    sku: {
+      defaultStockNum: 99,
+      unifiedStockNum: 66,
+      zeroStockReplacement: 12,
+      minSkuPriceFen: 700,
+    },
+  });
+
+  assert.equal(request.title, '现货 适用kindle充电传输数据线paperwhite电子书配件 包邮');
+  assert.deepEqual(request.head_imgs, [
+    'https://mmecimage.cn/p/uploaded-0.jpg',
+    'https://mmecimage.cn/p/uploaded-1.jpg',
+    'https://mmecimage.cn/p/uploaded-2.jpg',
+  ]);
+  assert.deepEqual(request.desc_info?.imgs, ['https://mmecimage.cn/p/uploaded-3.jpg']);
+  assert.equal(request.skus.length, 1);
+  assert.equal(request.skus[0].sku_code, 'sku-black-05m');
+  assert.equal(request.skus[0].sale_price, 840);
+  assert.equal(request.skus[0].stock_num, 66);
+});
+
+test('rejects product copy settings that filter every SKU before creating a WeChat draft request', () => {
+  const listing = sampleListing();
+  const imageMap = new Map(collectWxDraftSourceImages(listing).map((url, index) => [url, `https://mmecimage.cn/p/uploaded-${index}.jpg`]));
+
+  assert.throws(
+    () => mapProductCopyRecordToWxAddProductRequest(listing, {
+      catIds: ['10000111', '10000113', '6091'],
+      expressTemplateId: '47428464001',
+      afterSaleAddressId: '123456',
+      uploadedImages: imageMap,
+      sku: {
+        defaultStockNum: 99,
+        minSkuPriceFen: 99999,
+      },
+    }),
+    /SKU 过滤后没有可复制规格，请调整最低 SKU 价格/,
+  );
+});
+
 test('builds one default SKU when the product copy record has no SKU matrix', () => {
   const listing = sampleListing({
     price: { rangeText: '12.80' },

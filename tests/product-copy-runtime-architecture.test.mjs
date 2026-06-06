@@ -15,6 +15,8 @@ test('product copy collection uses typed runtime channels and a thin router regi
   assert.match(source('src/shared/runtime-channels.ts'), /'productCopy:list'/);
   assert.match(source('src/shared/runtime-channels.ts'), /'productCopy:getDraftParameterOptions'/);
   assert.match(source('src/shared/runtime-channels.ts'), /'productCopy:getCreatedProduct'/);
+  assert.match(source('src/shared/runtime-channels.ts'), /'productCopy:getDefaultSettings'/);
+  assert.match(source('src/shared/runtime-channels.ts'), /'productCopy:saveDefaultSettings'/);
   assert.match(source('src/shared/runtime-channels.ts'), /'productCopy:prepareWxDraftBoxProduct'/);
   assert.match(source('src/shared/runtime-channels.ts'), /'productCopy:createPreparedWxDraftBoxProduct'/);
   assert.match(source('src/shared/runtime-channels.ts'), /'productCopy:createWxDraftBoxProduct'/);
@@ -25,6 +27,8 @@ test('product copy collection uses typed runtime channels and a thin router regi
   assert.match(source('src/shared/extension-api.ts'), /productCopy:/);
   assert.match(source('src/shared/extension-api.ts'), /getDraftParameterOptions/);
   assert.match(source('src/shared/extension-api.ts'), /getCreatedProduct/);
+  assert.match(source('src/shared/extension-api.ts'), /getDefaultSettings/);
+  assert.match(source('src/shared/extension-api.ts'), /saveDefaultSettings/);
   assert.match(source('src/shared/extension-api.ts'), /prepareWxDraftBoxProduct/);
   assert.match(source('src/shared/extension-api.ts'), /createPreparedWxDraftBoxProduct/);
   assert.match(source('src/shared/extension-api.ts'), /createWxDraftBoxProduct/);
@@ -34,6 +38,8 @@ test('product copy collection uses typed runtime channels and a thin router regi
   assert.match(source('src/background/router/create-background-router.ts'), /createProductCopyRuntimeHandlers/);
   assert.match(source('src/background/router/create-background-router.ts'), /'productCopy:getDraftParameterOptions': 'productCopy'/);
   assert.match(source('src/background/router/create-background-router.ts'), /'productCopy:getCreatedProduct': 'productCopy'/);
+  assert.match(source('src/background/router/create-background-router.ts'), /'productCopy:getDefaultSettings': 'productCopy'/);
+  assert.match(source('src/background/router/create-background-router.ts'), /'productCopy:saveDefaultSettings': 'productCopy'/);
   assert.match(source('src/background/router/create-background-router.ts'), /'productCopy:deleteCreatedWxDraftBoxProduct': 'productCopy'/);
 });
 

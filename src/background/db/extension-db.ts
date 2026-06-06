@@ -4,6 +4,7 @@ import type { AppSettings } from '../../shared/settings';
 import type {
   Config,
   ProductCopyCreatedProductRecord,
+  ProductCopyDefaultSettings,
   ProductCopyRecord,
   Order,
   OrderAssociation,
@@ -91,6 +92,7 @@ export class ExtensionDb extends Dexie {
   accountSyncStates!: Table<AccountSyncStateRecord, string>;
   productCopyRecords!: Table<ProductCopyRecord, string>;
   productCopyCreatedProducts!: Table<ProductCopyCreatedProductRecord, string>;
+  productCopyDefaultSettings!: Table<ProductCopyDefaultSettings, string>;
   wxCategoryProductRules!: Table<WxCategoryProductRuleCacheItem, string>;
 
   constructor() {
@@ -148,6 +150,17 @@ export class ExtensionDb extends Dexie {
       accountSyncStates: 'accountId, appId, revision, updatedAt',
       productCopyRecords: 'id, updatedAt, collectedAt',
       productCopyCreatedProducts: 'id, accountId, copyId, productId, updatedAt',
+      wxCategoryProductRules: 'id, catId, releaseMode, updatedAt, lastError',
+    });
+    this.version(7).stores({
+      accounts: 'id, appId, updatedAt',
+      orders: '[accountId+orderId], accountId, [accountId+status+updateTime], [accountId+createTime], [accountId+lastFetchedAt]',
+      accountWorkspaces: 'accountId, updatedAt',
+      accountLogs: 'id, accountId, kind, [accountId+kind+timestamp], timestamp',
+      accountSyncStates: 'accountId, appId, revision, updatedAt',
+      productCopyRecords: 'id, updatedAt, collectedAt',
+      productCopyCreatedProducts: 'id, accountId, copyId, productId, updatedAt',
+      productCopyDefaultSettings: 'accountId, updatedAt',
       wxCategoryProductRules: 'id, catId, releaseMode, updatedAt, lastError',
     });
   }

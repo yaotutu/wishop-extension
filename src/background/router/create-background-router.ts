@@ -74,6 +74,8 @@ const FEATURE_CHANNELS = {
   'productCopy:remove': 'productCopy',
   'productCopy:getDraftParameterOptions': 'productCopy',
   'productCopy:getCreatedProduct': 'productCopy',
+  'productCopy:getDefaultSettings': 'productCopy',
+  'productCopy:saveDefaultSettings': 'productCopy',
   'productCopy:open': 'productCopy',
   'productCopy:getCurrentTabSession': 'productCopy',
   'productCopy:markPageReady': 'productCopy',

@@ -1,6 +1,8 @@
 import type {
   Account,
   ProductCopyCreatedProductRecord,
+  ProductCopyDefaultSettings,
+  ProductCopyDefaultSettingsPatch,
   ProductCopyDraftParameterOptions,
   ProductCopyRecord,
   Config,
@@ -215,6 +217,10 @@ export const extensionApi = {
       invoke('productCopy:getDraftParameterOptions', accountId),
     getCreatedProduct: (accountId: string, copyId: string): Promise<ProductCopyCreatedProductRecord | null> =>
       invoke('productCopy:getCreatedProduct', accountId, copyId),
+    getDefaultSettings: (accountId: string): Promise<ProductCopyDefaultSettings> =>
+      invoke('productCopy:getDefaultSettings', accountId),
+    saveDefaultSettings: (accountId: string, patch: ProductCopyDefaultSettingsPatch): Promise<ProductCopyDefaultSettings> =>
+      invoke('productCopy:saveDefaultSettings', accountId, patch),
     open: (input: CreateProductCopySessionInput): Promise<ProductCopySession> =>
       invoke('productCopy:open', input),
     getCurrentTabSession: (): Promise<ProductCopySession | null> =>

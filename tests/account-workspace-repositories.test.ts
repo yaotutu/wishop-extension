@@ -26,6 +26,11 @@ test('account repositories create account metadata and workspace data in Indexed
     url: 'https://item.taobao.com/item.htm?id=1',
     quantity: 2,
     remark: '主货源',
+    sourceType: 'productCopy',
+    sourcePlatform: 'taobao',
+    sourceItemId: '1',
+    sourceTitle: '淘宝货源商品',
+    createdBy: 'productCopy',
     createdAt: 0,
     updatedAt: 0,
   }]);
@@ -52,6 +57,8 @@ test('account repositories create account metadata and workspace data in Indexed
   assert.equal((await getAccount(account.id))?.config.appId, 'app-1');
   assert.equal((await getProductAuditConfig(account.id)).submitLimit, 20);
   assert.equal((await getProductSources(account.id))[0]?.productId, 'product-1');
+  assert.equal((await getProductSources(account.id))[0]?.sources[0]?.sourceType, 'productCopy');
+  assert.equal((await getProductSources(account.id))[0]?.sources[0]?.sourceItemId, '1');
   assert.equal((await getOrderAssociations(account.id))[0]?.internalRemark, '已配货');
   assert.equal((await getRealAddressCaches(account.id))[0]?.address.user_name, '张三');
   assert.equal((await extensionDb.accountSyncStates.get(account.id))?.dirty, true);

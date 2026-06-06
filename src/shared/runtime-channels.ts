@@ -4,6 +4,8 @@ import type { AppSettings, AppSettingsPatch } from './settings';
 import type {
   Account,
   ProductCopyCreatedProductRecord,
+  ProductCopyDefaultSettings,
+  ProductCopyDefaultSettingsPatch,
   ProductCopyDraftParameterOptions,
   ProductCopyRecord,
   Config,
@@ -137,6 +139,8 @@ export interface RuntimeChannels {
   'productCopy:remove': { args: [copyId: string]; result: void };
   'productCopy:getDraftParameterOptions': { args: [accountId: string]; result: ProductCopyDraftParameterOptions };
   'productCopy:getCreatedProduct': { args: [accountId: string, copyId: string]; result: ProductCopyCreatedProductRecord | null };
+  'productCopy:getDefaultSettings': { args: [accountId: string]; result: ProductCopyDefaultSettings };
+  'productCopy:saveDefaultSettings': { args: [accountId: string, patch: ProductCopyDefaultSettingsPatch]; result: ProductCopyDefaultSettings };
   'productCopy:open': { args: [input: CreateProductCopySessionInput]; result: ProductCopySession };
   'productCopy:getCurrentTabSession': { args: []; result: ProductCopySession | null };
   'productCopy:markPageReady': { args: [sessionId: string]; result: ProductCopySession };

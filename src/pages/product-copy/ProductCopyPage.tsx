@@ -18,6 +18,7 @@ import {
   Space,
   Steps,
   Table,
+  Tabs,
   Tag,
 } from 'antd';
 import type { TableProps } from 'antd';
@@ -25,6 +26,9 @@ import { queryKeys } from '../../query/query-keys';
 import { extensionApi } from '../../shared/extension-api';
 import type {
   ProductCopyCategoryOption,
+  ProductCopyDefaultSettings,
+  ProductCopyDefaultSettingsPatch,
+  ProductCopyPriceRounding,
   ProductCopyRecord,
   DeleteCreatedWxDraftBoxProductResult,
   ProductCopySession,
@@ -53,6 +57,20 @@ interface ProductCopyParameterFormValues {
   afterSaleAddressId?: string;
   brandId?: string;
   defaultStockNum?: number;
+  autoSourceBinding: boolean;
+  priceMultiplier?: number;
+  priceAddAmountYuan?: number;
+  priceRounding: ProductCopyPriceRounding;
+  titlePrefix?: string;
+  titleSuffix?: string;
+  mainImageSkipFirst?: number;
+  mainImageSkipLast?: number;
+  detailImageSkipFirst?: number;
+  detailImageSkipLast?: number;
+  maxDetailImages?: number;
+  unifiedStockNum?: number;
+  zeroStockReplacement?: number;
+  minSkuPriceYuan?: number;
 }
 
 const missingFieldLabels: Record<string, string> = {
@@ -161,13 +179,72 @@ function normalizedCategoryText(suggestion: WxProductDraftSuggestionResult | nul
   return suggestion.categoryPath?.join(' / ') || suggestion.catIds.join(' / ') || '-';
 }
 
-function defaultParameterValues(): ProductCopyParameterFormValues {
+function fenToYuan(value?: number): number | undefined {
+  return value === undefined ? undefined : Number((value / 100).toFixed(2));
+}
+
+function yuanToFen(value?: number): number | undefined {
+  if (value === undefined || value === null || !Number.isFinite(Number(value))) return undefined;
+  return Math.round(Number(value) * 100);
+}
+
+function optionalInteger(value?: number): number | undefined {
+  if (value === undefined || value === null || !Number.isFinite(Number(value))) return undefined;
+  return Math.max(0, Math.floor(Number(value)));
+}
+
+function defaultParameterValues(settings?: ProductCopyDefaultSettings | null): ProductCopyParameterFormValues {
   return {
     autoCategoryMatch: true,
     duplicateFilter: true,
     productStatus: 'draftBox',
-    brandId: DEFAULT_BRAND_ID,
-    defaultStockNum: DEFAULT_DRAFT_STOCK_NUM,
+    brandId: settings?.brandId || DEFAULT_BRAND_ID,
+    expressTemplateId: settings?.expressTemplateId,
+    afterSaleAddressId: settings?.afterSaleAddressId,
+    defaultStockNum: settings?.sku.defaultStockNum ?? DEFAULT_DRAFT_STOCK_NUM,
+    autoSourceBinding: settings?.autoSourceBinding ?? true,
+    priceMultiplier: settings?.pricing.multiplier ?? 1,
+    priceAddAmountYuan: fenToYuan(settings?.pricing.addAmountFen) ?? 0,
+    priceRounding: settings?.pricing.rounding ?? 'cent',
+    titlePrefix: settings?.content.titlePrefix || '',
+    titleSuffix: settings?.content.titleSuffix || '',
+    mainImageSkipFirst: settings?.content.mainImageSkipFirst ?? 0,
+    mainImageSkipLast: settings?.content.mainImageSkipLast ?? 0,
+    detailImageSkipFirst: settings?.content.detailImageSkipFirst ?? 0,
+    detailImageSkipLast: settings?.content.detailImageSkipLast ?? 0,
+    maxDetailImages: settings?.content.maxDetailImages,
+    unifiedStockNum: settings?.sku.unifiedStockNum,
+    zeroStockReplacement: settings?.sku.zeroStockReplacement,
+    minSkuPriceYuan: fenToYuan(settings?.sku.minSkuPriceFen),
+  };
+}
+
+function buildDefaultSettingsPatch(values: ProductCopyParameterFormValues): ProductCopyDefaultSettingsPatch {
+  return {
+    expressTemplateId: values.expressTemplateId,
+    afterSaleAddressId: values.afterSaleAddressId,
+    brandId: values.brandId?.trim() || DEFAULT_BRAND_ID,
+    autoSourceBinding: values.autoSourceBinding !== false,
+    pricing: {
+      multiplier: values.priceMultiplier && values.priceMultiplier > 0 ? values.priceMultiplier : 1,
+      addAmountFen: yuanToFen(values.priceAddAmountYuan) ?? 0,
+      rounding: values.priceRounding || 'cent',
+    },
+    content: {
+      titlePrefix: values.titlePrefix?.trim() || '',
+      titleSuffix: values.titleSuffix?.trim() || '',
+      mainImageSkipFirst: optionalInteger(values.mainImageSkipFirst) ?? 0,
+      mainImageSkipLast: optionalInteger(values.mainImageSkipLast) ?? 0,
+      detailImageSkipFirst: optionalInteger(values.detailImageSkipFirst) ?? 0,
+      detailImageSkipLast: optionalInteger(values.detailImageSkipLast) ?? 0,
+      maxDetailImages: optionalInteger(values.maxDetailImages),
+    },
+    sku: {
+      defaultStockNum: optionalInteger(values.defaultStockNum) ?? DEFAULT_DRAFT_STOCK_NUM,
+      unifiedStockNum: optionalInteger(values.unifiedStockNum),
+      zeroStockReplacement: optionalInteger(values.zeroStockReplacement),
+      minSkuPriceFen: yuanToFen(values.minSkuPriceYuan),
+    },
   };
 }
 
@@ -351,6 +428,12 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
     queryFn: () => extensionApi.productCopy.getCreatedProduct(accountId, copyRecord?.id || ''),
     enabled: Boolean(accountId && copyRecord?.id) && currentStep === 'parameterSettings',
   });
+  const defaultSettingsQuery = useQuery({
+    queryKey: queryKeys.productCopy.defaultSettings(accountId),
+    queryFn: () => extensionApi.productCopy.getDefaultSettings(accountId),
+    enabled: Boolean(accountId),
+    staleTime: 5 * 60 * 1000,
+  });
 
   const categoryByKey = useMemo(() => {
     return new Map((parameterOptionsQuery.data?.categories || []).map(category => [category.key, category]));
@@ -376,6 +459,22 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
       label: address.label,
     }));
   }, [parameterOptionsQuery.data?.afterSaleAddresses]);
+
+  const saveDefaultSettingsMutation = useMutation({
+    mutationFn: async () => {
+      const values = await parameterForm.validateFields();
+      return extensionApi.productCopy.saveDefaultSettings(accountId, buildDefaultSettingsPatch(values));
+    },
+    onSuccess: settings => {
+      queryClient.setQueryData(queryKeys.productCopy.defaultSettings(accountId), settings);
+      parameterForm.setFieldsValue(defaultParameterValues(settings));
+      message.success('默认参数已保存');
+    },
+    onError: error => {
+      const detail = error instanceof Error ? error.message : '保存默认参数失败';
+      message.error(detail);
+    },
+  });
 
   const wizardItems = useMemo<React.ComponentProps<typeof Steps>['items']>(() => [
     { title: '输入链接' },
@@ -404,6 +503,11 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
   }, [accountId, resetWizard]);
 
   useEffect(() => {
+    if (!defaultSettingsQuery.data) return;
+    parameterForm.setFieldsValue(defaultParameterValues(defaultSettingsQuery.data));
+  }, [defaultSettingsQuery.data, parameterForm]);
+
+  useEffect(() => {
     const options = parameterOptionsQuery.data;
     if (!options) return;
     const currentValues = parameterForm.getFieldsValue();
@@ -421,7 +525,7 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
     mutationFn: (url: string) => extensionApi.productCopy.open({ url }),
     onSuccess: session => {
       setActiveSession(session);
-      parameterForm.setFieldsValue(defaultParameterValues());
+      parameterForm.setFieldsValue(defaultParameterValues(defaultSettingsQuery.data));
       setCurrentStep('input');
       setCopyRecord(null);
       setDraftPrepared(null);
@@ -496,14 +600,18 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
         throw new Error('微信小店类目路径不完整，请重新选择类目');
       }
 
+      const settingsPatch = buildDefaultSettingsPatch(values);
       const prepared = await extensionApi.productCopy.prepareWxDraftBoxProduct({
         accountId,
         copyId: copyRecord.id,
         catIds,
-        brandId: values.brandId?.trim() || DEFAULT_BRAND_ID,
-        expressTemplateId: values.expressTemplateId,
-        afterSaleAddressId: values.afterSaleAddressId,
-        defaultStockNum: values.defaultStockNum ?? DEFAULT_DRAFT_STOCK_NUM,
+        brandId: settingsPatch.brandId,
+        expressTemplateId: settingsPatch.expressTemplateId,
+        afterSaleAddressId: settingsPatch.afterSaleAddressId,
+        defaultStockNum: settingsPatch.sku?.defaultStockNum ?? DEFAULT_DRAFT_STOCK_NUM,
+        pricing: settingsPatch.pricing,
+        content: settingsPatch.content,
+        sku: settingsPatch.sku,
       });
       return { suggestion, prepared, catIds };
     },
@@ -563,6 +671,7 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
           listing: DRAFT_BOX_LISTING_VALUE,
         },
         uploadedImageCount: draftPrepared.uploadedImageCount,
+        autoSourceBinding: parameterForm.getFieldValue('autoSourceBinding') !== false,
       });
     },
     onSuccess: result => {
@@ -587,7 +696,7 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
       );
 
       if (activeCollectionUrl && listing.sourceUrl !== activeCollectionUrl) return;
-      parameterForm.setFieldsValue(defaultParameterValues());
+      parameterForm.setFieldsValue(defaultParameterValues(defaultSettingsQuery.data));
       setActiveSession(null);
       setCopyRecord(listing);
       setCurrentStep('collectionPreview');
@@ -729,6 +838,7 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
 
   const renderDraftPreview = (prepared: WxDraftBoxProductPrepareResult): React.ReactNode => {
     const request = prepared.request;
+    const parameterValues = parameterForm.getFieldsValue();
     const attrRows = (request.attrs || []).map((attr, index) => ({ ...attr, key: `${attr.attr_key}:${index}` }));
     const skuRows = request.skus.map((sku, index) => ({ ...sku, key: sku.sku_code || `${index}` }));
     const attrColumns: TableProps<typeof attrRows[number]>['columns'] = [
@@ -775,6 +885,44 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
     return (
       <Space vertical size={16} style={{ width: '100%' }}>
         {renderCategorySuggestion(draftSuggestion)}
+
+        <Descriptions
+          size="small"
+          bordered
+          column={2}
+          items={[
+            {
+              label: '价格规则',
+              children: `源价 × ${parameterValues.priceMultiplier ?? 1} + ${parameterValues.priceAddAmountYuan ?? 0} 元，${parameterValues.priceRounding === 'yuan' ? '抹到元' : parameterValues.priceRounding === 'jiao' ? '抹到角' : '保留分'}`,
+              span: 2,
+            },
+            {
+              label: '标题处理',
+              children: `${parameterValues.titlePrefix ? `前缀「${parameterValues.titlePrefix}」` : '无前缀'} / ${parameterValues.titleSuffix ? `后缀「${parameterValues.titleSuffix}」` : '无后缀'}`,
+              span: 2,
+            },
+            {
+              label: '图片处理',
+              children: `主图忽略前 ${parameterValues.mainImageSkipFirst ?? 0} / 后 ${parameterValues.mainImageSkipLast ?? 0}；详情图忽略前 ${parameterValues.detailImageSkipFirst ?? 0} / 后 ${parameterValues.detailImageSkipLast ?? 0}${parameterValues.maxDetailImages === undefined ? '' : `，最多 ${parameterValues.maxDetailImages} 张`}`,
+              span: 2,
+            },
+            {
+              label: '库存与 SKU',
+              children: [
+                `默认库存 ${parameterValues.defaultStockNum ?? DEFAULT_DRAFT_STOCK_NUM}`,
+                parameterValues.unifiedStockNum === undefined ? '' : `统一库存 ${parameterValues.unifiedStockNum}`,
+                parameterValues.zeroStockReplacement === undefined ? '' : `0 库存替换为 ${parameterValues.zeroStockReplacement}`,
+                parameterValues.minSkuPriceYuan === undefined ? '' : `删除复制后售价低于 ${parameterValues.minSkuPriceYuan} 元的 SKU`,
+              ].filter(Boolean).join('；'),
+              span: 2,
+            },
+            {
+              label: '货源关联',
+              children: parameterValues.autoSourceBinding === false ? '关闭' : '创建草稿成功后自动关联淘宝货源',
+              span: 2,
+            },
+          ]}
+        />
 
         {prepared.warnings.length > 0 && (
           <Alert
@@ -985,6 +1133,9 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
           <Form.Item name="duplicateFilter" label="重复过滤" valuePropName="checked">
             <Checkbox>遇到已复制的记录，自动跳过</Checkbox>
           </Form.Item>
+          <Form.Item name="autoSourceBinding" label="货源关联" valuePropName="checked">
+            <Checkbox>创建草稿后，把当前淘宝链接自动关联到微信商品</Checkbox>
+          </Form.Item>
           <Form.Item name="productStatus" label="复制后商品状态">
             <Select
               disabled
@@ -1024,22 +1175,123 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
                 key: 'advanced',
                 label: '更多选项',
                 children: (
-                  <>
-                    <Form.Item name="afterSaleAddressId" label="售后地址">
-                      <Select
-                        allowClear
-                        loading={parameterOptionsQuery.isFetching}
-                        options={afterSaleAddressOptions}
-                        placeholder="不选择时自动使用默认售后地址"
-                      />
-                    </Form.Item>
-                    <Form.Item name="brandId" label="品牌 ID">
-                      <Input placeholder={DEFAULT_BRAND_ID} />
-                    </Form.Item>
-                    <Form.Item name="defaultStockNum" label="默认库存">
-                      <InputNumber min={0} precision={0} style={{ width: '100%' }} />
-                    </Form.Item>
-                  </>
+                  <Tabs
+                    size="small"
+                    items={[
+                      {
+                        key: 'basic',
+                        label: '基础配置',
+                        children: (
+                          <>
+                            <Form.Item name="afterSaleAddressId" label="售后地址">
+                              <Select
+                                allowClear
+                                loading={parameterOptionsQuery.isFetching}
+                                options={afterSaleAddressOptions}
+                                placeholder="不选择时自动使用默认售后地址"
+                              />
+                            </Form.Item>
+                            <Form.Item name="brandId" label="品牌 ID">
+                              <Input placeholder={DEFAULT_BRAND_ID} />
+                            </Form.Item>
+                          </>
+                        ),
+                      },
+                      {
+                        key: 'pricing-content',
+                        label: '价格与内容',
+                        children: (
+                          <>
+                            <Form.Item label="售价调整">
+                              <Space.Compact block>
+                                <Space.Addon>源价 x</Space.Addon>
+                                <Form.Item name="priceMultiplier" noStyle>
+                                  <InputNumber min={0.01} precision={2} step={0.1} style={{ width: 120 }} />
+                                </Form.Item>
+                                <Space.Addon>+</Space.Addon>
+                                <Form.Item name="priceAddAmountYuan" noStyle>
+                                  <InputNumber min={0} precision={2} step={0.1} style={{ width: 120 }} />
+                                </Form.Item>
+                                <Space.Addon>元</Space.Addon>
+                                <Form.Item name="priceRounding" noStyle>
+                                  <Select
+                                    style={{ width: 140 }}
+                                    options={[
+                                      { value: 'cent', label: '保留分' },
+                                      { value: 'jiao', label: '抹到角' },
+                                      { value: 'yuan', label: '抹到元' },
+                                    ]}
+                                  />
+                                </Form.Item>
+                              </Space.Compact>
+                            </Form.Item>
+                            <Form.Item name="titlePrefix" label="标题前缀">
+                              <Input placeholder="不添加前缀" maxLength={20} showCount />
+                            </Form.Item>
+                            <Form.Item name="titleSuffix" label="标题后缀">
+                              <Input placeholder="不添加后缀" maxLength={20} showCount />
+                            </Form.Item>
+                            <Form.Item label="主图处理">
+                              <Space.Compact block>
+                                <Space.Addon>忽略前</Space.Addon>
+                                <Form.Item name="mainImageSkipFirst" noStyle>
+                                  <InputNumber min={0} precision={0} style={{ width: 120 }} />
+                                </Form.Item>
+                                <Space.Addon>张，忽略后</Space.Addon>
+                                <Form.Item name="mainImageSkipLast" noStyle>
+                                  <InputNumber min={0} precision={0} style={{ width: 120 }} />
+                                </Form.Item>
+                                <Space.Addon>张</Space.Addon>
+                              </Space.Compact>
+                            </Form.Item>
+                            <Form.Item label="详情图处理">
+                              <Space.Compact block>
+                                <Space.Addon>忽略前</Space.Addon>
+                                <Form.Item name="detailImageSkipFirst" noStyle>
+                                  <InputNumber min={0} precision={0} style={{ width: 110 }} />
+                                </Form.Item>
+                                <Space.Addon>张，忽略后</Space.Addon>
+                                <Form.Item name="detailImageSkipLast" noStyle>
+                                  <InputNumber min={0} precision={0} style={{ width: 110 }} />
+                                </Form.Item>
+                                <Space.Addon>张，最多</Space.Addon>
+                                <Form.Item name="maxDetailImages" noStyle>
+                                  <InputNumber min={0} precision={0} style={{ width: 110 }} />
+                                </Form.Item>
+                                <Space.Addon>张</Space.Addon>
+                              </Space.Compact>
+                            </Form.Item>
+                          </>
+                        ),
+                      },
+                      {
+                        key: 'sku',
+                        label: '库存与 SKU',
+                        children: (
+                          <>
+                            <Form.Item name="defaultStockNum" label="默认库存">
+                              <InputNumber min={0} precision={0} style={{ width: '100%' }} />
+                            </Form.Item>
+                            <Form.Item name="unifiedStockNum" label="统一库存">
+                              <InputNumber min={0} precision={0} placeholder="不统一库存" style={{ width: '100%' }} />
+                            </Form.Item>
+                            <Form.Item name="zeroStockReplacement" label="0 库存替换">
+                              <InputNumber min={0} precision={0} placeholder="保持 0 库存" style={{ width: '100%' }} />
+                            </Form.Item>
+                            <Form.Item label="删除低价 SKU">
+                              <Space.Compact block>
+                                <Space.Addon>复制后售价 &lt;</Space.Addon>
+                                <Form.Item name="minSkuPriceYuan" noStyle>
+                                  <InputNumber min={0} precision={2} placeholder="不删除" style={{ width: 180 }} />
+                                </Form.Item>
+                                <Space.Addon>元</Space.Addon>
+                              </Space.Compact>
+                            </Form.Item>
+                          </>
+                        ),
+                      },
+                    ]}
+                  />
                 ),
               },
             ]}
@@ -1047,6 +1299,12 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
         </Form>
         <div style={actionBarStyle}>
           <Button onClick={() => setCurrentStep('collectionPreview')}>上一步</Button>
+          <Button
+            loading={saveDefaultSettingsMutation.isPending}
+            onClick={() => saveDefaultSettingsMutation.mutate()}
+          >
+            保存为默认参数
+          </Button>
           <Button
             type="primary"
             loading={generateDraftDataMutation.isPending}

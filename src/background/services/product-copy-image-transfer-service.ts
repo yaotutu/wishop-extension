@@ -1,5 +1,8 @@
 import type {
+  ProductCopyContentSettings,
+  ProductCopyPricingSettings,
   ProductCopyRecord,
+  ProductCopySkuSettings,
   TaobaoProductImageAsset,
   TaobaoProductImageRole,
 } from '../../shared/types.ts';
@@ -28,6 +31,9 @@ export interface ProductCopyImageDownloadDependencies {
 
 export interface UploadWxDraftSourceImagesOptions {
   logger?: ImageTransferLogger;
+  pricing?: ProductCopyPricingSettings;
+  content?: ProductCopyContentSettings;
+  sku?: ProductCopySkuSettings;
   downloadImage?: (source: WxDraftImageUploadSource) => Promise<ProductCopyImageDownloadResult>;
 }
 
@@ -78,8 +84,11 @@ function resolveImageCandidates(listing: ProductCopyRecord, sourceUrl: string): 
   ]);
 }
 
-export function buildWxDraftImageUploadSources(listing: ProductCopyRecord): WxDraftImageUploadSource[] {
-  return collectWxDraftSourceImages(listing).map(sourceUrl => ({
+export function buildWxDraftImageUploadSources(
+  listing: ProductCopyRecord,
+  options: Pick<UploadWxDraftSourceImagesOptions, 'pricing' | 'content' | 'sku'> = {},
+): WxDraftImageUploadSource[] {
+  return collectWxDraftSourceImages(listing, options).map(sourceUrl => ({
     sourceUrl,
     role: resolveImageRole(listing, sourceUrl),
     candidates: resolveImageCandidates(listing, sourceUrl),
@@ -165,7 +174,11 @@ export async function uploadWxDraftSourceImages(
   options: UploadWxDraftSourceImagesOptions = {},
 ): Promise<Map<string, string>> {
   const uploadedImages = new Map<string, string>();
-  const sources = buildWxDraftImageUploadSources(listing);
+  const sources = buildWxDraftImageUploadSources(listing, {
+    pricing: options.pricing,
+    content: options.content,
+    sku: options.sku,
+  });
   const downloadImage = options.downloadImage || (source => downloadProductCopyImage(source));
   options.logger?.info('开始本地校验并上传微信小店商品图片', {
     copyId: listing.id,
