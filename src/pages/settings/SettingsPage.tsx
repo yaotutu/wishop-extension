@@ -10,6 +10,7 @@ import {
   RobotOutlined,
   SafetyCertificateOutlined,
   ShopOutlined,
+  LinkOutlined,
 } from '@ant-design/icons';
 import wechatQrcode from '../../assets/wechat-qrcode.png';
 import douyinQrcode from '../../assets/douyin-qrcode.png';
@@ -19,6 +20,7 @@ import { useAppSettingsQuery, useUpdateAppSettingsMutation } from '../../hooks/u
 import type { SettingsTab } from '../../stores/dashboard-ui-preferences-store';
 import { queryKeys } from '../../query/query-keys';
 import StoreManagement from '../store-management/StoreManagement';
+import PurchaseLinkPanel from './PurchaseLinkPanel';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -39,6 +41,7 @@ const MENU_ITEMS = [
   { key: 'product', label: '产品介绍', icon: <AppstoreOutlined /> },
   { key: 'license', label: '授权状态', icon: <SafetyCertificateOutlined /> },
   { key: 'aiService', label: 'AI 服务', icon: <RobotOutlined /> },
+  { key: 'purchaseLink', label: '采购关联', icon: <LinkOutlined /> },
   { key: 'baseData', label: '基础数据', icon: <CloudDownloadOutlined /> },
   { key: 'contact', label: '联系我们', icon: <CustomerServiceOutlined /> },
 ];
@@ -403,6 +406,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ accounts, activeAccountId, 
         {activeTab === 'product' && <ProductPanel />}
         {activeTab === 'license' && <LicensePanel />}
         {activeTab === 'aiService' && <AiServicePanel />}
+        {activeTab === 'purchaseLink' && <PurchaseLinkPanel />}
         {activeTab === 'baseData' && <BaseDataPanel accounts={accounts} activeAccountId={activeAccountId} />}
         {activeTab === 'contact' && <ContactPanel />}
       </div>

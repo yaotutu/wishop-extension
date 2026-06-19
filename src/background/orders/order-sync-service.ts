@@ -7,6 +7,7 @@ import type {
   StoredOrderSource,
 } from '../../shared/types';
 import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
+import { linkOrdersFromMerchantNotes } from './order-association-service.ts';
 import type { OrderStore } from './order-store.ts';
 import type { WxOrderSource } from './wx-order-source.ts';
 
@@ -179,7 +180,21 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
       try {
         await enqueueCommit(() => deps.store.markSyncStarted({ type: 'account', accountId: account.id }));
         const orders = await refreshAccountOrders(account, { ...options, reason, mode });
-        const upsertResult = await enqueueCommit(() => deps.store.upsertMany(account.id, account.name, orders, reason));
+       const upsertResult = await enqueueCommit(() => deps.store.upsertMany(account.id, account.name, orders, reason));
+        // 订单落库后，对这批订单跑卖家备注提取，命中且来源启用/优先级够高就自动建立采购关联。
+        // 放在 enqueueCommit 外面执行：它依赖读取已写入的关联数据做优先级判断，且失败不应阻塞主同步流程。
+        try {
+          const noteResult = await linkOrdersFromMerchantNotes(account.id, orders);
+          if (noteResult.linked > 0) {
+            createDiagnosticLogger({ domain: 'orders', component: 'OrderSync', accountId: account.id }).info('卖家备注采购关联提取', {
+              accountName: account.name,
+              scanned: noteResult.scanned,
+              linked: noteResult.linked,
+            });
+          }
+        } catch {
+          // 备注提取是辅助流程，失败只记诊断，不阻塞订单同步主流程。
+        }
         const result: AccountRefreshResult = {
           account,
           orders,

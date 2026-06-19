@@ -12,6 +12,15 @@ export interface ShipmentCheckSettings {
   failureCooldownMinutes: number;
 }
 
+export type PurchaseLinkSourceId = 'manual' | 'merchant_notes' | 'payment_success';
+
+// 采购订单关联设置。sourceOrder 是用户排序的来源数组，靠前者优先级高；
+// enabledSources 控制哪些自动来源允许写入关联（manual 永远可写，不在此列）。
+export interface PurchaseLinkSettings {
+  sourceOrder: PurchaseLinkSourceId[];
+  enabledSources: PurchaseLinkSourceId[];
+}
+
 export interface AiServiceSettings {
   /** OpenAI 兼容接口地址仅保存在本地配置中，由后台统一拼接 chat completions 路径。 */
   baseUrl: string;
@@ -23,11 +32,13 @@ export interface AiServiceSettings {
 
 export interface AppSettings {
   shipmentCheck: ShipmentCheckSettings;
+  purchaseLink: PurchaseLinkSettings;
   aiService: AiServiceSettings;
 }
 
 export interface AppSettingsPatch {
   shipmentCheck?: Partial<ShipmentCheckSettings>;
+  purchaseLink?: Partial<PurchaseLinkSettings>;
   aiService?: Partial<AiServiceSettings>;
 }
 
@@ -43,6 +54,19 @@ type LegacyAppSettingsPatch = AppSettingsPatch & {
 
 export const MAX_SHIPMENT_CHECK_ORDER_LOOKBACK_DAYS = 7;
 
+// 来源默认顺序：用户手动输入最高，备注提取次之，付款页抓取最低。
+// 新增来源时追加到数组末尾，保持既有来源相对顺序不变。
+export const LINK_SOURCE_DEFAULT_ORDER: PurchaseLinkSourceId[] = ['manual', 'merchant_notes', 'payment_success'];
+
+// 默认开启的自动来源（不含 manual，manual 永远可写不受开关控制）。
+export const LINK_SOURCE_DEFAULT_ENABLED: PurchaseLinkSourceId[] = ['merchant_notes', 'payment_success'];
+
+const PURCHASE_LINK_SOURCE_IDS: ReadonlySet<PurchaseLinkSourceId> = new Set([
+  'manual',
+  'merchant_notes',
+  'payment_success',
+]);
+
 export const DEFAULT_SHIPMENT_CHECK_SETTINGS: ShipmentCheckSettings = {
   enabled: true,
   autoShipEnabled: false,
@@ -57,6 +81,11 @@ export const DEFAULT_SHIPMENT_CHECK_SETTINGS: ShipmentCheckSettings = {
   failureCooldownMinutes: 60,
 };
 
+export const DEFAULT_PURCHASE_LINK_SETTINGS: PurchaseLinkSettings = {
+  sourceOrder: [...LINK_SOURCE_DEFAULT_ORDER],
+  enabledSources: [...LINK_SOURCE_DEFAULT_ENABLED],
+};
+
 export const DEFAULT_AI_SERVICE_SETTINGS: AiServiceSettings = {
   baseUrl: '',
   apiKey: '',
@@ -65,6 +94,7 @@ export const DEFAULT_AI_SERVICE_SETTINGS: AiServiceSettings = {
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   shipmentCheck: DEFAULT_SHIPMENT_CHECK_SETTINGS,
+  purchaseLink: DEFAULT_PURCHASE_LINK_SETTINGS,
   aiService: DEFAULT_AI_SERVICE_SETTINGS,
 };
 
@@ -78,6 +108,50 @@ function cappedNumber(value: unknown, fallback: number, min: number, max: number
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
   if (value < min) return fallback;
   return Math.min(Math.round(value), max);
+}
+
+// 归一化来源数组：过滤未知值、去重、并把用户遗漏的新来源补到末尾，
+// 保证新增来源后老配置也能自动出现在设置页里。
+function normalizeSourceOrder(input: unknown): PurchaseLinkSourceId[] {
+  const raw = Array.isArray(input) ? (input as unknown[]).filter((id): id is PurchaseLinkSourceId =>
+    typeof id === 'string' && PURCHASE_LINK_SOURCE_IDS.has(id as PurchaseLinkSourceId),
+  ) : [];
+  const seen = new Set<PurchaseLinkSourceId>();
+  const ordered: PurchaseLinkSourceId[] = [];
+  for (const id of raw) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    ordered.push(id);
+  }
+  for (const id of LINK_SOURCE_DEFAULT_ORDER) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    ordered.push(id);
+  }
+  return ordered;
+}
+
+function normalizeEnabledSources(input: unknown): PurchaseLinkSourceId[] {
+  const raw = Array.isArray(input) ? (input as unknown[]).filter((id): id is PurchaseLinkSourceId =>
+    typeof id === 'string' && PURCHASE_LINK_SOURCE_IDS.has(id as PurchaseLinkSourceId),
+  ) : [];
+  const seen = new Set<PurchaseLinkSourceId>();
+  const enabled: PurchaseLinkSourceId[] = [];
+  for (const id of raw) {
+    if (id === 'manual') continue; // manual 只参与排序，不进 enabled 开关
+    if (seen.has(id)) continue;
+    seen.add(id);
+    enabled.push(id);
+  }
+  return enabled;
+}
+
+export function normalizePurchaseLinkSettings(input?: Partial<PurchaseLinkSettings>): PurchaseLinkSettings {
+  const fallback = DEFAULT_PURCHASE_LINK_SETTINGS;
+  return {
+    sourceOrder: input ? normalizeSourceOrder(input.sourceOrder) : [...fallback.sourceOrder],
+    enabledSources: input ? normalizeEnabledSources(input.enabledSources) : [...fallback.enabledSources],
+  };
 }
 
 export function normalizeShipmentCheckSettings(input?: Partial<ShipmentCheckSettings>): ShipmentCheckSettings {
@@ -144,6 +218,7 @@ export function normalizeAppSettings(input?: AppSettingsPatch | LegacyAppSetting
   const legacyAiService = normalizeLegacyAiServiceSettings(legacyInput?.aiProductCopy || legacyInput?.aiListing);
   return {
     shipmentCheck: normalizeShipmentCheckSettings(input?.shipmentCheck),
+    purchaseLink: normalizePurchaseLinkSettings(input?.purchaseLink),
     aiService: normalizeAiServiceSettings(input?.aiService || legacyAiService || DEFAULT_AI_SERVICE_SETTINGS),
   };
 }

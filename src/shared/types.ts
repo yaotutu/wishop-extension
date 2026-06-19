@@ -256,12 +256,17 @@ export interface ProductQrcodeResult {
 export type LinkedOrderPlatform = 'taobao' | 'tmall' | '1688' | 'manual';
 export type PurchaseShipmentCheckStatus = 'queued' | 'running' | 'waiting_user' | 'completed' | 'failed' | 'skipped';
 
+// 采购订单的关联来源，决定 applyLinkedOrder 的优先级比较。新增来源时：
+// 1) 在此扩展枚举；2) 在 LINK_SOURCE_DEFAULT_ORDER 追加默认位置；3) 设置页会自动展示。
+export type LinkSource = 'manual' | 'merchant_notes' | 'payment_success';
+
 export interface LinkedPlatformOrder {
   id: string;
   platform: LinkedOrderPlatform;
   platformOrderId: string;
   platformOrderStatus: string;
   logisticsStatus: string;
+  linkSource: LinkSource;
   logisticsCompany?: string;
   trackingNumber?: string;
   remark?: string;

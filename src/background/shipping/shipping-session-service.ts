@@ -6,10 +6,9 @@ import type {
   ShippingSession,
   ShippingSessionStatus,
 } from '../../shared/types';
-import { getOrderAssociations, setOrderAssociation } from '../store/order-association-repository';
 import { ensureTaobaoTaskWorkTab, openTaobaoShippingWorkTab } from '../taobao-workspace/work-tab-service';
 import { openPurchaseLookupSessionTab } from '../purchase-lookup/purchase-lookup-session-service';
-import { buildPaidTaobaoLinkedOrder } from './purchase-association';
+import { applyLinkedOrder } from '../orders/order-association-service';
 
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 const DEFAULT_PAYMENT_WORKFLOW: ShippingPaymentWorkflow = 'manualPasswordPayment';
@@ -105,15 +104,18 @@ function readPaymentSuccessOrderId(workflow: ShippingPaymentWorkflow, url?: stri
 }
 
 async function savePaidTaobaoOrderAssociation(session: ShippingSession, platformOrderId: string): Promise<OrderAssociation> {
-  const existing = (await getOrderAssociations(session.accountId)).find(item => item.orderId === session.orderId);
-  const existingLinked = existing?.linkedOrders[0];
-  const timestamp = now();
-  const linkedOrder = buildPaidTaobaoLinkedOrder(existingLinked, platformOrderId, timestamp);
-
-  return setOrderAssociation(session.accountId, session.orderId, {
-    internalRemark: existing?.internalRemark || '',
-    linkedOrders: [linkedOrder],
+  // 付款成功页抓取的订单号走统一关联入口，由优先级表决定是否写入。
+  const outcome = await applyLinkedOrder({
+    accountId: session.accountId,
+    orderId: session.orderId,
+    platformOrderId,
+    linkSource: 'payment_success',
+    remark: '淘宝付款完成页自动关联',
   });
+  if (!outcome.written) {
+    throw new Error('当前订单已有更高优先级的采购关联，付款页抓取被跳过');
+  }
+  return outcome.association;
 }
 
 async function startPaidTaobaoOrderStatusLookup(session: ShippingSession, platformOrderId: string): Promise<void> {

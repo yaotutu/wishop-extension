@@ -17,6 +17,10 @@ export async function updateAppSettings(patch: AppSettingsPatch): Promise<AppSet
       ...current.shipmentCheck,
       ...patch.shipmentCheck,
     },
+    purchaseLink: {
+      ...current.purchaseLink,
+      ...patch.purchaseLink,
+    },
     aiService: {
       ...current.aiService,
       ...patch.aiService,

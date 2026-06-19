@@ -20,6 +20,7 @@ import { getAppSettings } from '../store/settings-repository';
 import { getOrderAssociations, setOrderAssociation, updateLinkedOrderShipmentCheck } from '../store/order-association-repository';
 import { activateTaobaoWorkTab, ensureTaobaoTaskWorkTab, openTaobaoWorkTab } from '../taobao-workspace/work-tab-service';
 import { maybeAutoShipFromPurchase } from './auto-shipment-service';
+import { applyLinkedOrder } from '../orders/order-association-service';
 
 const SESSION_TTL_MS = 30 * 60 * 1000;
 const TAOBAO_ORDER_DETAIL_URL = 'https://trade.taobao.com/trade/detail/trade_order_detail.htm';
@@ -212,6 +213,8 @@ async function savePurchaseSnapshot(
     platformOrderId: snapshot.platformOrderId || session.platformOrderId,
     platformOrderStatus: snapshot.platformOrderStatus || '',
     logisticsStatus: snapshot.logisticsStatus || '',
+    // 这是状态回填，不是建立新关联，保留原有的关联来源。
+    linkSource: existingLinked?.linkSource || 'payment_success',
     logisticsCompany: snapshot.logisticsCompany || '',
     trackingNumber: snapshot.trackingNumber || '',
     remark: snapshot.remark || '',

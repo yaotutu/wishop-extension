@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { LinkedPlatformOrder, OrderAssociation } from '../../shared/types';
+import type { LinkSource, LinkedPlatformOrder, OrderAssociation } from '../../shared/types';
 import { normalizeLinkedPurchaseOrder } from '../../shared/purchase-status.ts';
 import { ensureAccountWorkspace, updateAccountWorkspace } from './workspace-repository.ts';
 
@@ -10,6 +10,8 @@ function normalizeLinkedOrder(order: Partial<LinkedPlatformOrder>, now: number):
     platformOrderId: order.platformOrderId?.trim() || '',
     platformOrderStatus: order.platformOrderStatus?.trim() || '',
     logisticsStatus: order.logisticsStatus?.trim() || '',
+    // 调用方若未显式带来源，保守归为 manual（用户明确写入），避免被自动来源误覆盖。
+    linkSource: (order.linkSource as LinkSource | undefined) ?? 'manual',
     logisticsCompany: order.logisticsCompany?.trim() || '',
     trackingNumber: order.trackingNumber?.trim() || '',
     remark: order.remark?.trim() || '',

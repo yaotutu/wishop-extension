@@ -163,6 +163,22 @@ export class ExtensionDb extends Dexie {
       productCopyDefaultSettings: 'accountId, updatedAt',
       wxCategoryProductRules: 'id, catId, releaseMode, updatedAt, lastError',
     });
+    // linkSource 字段成为 LinkedPlatformOrder 必填字段，旧关联数据缺少该字段，直接清空重建。
+    this.version(8).stores({
+      accounts: 'id, appId, updatedAt',
+      orders: '[accountId+orderId], accountId, [accountId+status+updateTime], [accountId+createTime], [accountId+lastFetchedAt]',
+      accountWorkspaces: 'accountId, updatedAt',
+      accountLogs: 'id, accountId, kind, [accountId+kind+timestamp], timestamp',
+      accountSyncStates: 'accountId, appId, revision, updatedAt',
+      productCopyRecords: 'id, updatedAt, collectedAt',
+      productCopyCreatedProducts: 'id, accountId, copyId, productId, updatedAt',
+      productCopyDefaultSettings: 'accountId, updatedAt',
+      wxCategoryProductRules: 'id, catId, releaseMode, updatedAt, lastError',
+    }).upgrade(async tx => {
+      await tx.table('accountWorkspaces').toCollection().modify(workspace => {
+        workspace.orderAssociations = [];
+      });
+    });
   }
 }
 
