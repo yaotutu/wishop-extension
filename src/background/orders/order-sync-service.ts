@@ -183,16 +183,18 @@ export function createOrderSyncService(deps: OrderSyncServiceDeps) {
        const upsertResult = await enqueueCommit(() => deps.store.upsertMany(account.id, account.name, orders, reason));
         // 订单落库后，对这批订单跑卖家备注提取，命中且来源启用/优先级够高就自动建立采购关联。
         // 放在 enqueueCommit 外面执行：它依赖读取已写入的关联数据做优先级判断，且失败不应阻塞主同步流程。
-        try {
-          const noteResult = await linkOrdersFromMerchantNotes(account.id, orders);
-          if (noteResult.linked > 0) {
-            createDiagnosticLogger({ domain: 'orders', component: 'OrderSync', accountId: account.id }).info('卖家备注采购关联提取', {
-              accountName: account.name,
-              scanned: noteResult.scanned,
-              linked: noteResult.linked,
-            });
-          }
-        } catch {
+       try {
+         const noteResult = await linkOrdersFromMerchantNotes(account.id, orders);
+         if (noteResult.linked > 0) {
+           createDiagnosticLogger({ domain: 'orders', component: 'OrderSync', accountId: account.id }).info('卖家备注采购关联提取', {
+             accountName: account.name,
+             scanned: noteResult.scanned,
+             linked: noteResult.linked,
+           });
+            // 通知前端关联数据已变化，让 orderAssociations query 重新拉取。
+            chrome.runtime.sendMessage({ type: 'event', event: 'orderAssociations:changed', payload: { accountId: account.id } }).catch(() => {});
+         }
+       } catch {
           // 备注提取是辅助流程，失败只记诊断，不阻塞订单同步主流程。
         }
         const result: AccountRefreshResult = {

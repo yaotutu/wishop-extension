@@ -153,14 +153,17 @@ export const extensionApi = {
     shipFromPurchase: (input: ShipOrderFromPurchaseInput): Promise<ShipOrderFromPurchaseResult> =>
       invoke('orders:shipFromPurchase', input),
   },
-  orderAssociations: {
-    list: (accountId: string): Promise<OrderAssociation[]> => invoke('orderAssociations:list', accountId),
-    set: (
-      accountId: string,
-      orderId: string,
-      input: Pick<OrderAssociation, 'internalRemark' | 'linkedOrders'>,
-    ): Promise<OrderAssociation> => invoke('orderAssociations:set', accountId, orderId, input),
-  },
+ orderAssociations: {
+   list: (accountId: string): Promise<OrderAssociation[]> => invoke('orderAssociations:list', accountId),
+   set: (
+     accountId: string,
+     orderId: string,
+     input: Pick<OrderAssociation, 'internalRemark' | 'linkedOrders'>,
+   ): Promise<OrderAssociation> => invoke('orderAssociations:set', accountId, orderId, input),
+   // 后台自动写入关联（如备注提取）后通知前端刷新。
+   onChanged: (callback: (payload: { accountId: string }) => void) =>
+     onRuntimeEvent('orderAssociations:changed', callback),
+ },
   purchaseLookup: {
     open: (input: CreatePurchaseLookupSessionInput): Promise<PurchaseLookupSession> => invoke('purchaseLookup:open', input),
     getCurrentTabSession: (): Promise<PurchaseLookupSession | null> => invoke('purchaseLookup:getCurrentTabSession'),

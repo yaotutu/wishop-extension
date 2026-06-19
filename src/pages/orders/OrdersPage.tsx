@@ -291,9 +291,14 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
       void refetchOrderAssociations();
       message.success(`淘宝订单已关联：${payload.session.linkedPlatformOrderId || '-'}`);
     });
-    const offShippingFailed = extensionApi.shipping.onPurchaseAssociationFailed((session) => {
-      if (!accountIdSet.has(session.accountId)) return;
-      message.error(session.purchaseAssociationMessage || '淘宝订单自动关联失败');
+   const offShippingFailed = extensionApi.shipping.onPurchaseAssociationFailed((session) => {
+     if (!accountIdSet.has(session.accountId)) return;
+     message.error(session.purchaseAssociationMessage || '淘宝订单自动关联失败');
+   });
+    // 后台通过备注提取等方式自动写入关联后，刷新前端的关联缓存。
+    const offAssociationsChanged = extensionApi.orderAssociations.onChanged((payload) => {
+      if (!accountIdSet.has(payload.accountId)) return;
+      void refetchOrderAssociations();
     });
     return () => {
       offCompleted();
@@ -305,6 +310,7 @@ const Orders: React.FC<{ scope: OrderScope; accounts: Account[] }> = ({ scope, a
       offRefundChallenge();
       offShippingAssociated();
       offShippingFailed();
+      offAssociationsChanged();
       refundSyncTimerIdsRef.current.forEach(timer => window.clearTimeout(timer));
       refundSyncTimerIdsRef.current = [];
     };
