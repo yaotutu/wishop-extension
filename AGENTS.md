@@ -91,6 +91,8 @@ Runtime IPC 必须保持类型化。每个新增 channel 都必须添加到 `Run
 
 前端异步业务数据应使用 TanStack Query。Query key 放在 `src/query/` 下，页面 hook 在 mutation 后应通过失效或更新 query data 来刷新数据，不要在组件 state 中维护重复的业务数据副本。持久化业务状态仍以后端 background repository 为准；Query 只是前端缓存。
 
+后台异步写入前端会缓存的数据后，必须通知前端刷新。前端 TanStack Query 缓存只有两条失效来源：前端主动 mutation 的 `invalidateQueries` 回调，以及后台 runtime event 驱动的 `refetch`。只要数据写入不经过前端 mutation（例如订单同步、定时任务、内容脚本回填、备注提取、付款抓取等后台异步流程），就必须通过 `chrome.runtime.sendMessage({ type: 'event', event, payload })` 发一个明确事件，并在 `extensionApi` 暴露对应的 `onXxx` 监听器，让消费该数据的页面 hook 失效或 refetch 对应 query。新增任何后台写入路径时，要确认这条写入在 UI 上能看到结果；如果 UI 看不到，说明缓存闭环没走完。不要只在存储层落库就认为任务完成。
+
 Zustand 只用于轻量 UI 状态和用户偏好，例如悬浮工具栏位置、折叠状态、选中的 tab 和视图偏好。不要把订单、真实地址、采购单详情、凭证或其它持久化业务数据放入 Zustand。
 
 `wxt.config.ts` 中的 host permissions 应继续集中在 `HOST_PERMISSIONS`，并用注释说明每个域名权限对应的用户功能。优先保证商家工作流使用方便，但不要添加无法解释的宽泛权限。
