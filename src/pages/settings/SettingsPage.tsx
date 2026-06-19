@@ -9,25 +9,32 @@ import {
   CustomerServiceOutlined,
   RobotOutlined,
   SafetyCertificateOutlined,
+  ShopOutlined,
 } from '@ant-design/icons';
 import wechatQrcode from '../../assets/wechat-qrcode.png';
 import douyinQrcode from '../../assets/douyin-qrcode.png';
-import type { Account, LicenseState } from '../../shared/types';
+import type { Account, Config, LicenseState } from '../../shared/types';
 import { DEFAULT_AI_SERVICE_SETTINGS } from '../../shared/settings';
 import { useAppSettingsQuery, useUpdateAppSettingsMutation } from '../../hooks/useOrderQueries';
 import type { SettingsTab } from '../../stores/dashboard-ui-preferences-store';
 import { queryKeys } from '../../query/query-keys';
+import StoreManagement from '../store-management/StoreManagement';
 
 const { Title, Paragraph, Text } = Typography;
 
 interface SettingsPageProps {
   accounts: Account[];
   activeAccountId: string;
+  addAccount: (name: string, config: Config) => Promise<Account>;
+  updateAccount: (id: string, patch: Partial<Pick<Account, 'name' | 'config'>>) => Promise<void>;
+  removeAccount: (id: string) => Promise<void>;
+  switchAccount: (id: string) => Promise<void>;
   defaultTab?: SettingsTab;
   onTabChange?: (tab: SettingsTab) => void;
 }
 
 const MENU_ITEMS = [
+  { key: 'store', label: '店铺管理', icon: <ShopOutlined /> },
   { key: 'about', label: '关于/更新', icon: <InfoCircleOutlined /> },
   { key: 'product', label: '产品介绍', icon: <AppstoreOutlined /> },
   { key: 'license', label: '授权状态', icon: <SafetyCertificateOutlined /> },
@@ -361,7 +368,7 @@ const ContactPanel: React.FC = () => (
   </Card>
 );
 
-const SettingsPage: React.FC<SettingsPageProps> = ({ accounts, activeAccountId, defaultTab = 'about', onTabChange }) => {
+const SettingsPage: React.FC<SettingsPageProps> = ({ accounts, activeAccountId, addAccount, updateAccount, removeAccount, switchAccount, defaultTab = 'about', onTabChange }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>(defaultTab);
 
   useEffect(() => {
@@ -382,6 +389,16 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ accounts, activeAccountId, 
         style={{ width: 160, height: '100%', borderRight: '1px solid #f0f0f0' }}
       />
       <div style={{ flex: 1, padding: 24, overflow: 'auto' }}>
+        {activeTab === 'store' && (
+          <StoreManagement
+            accounts={accounts}
+            activeAccountId={activeAccountId}
+            addAccount={addAccount}
+            updateAccount={updateAccount}
+            removeAccount={removeAccount}
+            switchAccount={switchAccount}
+          />
+        )}
         {activeTab === 'about' && <AboutPanel />}
         {activeTab === 'product' && <ProductPanel />}
         {activeTab === 'license' && <LicensePanel />}

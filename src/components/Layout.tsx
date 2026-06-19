@@ -1,6 +1,7 @@
 import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { extensionApi } from '../shared/extension-api';
-import { Layout as AntLayout, Tabs, Empty, Spin } from 'antd';
+import { Layout as AntLayout, Tabs, Empty, Spin, Button } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
 import ActivityLogDrawer from './ActivityLogDrawer';
 import NotificationCenter from './NotificationCenter';
 import { useAccounts } from '../hooks/useAccounts';
@@ -18,7 +19,6 @@ import {
 
 const { Header, Sider, Content } = AntLayout;
 
-const StoreManagement = lazy(() => import('../pages/store-management/StoreManagement'));
 const SettingsPage = lazy(() => import('../pages/settings/SettingsPage'));
 const OrdersPage = lazy(() => import('../pages/orders/OrdersPage'));
 const ProductCopyPage = lazy(() => import('../pages/product-copy/ProductCopyPage'));
@@ -30,7 +30,6 @@ const ACCOUNT_MODULES = new Set<string>(['orders', 'productCopy', 'commonFunctio
 
 const MODULES: { key: DashboardModuleType; label: string }[] = [
   { key: 'orders', label: '订单管理' },
-  { key: 'storeManagement', label: '店铺管理' },
   { key: 'productCopy', label: '复制商品' },
   { key: 'commonFunctions', label: '商品提审' },
   { key: 'scheduledJobs', label: '调度任务' },
@@ -151,11 +150,13 @@ const AccountModuleContent: React.FC<{
   orderScopeType: OrderScope['type'];
   productReviewScope: ProductReviewScope;
   productReviewGlobalView: ProductReviewGlobalView;
-}> = ({ accounts, activeAccountId, activeModule, orderScopeType, productReviewScope, productReviewGlobalView }) => {
+  onNavigateToAddStore: () => void;
+}> = ({ accounts, activeAccountId, activeModule, orderScopeType, productReviewScope, productReviewGlobalView, onNavigateToAddStore }) => {
   if (accounts.length === 0) {
     return (
-      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Empty description="请先添加店铺" />
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+        <Empty description="还没有店铺，先添加一个微信小店账号" />
+        <Button type="primary" icon={<PlusOutlined />} onClick={onNavigateToAddStore}>添加店铺</Button>
       </div>
     );
   }
@@ -200,9 +201,10 @@ const Layout: React.FC = () => {
 
   const isAccountModule = ACCOUNT_MODULES.has(activeModule);
 
-  const navigateToStoreManagement = useCallback(() => {
-    setActiveModule('storeManagement');
-  }, []);
+  const navigateToStoreSettings = useCallback(() => {
+    setSettingsTab('store');
+    setActiveModule('settings');
+  }, [setSettingsTab, setActiveModule]);
 
   const handleVersionClick = () => {
     setSettingsTab('about');
@@ -210,7 +212,7 @@ const Layout: React.FC = () => {
   };
 
   return (
-    <CredentialErrorProvider onNavigateToSettings={navigateToStoreManagement}>
+    <CredentialErrorProvider onNavigateToSettings={navigateToStoreSettings}>
       <AntLayout style={{ height: '100vh' }}>
         <Header style={{ padding: '0 12px', height: 48, lineHeight: '48px', background: '#fafafa', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center' }}>
           <Tabs
@@ -253,20 +255,9 @@ const Layout: React.FC = () => {
                   orderScopeType={orderScopeType}
                   productReviewScope={productReviewScope}
                   productReviewGlobalView={productReviewGlobalView}
+                  onNavigateToAddStore={navigateToStoreSettings}
                 />
               </div>
-              {activeModule === 'storeManagement' && (
-                <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                  <StoreManagement
-                    accounts={accounts}
-                    addAccount={addAccount}
-                    updateAccount={updateAccount}
-                    removeAccount={removeAccount}
-                    switchAccount={switchAccount}
-                    activeAccountId={activeAccountId}
-                  />
-                </div>
-              )}
               {activeModule === 'scheduledJobs' && (
                 <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                   <ScheduledJobsPage accounts={accounts} />
@@ -277,6 +268,10 @@ const Layout: React.FC = () => {
                   <SettingsPage
                     accounts={accounts}
                     activeAccountId={activeAccountId}
+                    addAccount={addAccount}
+                    updateAccount={updateAccount}
+                    removeAccount={removeAccount}
+                    switchAccount={switchAccount}
                     defaultTab={settingsTab}
                     onTabChange={(tab: SettingsTab) => setSettingsTab(tab)}
                   />
