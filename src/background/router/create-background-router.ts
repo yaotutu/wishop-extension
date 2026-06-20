@@ -17,6 +17,7 @@ import { createSchedulerRuntimeHandlers } from '../runtime-handlers/scheduler-ha
 import { createSettingsRuntimeHandlers } from '../runtime-handlers/settings-handlers';
 import { createShippingRuntimeHandlers } from '../runtime-handlers/shipping-handlers';
 import { createTaobaoWorkspaceRuntimeHandlers } from '../runtime-handlers/taobao-workspace-handlers';
+import { createTaobaoLoginRuntimeHandlers } from '../runtime-handlers/taobao-login-handlers';
 import { createTaobaoRefundRuntimeHandlers } from '../runtime-handlers/taobao-refund-handlers';
 import { createViolationRuntimeHandlers } from '../runtime-handlers/violation-handlers';
 import { createLicenseRuntimeHandlers } from '../runtime-handlers/license-handlers';
@@ -135,6 +136,11 @@ const FEATURE_CHANNELS = {
   'shipping:complete': 'shipping',
   'shipping:fail': 'shipping',
   'taobaoWorkspace:getCurrentRole': 'shipping',
+  // 淘宝登录态检测不收费，映射到 null；登录态本身是观测能力，不绑定 LicensedFeature。
+  'taobaoLogin:getState': null,
+  'taobaoLogin:probeNow': null,
+  'taobaoLogin:reportFromContent': null,
+  'taobaoLogin:openLoginPage': null,
   'license:get': null,
   'license:activate': null,
   'license:refresh': null,
@@ -179,6 +185,7 @@ export function createBackgroundRouter(options: CreateBackgroundRouterOptions): 
     ...createProductSourceRuntimeHandlers(),
     ...createShippingRuntimeHandlers(options.getCurrentTabShippingSession),
     ...createTaobaoWorkspaceRuntimeHandlers(),
+    ...createTaobaoLoginRuntimeHandlers(),
     ...createSchedulerRuntimeHandlers(),
     ...createProductAuditRuntimeHandlers({
       run: (accountId, config) => runProductAuditTask(accountId, config, options.taskSessions),

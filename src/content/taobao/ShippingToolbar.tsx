@@ -5,6 +5,8 @@ import { formatOrderAddressForCopy } from '../../shared/address-format';
 import { useShippingToolbarStore, type ShippingToolbarPosition } from '../../stores/shipping-toolbar-store';
 import { readTaobaoPageSnapshot, type TaobaoPageSnapshot } from './adapters/page-adapter';
 import { fillTaobaoCheckoutAddress, normalizeCheckoutAddress } from './adapters/checkout-address-adapter';
+import { detectTaobaoLoginState } from './adapters/login-state-adapter';
+import { extensionApi as loginExtensionApi } from '../../shared/extension-api';
 
 interface Props {
   session: ShippingSession;
@@ -92,6 +94,7 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
   const [currentSession, setCurrentSession] = useState(session);
   const activeSession = currentSession;
   const [snapshot, setSnapshot] = useState<TaobaoPageSnapshot>(() => readTaobaoPageSnapshot());
+  const [loggedOut, setLoggedOut] = useState(false);
   const [notice, setNotice] = useState('');
   const [addressCache, setAddressCache] = useState<OrderRealAddressCache | null>(null);
   const [addressLoading, setAddressLoading] = useState(false);
@@ -180,6 +183,30 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
         setAddressFilling(false);
       }
     }, 500);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  // 登录态兜底检测：发货助手页面读取依赖登录态，若下单中途登录失效（跳登录页），
+  // 在工具栏顶部显示明确警告，并回报后台触发全局未登录提示。
+  // 这里复用 login-state-adapter 的实测判定（整页跳转 + 页内弹窗双信号）。
+  useEffect(() => {
+    const detect = () => {
+      const probe = detectTaobaoLoginState();
+      setLoggedOut(probe.state === 'logged-out');
+      if (probe.state === 'logged-out') {
+        void loginExtensionApi.taobaoLogin.reportFromContent({
+          state: probe.state,
+          source: 'content-report',
+          detectedAt: Date.now(),
+          signals: probe.signals,
+          reason: probe.reason,
+          pageType: probe.pageType,
+          url: probe.url,
+        }).catch(() => {});
+      }
+    };
+    detect();
+    const timer = window.setInterval(detect, 2000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -373,6 +400,11 @@ export const ShippingToolbar: React.FC<Props> = ({ session }) => {
           -
         </button>
       </div>
+      {loggedOut && (
+        <div className="dianxiaoqi-shipping-login-warning">
+          检测到淘宝未登录，请先在淘宝完成登录后再继续发货操作。
+        </div>
+      )}
       <div className="dianxiaoqi-shipping-grid">
         <div className="dianxiaoqi-shipping-card">
           <label>微信订单</label>

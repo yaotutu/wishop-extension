@@ -21,6 +21,7 @@ import {
 } from '../store/product-copy-record-repository.ts';
 import { activateTaobaoWorkTab, openTaobaoWorkTab } from '../taobao-workspace/work-tab-service.ts';
 import { enrichTaobaoProductSnapshotWithItemcat } from './taobao-itemcat-lookup.ts';
+import { requireTaobaoLoggedIn } from '../taobao-login/taobao-login-service.ts';
 
 const SESSION_TTL_MS = 30 * 60 * 1000;
 const sessions = new Map<string, ProductCopySession>();
@@ -79,7 +80,7 @@ function isTerminalSession(session: ProductCopySession): boolean {
   return session.status === 'completed' || session.status === 'failed';
 }
 
-function hasActiveProductCopySession(): boolean {
+export function hasActiveProductCopySession(): boolean {
   if (!activeSessionId) return false;
   const active = getFreshSession(activeSessionId);
   if (active && !isTerminalSession(active)) return true;
@@ -161,6 +162,8 @@ async function startNextQueuedSession(): Promise<void> {
 export async function openProductCopySession(
   input: CreateProductCopySessionInput,
 ): Promise<ProductCopySession> {
+  // 前置登录态 gate：未登录直接拒绝，不查复用、不建会话、不入队。
+  await requireTaobaoLoggedIn();
   const url = normalizeTaobaoProductUrl(input.url);
   pruneExpiredSessions();
   const existing = Array.from(sessions.values()).find(session => !isTerminalSession(session) && session.url === url);

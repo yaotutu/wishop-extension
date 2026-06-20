@@ -7,6 +7,7 @@ import { getOrderAssociations, updateLinkedOrderShipmentCheck } from '../store/o
 import { addScheduledJob, getScheduledJob, getScheduledJobs, updateScheduledJob } from '../store/scheduled-job-repository';
 import { getAppSettings } from '../store/settings-repository';
 import { getOrdersClient } from '../wxshop/client-registry';
+import { getTaobaoLoginSnapshot } from '../taobao-login/taobao-login-service';
 import { registerScheduledJobExecutor } from './scheduler-center';
 import { createCancelledScheduledJobResult } from './scheduled-job-run-result';
 import {
@@ -84,6 +85,18 @@ async function dispatchShipmentCheck(candidate: ShipmentCheckCandidate): Promise
       lastShipmentCheckFinishedAt: Date.now(),
       lastShipmentCheckStatus: 'skipped',
       lastShipmentCheckError: '发货状态检测已关闭',
+    });
+    return;
+  }
+
+  // 无人值守路径：淘宝未登录时跳过本次，避免反复打开工作页产生失败任务堆积。
+  // 用户重新登录后，下一轮检测会自动恢复。
+  const loginSnapshot = getTaobaoLoginSnapshot();
+  if (loginSnapshot.state === 'logged-out') {
+    await updateLinkedOrderShipmentCheck(candidate.accountId, candidate.orderId, {
+      lastShipmentCheckFinishedAt: Date.now(),
+      lastShipmentCheckStatus: 'skipped',
+      lastShipmentCheckError: '淘宝未登录，已跳过本轮发货状态检测',
     });
     return;
   }

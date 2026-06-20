@@ -60,6 +60,7 @@ import type {
   TaobaoRefundSession,
   StatusRule,
   TaobaoWorkspaceRole,
+  TaobaoLoginSnapshot,
   TaobaoSecurityChallengeSnapshot,
   TaobaoPurchaseOrderSnapshot,
   TaobaoProductSnapshot,
@@ -163,6 +164,11 @@ export interface RuntimeChannels {
   'shipping:complete': { args: [sessionId: string]; result: ShippingSession };
   'shipping:fail': { args: [sessionId: string, error: string]; result: ShippingSession };
   'taobaoWorkspace:getCurrentRole': { args: []; result: TaobaoWorkspaceRole | null };
+  // 淘宝登录态：getState 读内存态、probeNow 触发一次即时探测、reportFromContent 由 content 主动回报。
+  'taobaoLogin:getState': { args: []; result: TaobaoLoginSnapshot };
+  'taobaoLogin:probeNow': { args: []; result: TaobaoLoginSnapshot };
+  'taobaoLogin:reportFromContent': { args: [snapshot: TaobaoLoginSnapshot]; result: void };
+  'taobaoLogin:openLoginPage': { args: []; result: void };
 
   'quota:get': { args: [accountId: string, force?: boolean]; result: QuotaResult };
 

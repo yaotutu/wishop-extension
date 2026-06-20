@@ -8,6 +8,7 @@ import {
   registerOrderShipmentScheduledJobs,
 } from '../src/background/scheduler/order-shipment-job-executor';
 import { ensureOrderHistoryBackfillScheduledJob, ensureOrderSyncScheduledJob, registerOrderSyncScheduledJobs } from '../src/background/scheduler/order-sync-job-executor';
+import { registerTaobaoLoginHeartbeatScheduledJobs, ensureTaobaoLoginHeartbeatScheduledJob } from '../src/background/scheduler/taobao-login-heartbeat-job-executor';
 import { installScheduledJobAlarmListener, startAllScheduledJobs } from '../src/background/scheduler/scheduler-center';
 import { installShippingPaymentSuccessWatcher, installShippingTabCleanup } from '../src/background/shipping/shipping-session-service';
 import { migrateStore } from '../src/background/store';
@@ -19,6 +20,7 @@ export default defineBackground(() => {
   registerProductAuditScheduledJobs();
   registerOrderShipmentScheduledJobs();
   registerOrderSyncScheduledJobs();
+  registerTaobaoLoginHeartbeatScheduledJobs();
   installRuntimeHandlers();
   installShippingTabCleanup();
   installShippingPaymentSuccessWatcher();
@@ -33,6 +35,7 @@ export default defineBackground(() => {
     await ensureOrderSyncScheduledJob();
     await ensureOrderHistoryBackfillScheduledJob();
     await ensureOrderShipmentCheckScheduledJob();
+    await ensureTaobaoLoginHeartbeatScheduledJob();
     await startAllScheduledJobs();
   });
 

@@ -7,10 +7,10 @@ function workTabTitle(role: TaobaoWorkspaceRole): string {
   return role === 'shipping' ? '店小七 · 下单工作页' : '店小七 · 后台任务页';
 }
 
-function workTabDescription(role: TaobaoWorkspaceRole): string {
-  return role === 'shipping'
-    ? '这是店小七下单工作页，用于淘宝下单、付款识别和订单关联。'
-    : '这是店小七后台任务页，用于自动检查淘宝订单状态、物流公司和快递单号。这个页面不是给用户操作的，你不需要处理这里的内容。';
+function workTabDescription(_role: TaobaoWorkspaceRole): string {
+  // 文案保持通用：不绑定具体业务场景（下单/读物流/退款/采集等），
+  // 否则每新增一个使用该工作页的场景都得回来改这里。
+  return '这是店小七的工作页，插件会自动使用它完成淘宝相关操作，你一般无需手动处理这里的内容。';
 }
 
 function faviconDataUrl(): string {
@@ -65,6 +65,12 @@ export const WorkTabNotice: React.FC<{ role: TaobaoWorkspaceRole }> = ({ role })
     };
   }, [role]);
 
+  // 落在淘宝登录页时不渲染：这是淘宝自己的登录界面（二维码/账号密码），
+  // 插件的告知条出现在这里既无意义又会干扰用户登录。
+  if (typeof location !== 'undefined' && /login\.(taobao|tmall)\.com|passport\.taobao\.com/.test(location.host)) {
+    return null;
+  }
+
   const hideNotice = React.useCallback(() => {
     setVisible(false);
     if (role === 'shipping') {
@@ -92,9 +98,7 @@ export const WorkTabNotice: React.FC<{ role: TaobaoWorkspaceRole }> = ({ role })
       <span>{workTabDescription(role)}</span>
       <div className="dianxiaoqi-work-tab-notice__footer">
         <span className="dianxiaoqi-work-tab-notice__state">
-          {role === 'shipping'
-            ? '隐藏后将不再自动显示；关闭工作页后，下次去发货会重新创建。'
-            : '请保持此标签页存在；插件会在这里自动排队执行后台读取任务。'}
+          请保持此标签页存在；关闭后插件会在下次需要时自动重新创建。
         </span>
       </div>
     </div>

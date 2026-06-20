@@ -174,6 +174,16 @@ export const toolbarCss = `
     color: #389e0d;
     font-size: 12px;
   }
+  .dianxiaoqi-shipping-login-warning {
+    margin-top: 8px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    background: #fff1f0;
+    border: 1px solid #ffa39e;
+    color: #cf1322;
+    font-size: 12px;
+    line-height: 1.5;
+  }
   .dianxiaoqi-shipping-profit-value {
     font-size: 14px;
     color: #1677ff;
@@ -253,8 +263,12 @@ export const toolbarCss = `
     box-sizing: border-box;
     position: fixed;
     top: 12px;
-    left: 50%;
-    transform: translateX(-50%);
+    /* 默认靠右上角，避免遮挡页面主体内容（尤其是淘宝登录页的二维码，位于页面中央）。 */
+    right: 16px;
+    left: auto;
+    transform: none;
+    width: min(360px, calc(100vw - 32px));
+    padding: 8px 10px;
     z-index: 2147483647;
     width: min(520px, calc(100vw - 32px));
     padding: 10px 12px;
@@ -266,24 +280,7 @@ export const toolbarCss = `
     font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     pointer-events: auto;
   }
-  .dianxiaoqi-work-tab-notice--shipping {
-    top: 12px;
-    right: 16px;
-    left: auto;
-    transform: none;
-    width: min(360px, calc(100vw - 32px));
-    padding: 8px 10px;
-  }
-  .dianxiaoqi-work-tab-notice--task {
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: min(640px, calc(100vw - 48px));
-    padding: 28px 32px;
-    text-align: center;
-    border-color: rgba(250, 140, 22, 0.38);
-    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.2);
-  }
+  /* shipping 与 task 两种角色共用右上角轻量提示条，避免遮挡页面主体内容。 */
   .dianxiaoqi-work-tab-notice__header {
     display: flex;
     justify-content: space-between;
@@ -295,16 +292,6 @@ export const toolbarCss = `
     margin-bottom: 2px;
     color: #1677ff;
     font-size: 14px;
-  }
-  .dianxiaoqi-work-tab-notice--task strong {
-    margin-bottom: 10px;
-    color: #fa8c16;
-    font-size: 22px;
-    line-height: 30px;
-  }
-  .dianxiaoqi-work-tab-notice--task span {
-    font-size: 15px;
-    line-height: 24px;
   }
   .dianxiaoqi-work-tab-notice__close {
     width: 24px;
@@ -333,8 +320,5 @@ export const toolbarCss = `
   .dianxiaoqi-work-tab-notice__state {
     color: #8c8c8c;
     font-size: 12px;
-  }
-  .dianxiaoqi-work-tab-notice--task .dianxiaoqi-work-tab-notice__state {
-    font-size: 13px;
   }
 `;

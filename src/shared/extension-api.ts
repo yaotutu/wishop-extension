@@ -55,6 +55,7 @@ import type {
   ShippingSession,
   StatusRule,
   TaobaoWorkspaceRole,
+  TaobaoLoginSnapshot,
   TaobaoRefundPrepareSnapshot,
   TaobaoRefundSession,
   TaobaoSecurityChallengeSnapshot,
@@ -277,6 +278,15 @@ export const extensionApi = {
   },
   taobaoWorkspace: {
     getCurrentRole: (): Promise<TaobaoWorkspaceRole | null> => invoke('taobaoWorkspace:getCurrentRole'),
+  },
+  // 淘宝登录态：读取后台内存态快照、触发即时探测、content 主动回报，并订阅状态变化事件。
+  taobaoLogin: {
+    getState: (): Promise<TaobaoLoginSnapshot> => invoke('taobaoLogin:getState'),
+    probeNow: (): Promise<TaobaoLoginSnapshot> => invoke('taobaoLogin:probeNow'),
+    reportFromContent: (snapshot: TaobaoLoginSnapshot): Promise<void> => invoke('taobaoLogin:reportFromContent', snapshot),
+    openLoginPage: (): Promise<void> => invoke('taobaoLogin:openLoginPage'),
+    onLoginChanged: (callback: (snapshot: TaobaoLoginSnapshot) => void) =>
+      onRuntimeEvent('taobaoLogin:changed', callback),
   },
   quota: {
     get: (accountId: string, force = false): Promise<QuotaResult> => invoke('quota:get', accountId, force),

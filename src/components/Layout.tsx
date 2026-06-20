@@ -9,6 +9,7 @@ import { BUILD_TIME } from '../shared/build-info';
 import type { Account } from '../shared/types';
 import type { OrderScope } from '../shared/types';
 import { CredentialErrorProvider } from '../contexts/CredentialErrorContext';
+import { TaobaoLoginProvider, TaobaoLoginIndicator } from '../contexts/TaobaoLoginContext';
 import {
   useDashboardUiPreferencesStore,
   type DashboardModuleType,
@@ -212,6 +213,7 @@ const Layout: React.FC = () => {
   };
 
   return (
+    <TaobaoLoginProvider>
     <CredentialErrorProvider onNavigateToSettings={navigateToStoreSettings}>
       <AntLayout style={{ height: '100vh' }}>
         <Header style={{ padding: '0 12px', height: 48, lineHeight: '48px', background: '#fafafa', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center' }}>
@@ -229,6 +231,7 @@ const Layout: React.FC = () => {
           >
             v{version} · 构建 {BUILD_TIME}
           </span>
+          <TaobaoLoginIndicator />
         </Header>
         <AntLayout>
           {isAccountModule && (
@@ -284,6 +287,7 @@ const Layout: React.FC = () => {
         <ActivityLogDrawer />
       </AntLayout>
     </CredentialErrorProvider>
+    </TaobaoLoginProvider>
   );
 };
 

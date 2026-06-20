@@ -12,7 +12,8 @@ export type ScheduledJobType =
   | 'orders.checkShipmentStatus'
   | 'orders.syncRecent'
   | 'orders.backfillHistory'
-  | 'violation.scanProducts';
+  | 'violation.scanProducts'
+  | 'taobaoLogin.checkHeartbeat';
 export type ScheduledJobStatus = 'idle' | 'running' | 'waiting_user' | 'completed' | 'failed' | 'skipped' | 'cancelled';
 export type ScheduledJobRunMode = 'recurring' | 'untilComplete';
 
@@ -335,6 +336,49 @@ export interface TaobaoSecurityChallengeSnapshot {
   title: string;
   url: string;
   matchedSignals: string[];
+}
+
+/**
+ * 淘宝登录态判定结果。
+ *
+ * 这套判定基于真实 DOM 实测（4 类页面 × 2 种登录态共 8 组数据），
+ * 采用「未登录反向信号 + 已登录正向信号」双向交叉判定：
+ * - 反向信号是未登录的充分条件（命中即未登录，覆盖正向信号）。
+ * - 正向信号是已登录的强证据（反向信号缺失时才采信）。
+ * - 两者都不命中时返回 'unknown'，绝不瞎猜，由调用方决定复核或等待。
+ */
+export type TaobaoLoginState = 'logged-in' | 'logged-out' | 'unknown';
+
+/**
+ * 登录态检测的来源，用于区分状态是怎么得到的，便于调试与 UI 展示。
+ * - 'content-report'：content script 在页面导航后主动回报。
+ * - 'heartbeat'：后台定时心跳探测的结果。
+ * - 'pre-action-probe'：用户触发淘宝操作前的即时探测结果。
+ */
+export type TaobaoLoginSource = 'content-report' | 'heartbeat' | 'pre-action-probe';
+
+/**
+ * 淘宝页面类型，按登录态判定规则所需区分。
+ * 首页与干活页的未登录机制不同（首页页内弹窗 vs 干活页整页跳转登录域）。
+ */
+export type TaobaoPageType = 'home' | 'bought-list' | 'order-detail' | 'product-detail' | 'checkout' | 'other';
+
+/**
+ * 淘宝登录态快照，是后台内存态登录态的唯一事实来源。
+ * 它是观察数据，不持久化（按 AGENTS.md，观察数据不应作为持久业务状态来源）。
+ */
+export interface TaobaoLoginSnapshot {
+  state: TaobaoLoginState;
+  source: TaobaoLoginSource;
+  detectedAt: number;
+  /** 命中的判定信号列表（便于调试与日志，例如 ['host:login.taobao.com']）。 */
+  signals: string[];
+  /** 未登录时的可读原因（如"整页跳转到登录域"）。 */
+  reason?: string;
+  /** 探测时所在页面类型。 */
+  pageType?: TaobaoPageType;
+  /** 探测时的页面 URL（仅保留 host + path，不含 query，避免泄露敏感参数）。 */
+  url?: string;
 }
 
 export interface TaobaoPurchaseOrderSnapshot {

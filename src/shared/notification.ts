@@ -6,6 +6,7 @@ export type NotificationUrgency = 'silent' | 'normal' | 'important';
 
 export type NotificationTopic =
   | 'taobao.security_challenge'
+  | 'taobao.login_required'
   | 'orders.auto_shipment_completed'
   | 'orders.auto_shipment_failed'
   | 'orders.shipment_failed'
@@ -54,6 +55,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCE: NotificationPreference = {
   inAppEnabled: true,
   topicEnabled: {
     'taobao.security_challenge': true,
+    'taobao.login_required': true,
     'orders.auto_shipment_completed': true,
     'orders.auto_shipment_failed': true,
     'orders.shipment_failed': true,
@@ -89,6 +91,13 @@ export const NOTIFICATION_TOPIC_DEFINITIONS: NotificationTopicDefinition[] = [
     domain: 'orders',
     label: '淘宝/天猫需要处理',
     description: '工作页遇到登录、安全验证、访问受限等需要人工处理的情况。',
+    defaultUrgency: 'important',
+  },
+  {
+    topic: 'taobao.login_required',
+    domain: 'system',
+    label: '淘宝未登录',
+    description: '检测到淘宝/天猫未登录，相关读取与发货操作将被拦截，请先登录淘宝。',
     defaultUrgency: 'important',
   },
   {

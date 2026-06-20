@@ -27,6 +27,7 @@ const jobTypeLabels: Record<ScheduledJob['jobType'], string> = {
   'orders.syncRecent': '同步近期订单',
   'orders.backfillHistory': '补拉历史订单',
   'violation.scanProducts': '扫描违规商品',
+  'taobaoLogin.checkHeartbeat': '淘宝登录态心跳',
 };
 
 const statusColors: Record<ScheduledJobStatus, string> = {

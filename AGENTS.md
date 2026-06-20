@@ -191,6 +191,10 @@ Chrome 扩展开发时，dashboard 页面和 background service worker 可能不
 
 PR 应包含清晰摘要、验证命令、关联 issue 或任务背景，以及 UI 变更对应的截图或录屏。涉及权限、manifest 或 API 行为变化时，需要明确说明。
 
+## 交付前自检
+
+完成一个任务或一组关联改动、准备交付前，必须自己重新 review 一遍全部改动，确认逻辑正确、边界处理完整、与架构规则一致，再向用户报告完成。不得把"能编译、能跑"等同于"完成"。
+
 ## 安全与配置提示
 
 不要提交真实 app 凭证、access token 或客户数据。账号配置和微信 API 客户端值都应视为敏感信息。新增 `wxt.config.ts` host permissions 时保持范围尽量窄，并在 PR 中解释权限变化。

@@ -9,6 +9,7 @@ import type {
 import { ensureTaobaoTaskWorkTab, openTaobaoShippingWorkTab } from '../taobao-workspace/work-tab-service';
 import { openPurchaseLookupSessionTab } from '../purchase-lookup/purchase-lookup-session-service';
 import { applyLinkedOrder } from '../orders/order-association-service';
+import { requireTaobaoLoggedIn } from '../taobao-login/taobao-login-service';
 
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 const DEFAULT_PAYMENT_WORKFLOW: ShippingPaymentWorkflow = 'manualPasswordPayment';
@@ -250,6 +251,8 @@ export async function updateShippingSessionStatus(
 }
 
 export async function openShippingSessionTab(input: CreateShippingSessionInput): Promise<ShippingSession> {
+  // 前置登录态 gate：未登录直接拒绝，不建会话也不开工作页，避免产生脏数据。
+  await requireTaobaoLoggedIn();
   const session = await createShippingSession(input);
   await ensureTaobaoTaskWorkTab().catch(() => {});
   const tab = await openTaobaoShippingWorkTab(input.source.url);

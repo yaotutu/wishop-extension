@@ -21,6 +21,7 @@ import { getOrderAssociations, setOrderAssociation, updateLinkedOrderShipmentChe
 import { activateTaobaoWorkTab, ensureTaobaoTaskWorkTab, openTaobaoWorkTab } from '../taobao-workspace/work-tab-service';
 import { maybeAutoShipFromPurchase } from './auto-shipment-service';
 import { applyLinkedOrder } from '../orders/order-association-service';
+import { requireTaobaoLoggedIn } from '../taobao-login/taobao-login-service';
 
 const SESSION_TTL_MS = 30 * 60 * 1000;
 const TAOBAO_ORDER_DETAIL_URL = 'https://trade.taobao.com/trade/detail/trade_order_detail.htm';
@@ -104,7 +105,7 @@ export function getActivePurchaseLookupKeys(): Set<string> {
   );
 }
 
-function hasActivePurchaseLookupSession(): boolean {
+export function hasActivePurchaseLookupSession(): boolean {
   if (!activeSessionId) return false;
   const active = getFreshSession(activeSessionId);
   if (active && !isTerminalSession(active)) return true;
@@ -280,6 +281,8 @@ export async function updatePurchaseLookupSessionStatus(
 }
 
 export async function openPurchaseLookupSessionTab(input: CreatePurchaseLookupSessionInput): Promise<PurchaseLookupSession> {
+  // 前置登录态 gate：未登录直接拒绝，不查复用、不建会话、不入队，避免脏任务堆积。
+  await requireTaobaoLoggedIn();
   const active = findActivePurchaseLookupSession(input);
   if (active) return active;
   const session = await createPurchaseLookupSession(input);
