@@ -61,8 +61,8 @@ import type {
   TaobaoSecurityChallengeSnapshot,
   TaobaoPurchaseOrderSnapshot,
   TaobaoProductSnapshot,
-  ViolationMatch,
-  ViolationScanResult,
+  ScanItem,
+  ComplianceScanResult,
   ViolationWordModule,
   SyncWxCategoryProductRulesInput,
   WxDraftBoxProductPrepareResult,
@@ -350,13 +350,13 @@ export const extensionApi = {
   },
   // 商品合规扫描：针对具体店铺草稿箱扫描违禁词。词库来源是全局通用词库。
   compliance: {
-    batchScan: (accountId: string, limit?: number): Promise<ViolationScanResult> => invoke('compliance:batchScan', accountId, limit),
+    batchScan: (accountId: string, limit?: number): Promise<ComplianceScanResult> => invoke('compliance:batchScan', accountId, limit),
     scanStep: (accountId: string, action: 'next' | 'skip' | 'delete'): Promise<
       | { type: 'done'; scanned?: number; reason?: string }
       | { type: 'stopped'; reason?: string }
-      | ({ type: 'violation'; scanned: number } & ViolationMatch)
+      | ({ type: 'violation'; scanned: number } & ScanItem)
     > => invoke('compliance:scanStep', accountId, action),
-    batchDelete: (accountId: string, violations: ViolationMatch[]): Promise<{ deleted: number; errors: number; stopped: boolean }> => invoke('compliance:batchDelete', accountId, violations),
+    batchDelete: (accountId: string, violations: ScanItem[]): Promise<{ deleted: number; errors: number; stopped: boolean }> => invoke('compliance:batchDelete', accountId, violations),
     stop: (accountId: string): Promise<void> => invoke('compliance:stop', accountId),
     onLog: (accountId: string, callback: (log: LogEntry) => void) => onRuntimeEvent(`complianceLog:added:${accountId}`, callback),
   },

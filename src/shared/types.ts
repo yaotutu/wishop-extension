@@ -1276,15 +1276,46 @@ export interface OrderRefreshResult {
   finishedAt: number;
 }
 
-export interface ViolationMatch {
-  productId: string;
-  title: string;
-  matchedWords: string[];
+/**
+ * 可扫描字段定义。合规扫描的 FieldExtractor 产出这个清单，
+ * 描述「本次要从商品的哪些字段里抽文本去匹配」。
+ * 放在 shared 层是因为命中结果会跨前后端流转。
+ */
+export interface ScanField {
+  /** 字段标识，稳定不变，用于命中结果回指。如 'title' / 'desc' / 'attrs' */
+  key: string;
+  /** 给用户看的字段中文名。如「标题」「描述」 */
+  label: string;
+  /** 该字段实际待匹配的文本。多个属性/SKU 可拼成一段文本。 */
+  text: string;
 }
 
-export interface ViolationScanResult {
+/**
+ * 单条命中明细。合规扫描的 WordMatcher 产出，ScanItem.matches 的元素。
+ */
+export interface FieldMatch {
+  /** 命中在哪个字段，回指 ScanField.key */
+  fieldKey: string;
+  /** 命中的违禁词 */
+  word: string;
+}
+
+/**
+ * 扫描结果对象。合规扫描器每条商品产出一个。
+ * 前端用 matches 渲染命中明细（可按 fieldKey 分组），用 scannedFields 回看原始文本（可选）。
+ */
+export interface ScanItem {
+  productId: string;
+  title: string;
+  /** 本次扫描实际覆盖的字段清单（含文本）。用于结果区展示「扫了哪些字段」。 */
+  scannedFields: ScanField[];
+  /** 命中明细。空数组表示该商品无违禁。 */
+  matches: FieldMatch[];
+}
+
+export interface ComplianceScanResult {
   scanned: number;
-  violations: ViolationMatch[];
+  violations: ScanItem[];
   errors: number;
   stopped: boolean;
   reason?: string;

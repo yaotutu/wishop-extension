@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { extensionApi } from '../../shared/extension-api';
 import { Card, Button, Space, InputNumber, Table, Tag, Radio, Modal, Alert, message, Popconfirm } from 'antd';
 import { DeleteOutlined, SearchOutlined, StopOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
-import type { ViolationMatch, LogEntry } from '../../shared/types';
+import type { ScanItem, LogEntry } from '../../shared/types';
 
 /**
  * 商品合规扫描页。
@@ -20,12 +20,12 @@ const CompliancePage: React.FC<ComplianceProps> = ({ accountId }) => {
   const [mode, setMode] = useState<'batch' | 'onebyone'>('batch');
   const [scanLimit, setScanLimit] = useState(100);
   const [scanning, setScanning] = useState(false);
-  const [violations, setViolations] = useState<ViolationMatch[]>([]);
+  const [violations, setViolations] = useState<ScanItem[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([]);
   const [deleting, setDeleting] = useState(false);
 
   // 逐个模式状态
-  const [currentViolation, setCurrentViolation] = useState<(ViolationMatch & { scanned: number }) | null>(null);
+  const [currentViolation, setCurrentViolation] = useState<(ScanItem & { scanned: number }) | null>(null);
   const [oneByOneScanning, setOneByOneScanning] = useState(false);
   const stoppedRef = useRef(false);
 
@@ -182,10 +182,11 @@ const CompliancePage: React.FC<ComplianceProps> = ({ accountId }) => {
     unsubscribeLogs();
   };
 
-  // 把命中违禁词的部分高亮成红色 Tag
-  const highlightTitle = (title: string, matchedWords: string[]) => {
+  // 把标题里命中违禁词的部分高亮成红色 Tag。
+  // 输入是「标题字段命中的词」，由调用方从 record.matches 里筛 fieldKey==='title' 得到。
+  const highlightTitle = (title: string, words: string[]) => {
     let parts: { text: string; highlight: boolean }[] = [{ text: title, highlight: false }];
-    for (const word of matchedWords) {
+    for (const word of words) {
       const newParts: { text: string; highlight: boolean }[] = [];
       for (const part of parts) {
         if (part.highlight) {
@@ -209,6 +210,46 @@ const CompliancePage: React.FC<ComplianceProps> = ({ accountId }) => {
     return parts;
   };
 
+  // 从 ScanItem.matches 里筛出某个字段命中的词。
+  const wordsOfField = (item: ScanItem, fieldKey: string): string[] =>
+    Array.from(new Set(item.matches.filter(m => m.fieldKey === fieldKey).map(m => m.word)));
+
+  /**
+   * 把命中明细按字段分组渲染：每个字段一行，前缀显示字段中文名，
+   * 后面跟该字段命中的词（橙色 Tag）。
+   * 字段中文名优先取 scannedFields 里的 label，匹配不到则用 fieldKey 兜底。
+   * 即使本期只扫标题，结构也支持多字段，后续开多字段扫描无需改这里。
+   */
+  const renderMatchesByField = (item: ScanItem) => {
+    const fieldLabelMap = new Map<string, string>();
+    for (const f of item.scannedFields) fieldLabelMap.set(f.key, f.label);
+    // 按 scannedFields 的顺序分组，保证展示稳定
+    const groups = item.scannedFields
+      .map(f => ({ fieldKey: f.key, label: f.label, words: wordsOfField(item, f.key) }))
+      .filter(g => g.words.length > 0);
+    // 兜底：如果有命中的 fieldKey 不在 scannedFields 里（理论上不会），也展示出来
+    for (const m of item.matches) {
+      if (!fieldLabelMap.has(m.fieldKey)) {
+        fieldLabelMap.set(m.fieldKey, m.fieldKey);
+      }
+    }
+    const extraKeys = Array.from(new Set(item.matches.map(m => m.fieldKey)))
+      .filter(k => !item.scannedFields.some(f => f.key === k));
+    for (const k of extraKeys) {
+      groups.push({ fieldKey: k, label: fieldLabelMap.get(k) || k, words: wordsOfField(item, k) });
+    }
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {groups.map(g => (
+          <div key={g.fieldKey} style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+            <Tag color="blue" style={{ margin: 0 }}>{g.label}</Tag>
+            {g.words.map(w => <Tag key={w} color="orange" style={{ margin: 0 }}>{w}</Tag>)}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   const isRunning = scanning || oneByOneScanning;
 
   const columns = [
@@ -217,8 +258,8 @@ const CompliancePage: React.FC<ComplianceProps> = ({ accountId }) => {
       dataIndex: 'title',
       key: 'title',
       ellipsis: true,
-      render: (title: string, record: ViolationMatch) => {
-        const parts = highlightTitle(title, record.matchedWords);
+      render: (title: string, record: ScanItem) => {
+        const parts = highlightTitle(title, wordsOfField(record, 'title'));
         return <span>{parts.map((p, i) => p.highlight
           ? <Tag key={i} color="red" style={{ margin: 0 }}>{p.text}</Tag>
           : <span key={i}>{p.text}</span>
@@ -226,19 +267,16 @@ const CompliancePage: React.FC<ComplianceProps> = ({ accountId }) => {
       },
     },
     {
-      title: '匹配词',
-      dataIndex: 'matchedWords',
-      key: 'matchedWords',
-      width: 200,
-      render: (matchedWords: string[]) => matchedWords.map(w => (
-        <Tag key={w} color="orange">{w}</Tag>
-      )),
+      title: '命中明细',
+      key: 'matches',
+      width: 240,
+      render: (_: unknown, record: ScanItem) => renderMatchesByField(record),
     },
     {
       title: '操作',
       key: 'action',
       width: 80,
-      render: (_: unknown, record: ViolationMatch) => (
+      render: (_: unknown, record: ScanItem) => (
         <Popconfirm
           title="确认删除此商品？"
           onConfirm={async () => {
@@ -285,10 +323,25 @@ const CompliancePage: React.FC<ComplianceProps> = ({ accountId }) => {
 
       {/* 扫描控制 */}
       <Card size="small">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Space size={16}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <Space size={16} wrap>
             <Space size={4}>
-              <Tag color="blue">草稿箱</Tag>
+              {/* 扫描范围：本期只有草稿箱可选（上架商品 source 未实现，置灰）。控件就位，后续激活即可。 */}
+              <span style={{ color: '#999', fontSize: 12 }}>范围</span>
+              <Radio.Group value="draft" size="small">
+                <Radio.Button value="draft">草稿箱</Radio.Button>
+                <Radio.Button value="online" disabled title="上架商品扫描尚未实现">上架商品</Radio.Button>
+              </Radio.Group>
+            </Space>
+            <Space size={4}>
+              {/* 扫描字段：本期只有标题可勾（描述等字段未实现 extractor，置灰）。控件就位，后续激活即可。 */}
+              <span style={{ color: '#999', fontSize: 12 }}>字段</span>
+              <Radio.Group value={['title']} size="small">
+                <Radio.Button value="title">标题</Radio.Button>
+                <Radio.Button value="desc" disabled title="描述字段扫描尚未实现">描述</Radio.Button>
+              </Radio.Group>
+            </Space>
+            <Space size={4}>
               <Radio.Group value={mode} onChange={e => setMode(e.target.value)} size="small">
                 <Radio.Button value="batch">批量扫描</Radio.Button>
                 <Radio.Button value="onebyone">逐个提示</Radio.Button>
@@ -466,7 +519,7 @@ const CompliancePage: React.FC<ComplianceProps> = ({ accountId }) => {
               marginBottom: 12,
             }}>
               <div style={{ fontSize: 14, lineHeight: 1.8, wordBreak: 'break-all' }}>
-                {highlightTitle(currentViolation.title, currentViolation.matchedWords).map((p, i) =>
+                {highlightTitle(currentViolation.title, wordsOfField(currentViolation, 'title')).map((p, i) =>
                   p.highlight
                     ? <Tag key={i} color="red" style={{ margin: '2px 1px' }}>{p.text}</Tag>
                     : <span key={i}>{p.text}</span>
@@ -474,10 +527,8 @@ const CompliancePage: React.FC<ComplianceProps> = ({ accountId }) => {
               </div>
             </div>
             <div style={{ marginBottom: 16 }}>
-              <span style={{ color: '#999', fontSize: 13, marginRight: 8 }}>匹配到违禁词：</span>
-              {currentViolation.matchedWords.map(w => (
-                <Tag key={w} color="orange">{w}</Tag>
-              ))}
+              <div style={{ color: '#999', fontSize: 13, marginBottom: 6 }}>命中明细：</div>
+              {renderMatchesByField(currentViolation)}
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <Button danger icon={<StopOutlined />} onClick={handleStop}>停止扫描</Button>

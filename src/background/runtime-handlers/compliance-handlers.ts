@@ -1,7 +1,7 @@
-import type { ViolationMatch } from '../../shared/types';
+import type { ScanItem } from '../../shared/types';
+import { DeleteResultAction, type ActionResultContext } from '../compliance';
 import { createScopedComplianceLog } from '../store/log-repository';
 import { getListingClient } from '../wxshop/client-registry';
-import { batchDeleteViolations } from '../modules/compliance-detect';
 import type { RuntimeHandlerMap } from '../router/runtime-router';
 
 /**
@@ -26,14 +26,35 @@ export function createComplianceRuntimeHandlers(deps: ComplianceHandlerDeps): Ru
     async 'compliance:scanStep'(args) {
       return deps.scanStep(args[0] as string, args[1] as 'next' | 'skip' | 'delete');
     },
+    /**
+     * 批量删除选中的命中商品。
+     * 处置走 DeleteResultAction，循环 apply 每条 ScanItem。
+     * 命中微信全局限制（errcode 10020208/10020247）时提前停止并返回 stopped。
+     */
     async 'compliance:batchDelete'(args) {
-      return batchDeleteViolations(
-        await getListingClient(args[0] as string),
-        createScopedComplianceLog(args[0] as string),
-        args[1] as ViolationMatch[],
-        Date.now().toString(),
-        args[0] as string,
-      );
+      const accountId = args[0] as string;
+      const items = args[1] as ScanItem[];
+      const api = await getListingClient(accountId);
+      const addLog = createScopedComplianceLog(accountId);
+      const runId = Date.now().toString();
+      const ctx: ActionResultContext = { accountId, api, addLog, runId };
+      const action = new DeleteResultAction();
+
+      let deleted = 0;
+      let errors = 0;
+      let stopped = false;
+      for (const item of items) {
+        const result = await action.apply(item, ctx);
+        if (result.status === 'success') {
+          deleted++;
+        } else if (result.status === 'stopped') {
+          stopped = true;
+          break;
+        } else {
+          errors++;
+        }
+      }
+      return { deleted, errors, stopped };
     },
     async 'compliance:stop'(args) {
       deps.stop(args[0] as string);

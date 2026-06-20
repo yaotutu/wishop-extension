@@ -64,8 +64,8 @@ import type {
   TaobaoSecurityChallengeSnapshot,
   TaobaoPurchaseOrderSnapshot,
   TaobaoProductSnapshot,
-  ViolationMatch,
-  ViolationScanResult,
+  ScanItem,
+  ComplianceScanResult,
   ViolationWordModule,
   SyncWxCategoryProductRulesInput,
   WxDraftBoxProductPrepareResult,
@@ -205,15 +205,15 @@ export interface RuntimeChannels {
   'violationWords:setModule': { args: [module: ViolationWordModule, words: string[]]; result: void };
   'violationWords:getDefaults': { args: []; result: { words: string[]; totalCount: number; violationWords: string[]; brands: string[]; source: string; updatedAt: string; version: number } };
   'violationWords:getSettings': { args: []; result: ViolationWordsSettings };
-  'compliance:batchScan': { args: [accountId: string, limit?: number]; result: ViolationScanResult };
+  'compliance:batchScan': { args: [accountId: string, limit?: number]; result: ComplianceScanResult };
   'compliance:scanStep': {
     args: [accountId: string, action: 'next' | 'skip' | 'delete'];
     result:
       | { type: 'done'; scanned?: number; reason?: string }
       | { type: 'stopped'; reason?: string }
-      | ({ type: 'violation'; scanned: number } & ViolationMatch);
+      | ({ type: 'violation'; scanned: number } & ScanItem);
   };
-  'compliance:batchDelete': { args: [accountId: string, violations: ViolationMatch[]]; result: { deleted: number; errors: number; stopped: boolean } };
+  'compliance:batchDelete': { args: [accountId: string, violations: ScanItem[]]; result: { deleted: number; errors: number; stopped: boolean } };
   'compliance:stop': { args: [accountId: string]; result: void };
 
   'productAudit:failurePolicyGet': { args: []; result: ProductAuditFailurePolicy };

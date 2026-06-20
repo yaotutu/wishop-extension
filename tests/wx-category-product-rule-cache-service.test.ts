@@ -52,6 +52,9 @@ function fakeListingClient(
     async getProductDetail() {
       throw new Error('not used');
     },
+    async getProductDetailFull() {
+      throw new Error('not used');
+    },
     async getProductQrcode() {
       throw new Error('not used');
     },

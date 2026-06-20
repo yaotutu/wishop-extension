@@ -2,6 +2,7 @@ import type { ActivityLogDomain } from '../../../shared/activity-log.ts';
 import type { DraftProduct, QuotaResult, WxProductCategoryPath } from '../../../shared/types';
 import { createWxShopRequestClient } from '../core/request';
 import type {
+  DraftProductFull,
   ListingResult,
   ProductListResult,
   WxShopAddProductRequest,
@@ -213,6 +214,65 @@ export function createWxShopListingClient(accountId: string, domain: ActivityLog
       headImgs: product.head_imgs || [],
       status: product.status,
       editStatus: product.edit_status,
+    };
+  }
+
+  /**
+   * 把微信 edit_product 里的属性列表聚合成「键:值」文本。
+   * attrs 和 sku_attrs 都是 [{ attr_key, attr_value }] 结构，统一处理。
+   */
+  function aggregateAttrsText(attrs: unknown): string {
+    if (!Array.isArray(attrs)) return '';
+    return attrs
+      .map((item: any) => {
+        const key = normalizeText(item?.attr_key ?? item?.key ?? item?.name);
+        const value = normalizeText(item?.attr_value ?? item?.value);
+        if (!key && !value) return '';
+        return key ? `${key}:${value}` : value;
+      })
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  /**
+   * 把 skus[].sku_attrs 聚合成一段文本，供合规扫描抽 SKU 属性。
+   */
+  function aggregateSkuAttrsText(skus: unknown): string {
+    if (!Array.isArray(skus)) return '';
+    const parts: string[] = [];
+    for (const sku of skus) {
+      const text = aggregateAttrsText(sku?.sku_attrs);
+      if (text) parts.push(text);
+    }
+    return Array.from(new Set(parts)).join(' ');
+  }
+
+  async function getProductDetailFull(productId: string): Promise<DraftProductFull> {
+    const path = '/channels/ec/product/get';
+    const stage = '获取商品详情（含可扫描字段）';
+    const data = await wxshop.request<any>(path, {
+      product_id: productId,
+      data_type: 2,
+    }, stage);
+
+    if (data.errcode && data.errcode !== 0) {
+      wxshop.throwWxApiError(path, stage, data);
+    }
+
+    const product = data.edit_product;
+    if (!product) {
+      throw new Error(`商品 ${productId} 详情为空`);
+    }
+
+    return {
+      productId: product.product_id,
+      title: product.title,
+      headImgs: product.head_imgs || [],
+      status: product.status,
+      editStatus: product.edit_status,
+      desc: normalizeText(product.desc_info?.desc) || undefined,
+      attrsText: aggregateAttrsText(product.attrs) || undefined,
+      skuAttrsText: aggregateSkuAttrsText(product.skus) || undefined,
     };
   }
 
@@ -521,6 +581,7 @@ export function createWxShopListingClient(accountId: string, domain: ActivityLog
   return {
     getDraftProducts,
     getProductDetail,
+    getProductDetailFull,
     getProductQrcode,
     getAllCategoryPaths,
     precheckProductCategory,

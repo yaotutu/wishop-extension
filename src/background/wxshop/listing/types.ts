@@ -72,9 +72,32 @@ export interface WxShopCategoryProductRule {
   saleAttrs: WxShopCategoryProductAttrRule[];
 }
 
+/**
+ * 带全量可扫描字段的商品详情。
+ *
+ * 供合规扫描等「需要更多文本字段」的场景使用。
+ * 与 DraftProduct 的区别：后者是草稿通用载体（提审/删除/展示共用），
+ * 只带最小字段；这里额外带商品描述、属性、SKU 属性聚合文本，
+ * 避免污染通用类型，也让扫描字段提取器有料可抽。
+ */
+export interface DraftProductFull extends DraftProduct {
+  /** 商品描述纯文本（来自 desc_info.desc）。可能为空。 */
+  desc?: string;
+  /** 商品属性聚合文本（attrs 拼成「键:值」文本）。可能为空。 */
+  attrsText?: string;
+  /** SKU 属性聚合文本（skus[].sku_attrs 拼成「键:值」文本）。可能为空。 */
+  skuAttrsText?: string;
+}
+
 export interface WxShopListingClient {
   getDraftProducts(pageSize?: number, nextKey?: string): Promise<ProductListResult>;
   getProductDetail(productId: string): Promise<DraftProduct>;
+  /**
+   * 获取带全量可扫描字段的商品详情。
+   * 相比 getProductDetail 多返回 desc / attrsText / skuAttrsText，
+   * 供合规扫描使用。其它模块继续用精简的 getProductDetail。
+   */
+  getProductDetailFull(productId: string): Promise<DraftProductFull>;
   getProductQrcode(productId: string): Promise<ProductQrcodeResult>;
   getAllCategoryPaths(): Promise<WxProductCategoryPath[]>;
   precheckProductCategory(catId: string): Promise<WxShopCategoryPrecheckResult>;
