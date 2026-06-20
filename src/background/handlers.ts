@@ -4,7 +4,7 @@ import { getProductCopySessionByTab } from './services/product-copy-session-serv
 import { getShippingSessionByTab } from './shipping/shipping-session-service';
 import { getTaobaoRefundSessionByTab } from './taobao-refund/taobao-refund-session-service';
 import { createBackgroundRouter } from './router/create-background-router';
-import type { ScanSessionState } from './services/violation-service';
+import type { ScanSessionState } from './services/compliance-service';
 
 type RuntimeRequest = {
   channel: string;

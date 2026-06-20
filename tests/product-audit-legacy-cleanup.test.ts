@@ -49,7 +49,8 @@ test('cleanupProductAuditLegacyData removes old audit config, rules, jobs, and l
       blacklistRules: [{ code: 6600144, description: '旧停止规则' }],
       productAuditRules: [],
       statusRules: [],
-      violationWords: [],
+      globalViolationWords: [],
+      moduleViolationWords: {},
     },
     appSettings: { siliconFlowApiKey: '' },
     notificationPreference: {

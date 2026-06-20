@@ -19,16 +19,6 @@ function normalizeProductAuditFailurePolicy(policy: ProductAuditFailurePolicy): 
   };
 }
 
-export async function getViolationWords(accountId: string): Promise<string[]> {
-  return (await ensureAccountWorkspace(accountId)).rules.violationWords;
-}
-
-export async function setViolationWords(accountId: string, words: string[]): Promise<void> {
-  await updateAccountWorkspace(accountId, workspace => {
-    workspace.rules.violationWords = words;
-  });
-}
-
 export function getDefaultProductAuditFailurePolicy(): ProductAuditFailurePolicy {
   return normalizeProductAuditFailurePolicy({
     rules: DEFAULT_PRODUCT_AUDIT_FAILURE_RULES,

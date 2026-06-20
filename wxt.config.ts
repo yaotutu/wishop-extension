@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import packageJson from './package.json';
 
 const HOST_PERMISSIONS = [
-  // 微信小店 API：商品提审、订单、违规检测等后台能力。
+  // 微信小店 API：商品提审、订单、商品合规扫描等后台能力。
   'https://api.weixin.qq.com/*',
   // 淘宝/Tmall：订单去发货、采购单读取和退款申请时注入工作页工具栏。
   'https://*.taobao.com/*',
@@ -65,7 +65,7 @@ export default defineConfig({
   },
   manifest: {
     name: '店小七',
-    description: '微信小店多账户商品提审、订单管理和违规词检测工具',
+    description: '微信小店多账户商品提审、订单管理和商品合规扫描工具',
     version: packageJson.version,
     permissions: EXTENSION_PERMISSIONS,
     host_permissions: HOST_PERMISSIONS,

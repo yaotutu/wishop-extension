@@ -19,13 +19,14 @@ import { createShippingRuntimeHandlers } from '../runtime-handlers/shipping-hand
 import { createTaobaoWorkspaceRuntimeHandlers } from '../runtime-handlers/taobao-workspace-handlers';
 import { createTaobaoLoginRuntimeHandlers } from '../runtime-handlers/taobao-login-handlers';
 import { createTaobaoRefundRuntimeHandlers } from '../runtime-handlers/taobao-refund-handlers';
-import { createViolationRuntimeHandlers } from '../runtime-handlers/violation-handlers';
+import { createComplianceRuntimeHandlers } from '../runtime-handlers/compliance-handlers';
+import { createViolationWordRuntimeHandlers } from '../runtime-handlers/violation-word-handlers';
 import { createLicenseRuntimeHandlers } from '../runtime-handlers/license-handlers';
 import { createWxCategoryDataRuntimeHandlers } from '../runtime-handlers/wx-category-data-handlers';
 import { assertFeatureAccess } from '../licensing/licensing-service';
 import { clearDraftPagination, deleteDraft, fetchDrafts, submitDraftAudit } from '../services/draft-service';
 import { runProductAuditTask } from '../services/product-audit-task-service';
-import { runViolationBatchScan, runViolationStep, type ScanSessionState } from '../services/violation-service';
+import { runComplianceBatchScan, runComplianceStep, type ScanSessionState } from '../services/compliance-service';
 import type { SessionManager } from '../utils/session-manager';
 import { createRuntimeRouter, type RuntimeFeatureMap, type RuntimeRouter } from './runtime-router';
 
@@ -118,12 +119,16 @@ const FEATURE_CHANNELS = {
   'productAudit:precheckCategory': 'productAudit',
   'productAudit:configGet': 'productAudit',
   'productAudit:configSet': 'productAudit',
-  'violation:getWords': 'violation',
-  'violation:setWords': 'violation',
-  'violation:batchScan': 'violation',
-  'violation:scanStep': 'violation',
-  'violation:batchDelete': 'violation',
-  'violation:stop': 'violation',
+  'violationWords:getGlobal': 'compliance',
+  'violationWords:setGlobal': 'compliance',
+  'violationWords:getModule': 'compliance',
+  'violationWords:setModule': 'compliance',
+  'violationWords:getDefaults': 'compliance',
+  'violationWords:getSettings': 'compliance',
+  'compliance:batchScan': 'compliance',
+  'compliance:scanStep': 'compliance',
+  'compliance:batchDelete': 'compliance',
+  'compliance:stop': 'compliance',
   'productAudit:failurePolicyGet': 'productAudit',
   'productAudit:failurePolicyGetDefaults': 'productAudit',
   'productAudit:failurePolicySet': 'productAudit',
@@ -193,13 +198,14 @@ export function createBackgroundRouter(options: CreateBackgroundRouterOptions): 
         options.taskSessions.stop(accountId);
       },
     }),
-    ...createViolationRuntimeHandlers({
-      batchScan: (accountId, limit) => runViolationBatchScan(accountId, options.scanSessions, limit),
-      scanStep: (accountId, action) => runViolationStep(accountId, options.scanSessions, action),
+    ...createComplianceRuntimeHandlers({
+      batchScan: (accountId, limit) => runComplianceBatchScan(accountId, options.scanSessions, limit),
+      scanStep: (accountId, action) => runComplianceStep(accountId, options.scanSessions, action),
       stop(accountId) {
         options.scanSessions.stop(accountId);
       },
     }),
+    ...createViolationWordRuntimeHandlers(),
     ...createRuleRuntimeHandlers(),
     ...createQuotaRuntimeHandlers(),
     ...createLogRuntimeHandlers(),

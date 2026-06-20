@@ -106,7 +106,6 @@ export function normalizeAccount(account: FullAccount): FullAccount {
   return {
     ...account,
     productAuditConfig: normalizeProductAuditTaskConfig(account.productAuditConfig),
-    violationWords: account.violationWords || [],
     productAuditLogs: account.productAuditLogs || [],
     violationLogs: account.violationLogs || [],
     productSources: account.productSources || [],

@@ -69,7 +69,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCE: NotificationPreference = {
   domainEnabled: {
     productCopy: true,
     productAudit: true,
-    violation: true,
+    compliance: true,
     orders: true,
     store: true,
     scheduler: true,

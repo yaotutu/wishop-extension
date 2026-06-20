@@ -23,7 +23,10 @@ export function createDefaultAccountWorkspace(accountId: string, now = Date.now(
       productAuditRules: DEFAULT_PRODUCT_AUDIT_FAILURE_RULES,
       productAuditDefaultFailureAction: DEFAULT_PRODUCT_AUDIT_FAILURE_DEFAULT_ACTION,
       statusRules: [],
-      violationWords: [],
+      // 违禁词已全局化，账号 workspace 不再保留账号级词库。
+      // 这两个全局字段仅会在 '__global_rules__' 这条全局 workspace 上被实际读写。
+      globalViolationWords: [],
+      moduleViolationWords: {},
     },
     appSettings: DEFAULT_APP_SETTINGS,
     notificationPreference: DEFAULT_NOTIFICATION_PREFERENCE,
@@ -46,7 +49,8 @@ export function normalizeAccountWorkspace(workspace: AccountWorkspaceRecord): Ac
       productAuditRules: Array.isArray(workspace.rules?.productAuditRules) ? workspace.rules.productAuditRules : DEFAULT_PRODUCT_AUDIT_FAILURE_RULES,
       productAuditDefaultFailureAction: workspace.rules?.productAuditDefaultFailureAction === 'deleteDraft' ? 'deleteDraft' : DEFAULT_PRODUCT_AUDIT_FAILURE_DEFAULT_ACTION,
       statusRules: Array.isArray(workspace.rules?.statusRules) ? workspace.rules.statusRules : [],
-      violationWords: Array.isArray(workspace.rules?.violationWords) ? workspace.rules.violationWords : [],
+      globalViolationWords: Array.isArray(workspace.rules?.globalViolationWords) ? workspace.rules.globalViolationWords : [],
+      moduleViolationWords: workspace.rules?.moduleViolationWords && typeof workspace.rules.moduleViolationWords === 'object' ? workspace.rules.moduleViolationWords : {},
     },
     appSettings: normalizeAppSettings(workspace.appSettings),
     notificationPreference: normalizeNotificationPreference(workspace.notificationPreference),

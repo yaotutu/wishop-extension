@@ -39,7 +39,6 @@ export async function getAccount(accountId: string): Promise<FullAccount | undef
   return {
     ...toAccount(account),
     productAuditConfig: workspace.productAuditConfig,
-    violationWords: workspace.rules.violationWords,
     productAuditLogs: [],
     violationLogs: [],
     productSources: workspace.productSources,
@@ -55,7 +54,6 @@ export async function addAccount(name: string, config: Config): Promise<FullAcco
     name,
     config,
     productAuditConfig: DEFAULT_PRODUCT_AUDIT_CONFIG,
-    violationWords: [],
     productAuditLogs: [],
     violationLogs: [],
     productSources: [],

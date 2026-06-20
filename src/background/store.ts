@@ -32,7 +32,7 @@ export {
   clearModuleLogs,
   createScopedProductAuditLog,
   createScopedModuleLog,
-  createScopedViolationLog,
+  createScopedComplianceLog,
   getProductAuditLogs,
   getModuleLogs,
   onModuleLog,
@@ -54,10 +54,8 @@ export {
   getDefaultStatusRules,
   getProductAuditFailurePolicy,
   getStatusRules,
-  getViolationWords,
   setProductAuditFailurePolicy,
   setStatusRules,
-  setViolationWords,
 } from './store/rule-repository';
 
 export {

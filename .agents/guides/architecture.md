@@ -7,7 +7,7 @@
 1. `src/background/handlers.ts`：只负责 runtime 消息监听。
 2. `src/background/router/`：负责 channel 注册、功能鉴权入口和分发。
 3. `src/background/runtime-handlers/`：负责 IPC 参数适配和功能级入口。
-4. `src/background/services/`：负责业务流程，例如草稿商品获取、订单查询、任务执行和违规扫描。
+4. `src/background/services/`：负责业务流程，例如草稿商品获取、订单查询、任务执行和商品合规扫描。
 5. `src/background/modules/`：负责更底层的任务算法。
 6. `src/background/store/`、`src/background/wxshop/` 和 `src/background/activity-logs/`：负责基础设施。
 

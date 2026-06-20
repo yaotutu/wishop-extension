@@ -25,7 +25,7 @@ const OrdersPage = lazy(() => import('../pages/orders/OrdersPage'));
 const ProductCopyPage = lazy(() => import('../pages/product-copy/ProductCopyPage'));
 const ProductAuditPage = lazy(() => import('../pages/common-functions/ProductAuditPage'));
 const ScheduledJobsPage = lazy(() => import('../pages/scheduled-jobs/ScheduledJobsPage'));
-const ViolationPage = lazy(() => import('../pages/violation/ViolationPage'));
+const CompliancePage = lazy(() => import('../pages/compliance/CompliancePage'));
 
 const ACCOUNT_MODULES = new Set<string>(['orders', 'productCopy', 'commonFunctions', 'violation']);
 
@@ -34,7 +34,7 @@ const MODULES: { key: DashboardModuleType; label: string }[] = [
   { key: 'productCopy', label: '复制商品' },
   { key: 'commonFunctions', label: '商品提审' },
   { key: 'scheduledJobs', label: '调度任务' },
-  { key: 'violation', label: '违规词检测' },
+  { key: 'violation', label: '商品合规扫描' },
   { key: 'settings', label: '设置' },
 ];
 
@@ -173,7 +173,7 @@ const AccountModuleContent: React.FC<{
       {activeModule === 'orders' && <OrdersPage scope={orderScope} accounts={accounts} />}
       {activeModule === 'productCopy' && <ProductCopyPage accountId={activeAccount.id} accountName={activeAccount.name} />}
       {activeModule === 'commonFunctions' && <ProductAuditPage accountId={activeAccount.id} accounts={accounts} scope="account" />}
-      {activeModule === 'violation' && <ViolationPage accountId={activeAccount.id} />}
+      {activeModule === 'violation' && <CompliancePage accountId={activeAccount.id} />}
     </div>
   );
 };

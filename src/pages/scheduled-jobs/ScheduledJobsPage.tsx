@@ -16,7 +16,7 @@ const moduleLabels: Record<ScheduledJob['module'], string> = {
   productCopy: '商品复制',
   productAudit: '商品提审',
   orders: '订单管理',
-  violation: '违规检测',
+  compliance: '商品合规扫描',
   store: '店铺管理',
   system: '系统',
 };
@@ -26,7 +26,7 @@ const jobTypeLabels: Record<ScheduledJob['jobType'], string> = {
   'orders.checkShipmentStatus': '检测发货状态',
   'orders.syncRecent': '同步近期订单',
   'orders.backfillHistory': '补拉历史订单',
-  'violation.scanProducts': '扫描违规商品',
+  'compliance.scanProducts': '合规扫描商品',
   'taobaoLogin.checkHeartbeat': '淘宝登录态心跳',
 };
 

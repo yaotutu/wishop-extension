@@ -1,6 +1,6 @@
 import type { ActivityLogEntry } from './activity-log';
 import type { NotificationEntry, NotificationPreference } from './notification';
-import type { AppSettings, AppSettingsPatch } from './settings';
+import type { AppSettings, AppSettingsPatch, ViolationWordsSettings } from './settings';
 import type {
   Account,
   ProductCopyCreatedProductRecord,
@@ -66,6 +66,7 @@ import type {
   TaobaoProductSnapshot,
   ViolationMatch,
   ViolationScanResult,
+  ViolationWordModule,
   SyncWxCategoryProductRulesInput,
   WxDraftBoxProductPrepareResult,
   WxProductDraftSuggestionResult,
@@ -198,18 +199,22 @@ export interface RuntimeChannels {
   'productAudit:stop': { args: [accountId: string]; result: void };
   'productAudit:precheckCategory': { args: [input: ProductAuditCategoryPrecheckInput]; result: ProductAuditCategoryPrecheckResult };
 
-  'violation:getWords': { args: [accountId: string]; result: string[] };
-  'violation:setWords': { args: [accountId: string, words: string[]]; result: void };
-  'violation:batchScan': { args: [accountId: string, limit?: number]; result: ViolationScanResult };
-  'violation:scanStep': {
+  'violationWords:getGlobal': { args: []; result: string[] };
+  'violationWords:setGlobal': { args: [words: string[]]; result: void };
+  'violationWords:getModule': { args: [module: ViolationWordModule]; result: string[] };
+  'violationWords:setModule': { args: [module: ViolationWordModule, words: string[]]; result: void };
+  'violationWords:getDefaults': { args: []; result: { words: string[]; totalCount: number; violationWords: string[]; brands: string[]; source: string; updatedAt: string; version: number } };
+  'violationWords:getSettings': { args: []; result: ViolationWordsSettings };
+  'compliance:batchScan': { args: [accountId: string, limit?: number]; result: ViolationScanResult };
+  'compliance:scanStep': {
     args: [accountId: string, action: 'next' | 'skip' | 'delete'];
     result:
       | { type: 'done'; scanned?: number; reason?: string }
       | { type: 'stopped'; reason?: string }
       | ({ type: 'violation'; scanned: number } & ViolationMatch);
   };
-  'violation:batchDelete': { args: [accountId: string, violations: ViolationMatch[]]; result: { deleted: number; errors: number; stopped: boolean } };
-  'violation:stop': { args: [accountId: string]; result: void };
+  'compliance:batchDelete': { args: [accountId: string, violations: ViolationMatch[]]; result: { deleted: number; errors: number; stopped: boolean } };
+  'compliance:stop': { args: [accountId: string]; result: void };
 
   'productAudit:failurePolicyGet': { args: []; result: ProductAuditFailurePolicy };
   'productAudit:failurePolicyGetDefaults': { args: []; result: ProductAuditFailurePolicy };

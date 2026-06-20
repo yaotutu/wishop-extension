@@ -9,6 +9,7 @@ import {
   CustomerServiceOutlined,
   RobotOutlined,
   SafetyCertificateOutlined,
+  SafetyOutlined,
   ShopOutlined,
   LinkOutlined,
 } from '@ant-design/icons';
@@ -21,6 +22,7 @@ import type { SettingsTab } from '../../stores/dashboard-ui-preferences-store';
 import { queryKeys } from '../../query/query-keys';
 import StoreManagement from '../store-management/StoreManagement';
 import PurchaseLinkPanel from './PurchaseLinkPanel';
+import ViolationWordsPanel from './ViolationWordsPanel';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -37,6 +39,7 @@ interface SettingsPageProps {
 
 const MENU_ITEMS = [
   { key: 'store', label: '店铺管理', icon: <ShopOutlined /> },
+  { key: 'violationWords', label: '违禁词管理', icon: <SafetyOutlined /> },
   { key: 'about', label: '关于/更新', icon: <InfoCircleOutlined /> },
   { key: 'product', label: '产品介绍', icon: <AppstoreOutlined /> },
   { key: 'license', label: '授权状态', icon: <SafetyCertificateOutlined /> },
@@ -72,7 +75,7 @@ const AboutPanel: React.FC = () => {
 const ProductPanel: React.FC = () => {
   const features = [
     { title: '商品提审', desc: '批量提交商品审核，支持定时调度，自动处理审核结果' },
-    { title: '违规词检测', desc: '扫描商品标题和描述中的违规词，批量处理不合规商品' },
+    { title: '商品合规扫描', desc: '扫描商品标题中的违禁词，批量处理不合规商品' },
     { title: '订单管理', desc: '多账户订单查看、搜索、详情查看、地址解密' },
     { title: '多账户管理', desc: '一个应用管理多个微信小店，账户数据完全隔离' },
   ];
@@ -144,7 +147,7 @@ const LicensePanel: React.FC = () => {
         showIcon
         style={{ marginBottom: 16 }}
         title="授权拦截暂未启用"
-        description="当前版本只保存授权结构和本地状态，不会限制订单、提审、违规检测或发货功能。服务端完成后可打开统一授权开关。"
+        description="当前版本只保存授权结构和本地状态，不会限制订单、提审、合规扫描或发货功能。服务端完成后可打开统一授权开关。"
       />
       <Descriptions column={1} style={{ maxWidth: 620 }}>
         <Descriptions.Item label="授权开关">
@@ -402,6 +405,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ accounts, activeAccountId, 
             switchAccount={switchAccount}
           />
         )}
+        {activeTab === 'violationWords' && <ViolationWordsPanel />}
         {activeTab === 'about' && <AboutPanel />}
         {activeTab === 'product' && <ProductPanel />}
         {activeTab === 'license' && <LicensePanel />}

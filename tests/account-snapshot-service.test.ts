@@ -119,7 +119,8 @@ test('account snapshots replace only the target account data', async () => {
         productAuditRules: [],
         productAuditDefaultFailureAction: 'keepDraft',
         statusRules: [],
-        violationWords: ['违规词'],
+        globalViolationWords: [],
+        moduleViolationWords: {},
       },
       appSettings: DEFAULT_APP_SETTINGS,
       notificationPreference: DEFAULT_NOTIFICATION_PREFERENCE,
@@ -137,7 +138,8 @@ test('account snapshots replace only the target account data', async () => {
         productAuditRules: [],
         productAuditDefaultFailureAction: 'keepDraft',
         statusRules: [],
-        violationWords: [],
+        globalViolationWords: [],
+        moduleViolationWords: {},
       },
       appSettings: DEFAULT_APP_SETTINGS,
       notificationPreference: DEFAULT_NOTIFICATION_PREFERENCE,
@@ -183,7 +185,7 @@ test('account snapshots replace only the target account data', async () => {
   const snapshot = await exportAccountSnapshot('account-1');
   assert.equal(snapshot.accountId, 'account-1');
   assert.equal(snapshot.tables.orders.length, 1);
-  assert.equal(snapshot.tables.workspace.rules.violationWords[0], '违规词');
+  assert.equal(snapshot.tables.workspace.rules.globalViolationWords.length, 0);
 
   await extensionDb.orders.put({
     accountId: 'account-1',

@@ -11,7 +11,7 @@ const { Text } = Typography;
 const domainLabels: Record<ActivityLogDomain, string> = {
   productCopy: '商品复制',
   productAudit: '商品提审',
-  violation: '违规词',
+  compliance: '商品合规',
   orders: '订单',
   store: '店铺',
   scheduler: '定时任务',
@@ -48,7 +48,7 @@ const triggerLabels: Record<ActivityLogTrigger, string> = {
   background: '后台',
 };
 
-const notificationDomains: ActivityLogDomain[] = ['productCopy', 'productAudit', 'orders', 'violation', 'store', 'scheduler', 'system'];
+const notificationDomains: ActivityLogDomain[] = ['productCopy', 'productAudit', 'orders', 'compliance', 'store', 'scheduler', 'system'];
 const notificationTopicsByDomain = NOTIFICATION_TOPIC_DEFINITIONS.reduce((acc, definition) => {
   const current = acc[definition.domain] || [];
   return { ...acc, [definition.domain]: [...current, definition.topic] };

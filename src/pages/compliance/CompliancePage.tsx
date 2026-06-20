@@ -1,16 +1,22 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { extensionApi } from '../../shared/extension-api';
-import { Card, Button, Space, Input, InputNumber, Table, Tag, Radio, Modal, Alert, message, Popconfirm, Upload, Divider } from 'antd';
-import { UploadOutlined, DeleteOutlined, SearchOutlined, StopOutlined, ExclamationCircleOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons';
+import { Card, Button, Space, InputNumber, Table, Tag, Radio, Modal, Alert, message, Popconfirm } from 'antd';
+import { DeleteOutlined, SearchOutlined, StopOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import type { ViolationMatch, LogEntry } from '../../shared/types';
 
-interface ViolationProps {
+/**
+ * 商品合规扫描页。
+ *
+ * 这是「扫描执行」模块，针对选中的店铺草稿箱批量检测违禁词。
+ * 词库本身已全局化，管理入口在「设置 - 违禁词管理」，这里不再做词库 CRUD。
+ * 词库为空时禁用扫描，并提示去设置页导入词库。
+ */
+interface ComplianceProps {
   accountId: string;
 }
 
-const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
-  const [words, setWords] = useState<string[]>([]);
-  const [wordsExpanded, setWordsExpanded] = useState(false);
+const CompliancePage: React.FC<ComplianceProps> = ({ accountId }) => {
+  const [wordCount, setWordCount] = useState(0); // 扫描生效词数（默认词∪自定义词合并后），只用于"词库为空"判断和提示
   const [mode, setMode] = useState<'batch' | 'onebyone'>('batch');
   const [scanLimit, setScanLimit] = useState(100);
   const [scanning, setScanning] = useState(false);
@@ -18,67 +24,42 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([]);
   const [deleting, setDeleting] = useState(false);
 
-  // file upload preview
-  const [previewWords, setPreviewWords] = useState<string[]>([]);
-  const [previewModalOpen, setPreviewModalOpen] = useState(false);
-
-  // one-by-one state
+  // 逐个模式状态
   const [currentViolation, setCurrentViolation] = useState<(ViolationMatch & { scanned: number }) | null>(null);
   const [oneByOneScanning, setOneByOneScanning] = useState(false);
   const stoppedRef = useRef(false);
 
-  // logs
+  // 执行日志
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
-  // scan result summary
+  // 扫描结果摘要
   const [scanResult, setScanResult] = useState<{ scanned: number; total: number } | null>(null);
 
-  // result area tab
+  // 结果区 Tab
   const [activeResultTab, setActiveResultTab] = useState<'result' | 'logs'>('result');
 
   useEffect(() => {
-    loadWords();
+    // 读取扫描生效词数（与后端 resolveScanWords 保持一致的合并口径）：
+    // 开关开 → 默认词 ∪ 用户词 去重后的数量；开关关 → 用户词数量。
+    // 这里只算数量用于"词库为空"拦截和提示，不参与实际扫描。
+    void Promise.all([
+      extensionApi.violationWords.getGlobal(),
+      extensionApi.violationWords.getDefaults(),
+      extensionApi.violationWords.getSettings(),
+    ]).then(([userWords, defaults, settings]) => {
+      const effective = settings.defaultWordsEnabled
+        ? new Set([...defaults.words, ...userWords]).size
+        : userWords.length;
+      setWordCount(effective);
+    });
     return () => {
       unsubscribeRef.current?.();
     };
-  }, [accountId]);
-
-  const loadWords = async () => {
-    const data = await extensionApi.violation.getWords(accountId);
-    setWords(data);
-  };
-
-  const handleFileUpload = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target?.result as string;
-      const parsed = [...new Set(
-        text.split(/\r?\n/)
-          .map(line => line.trim())
-          .filter(line => line.length > 0)
-      )];
-      if (parsed.length === 0) {
-        message.warning('文件内容为空');
-        return;
-      }
-      setPreviewWords(parsed);
-      setPreviewModalOpen(true);
-    };
-    reader.readAsText(file);
-    return false;
-  };
-
-  const handleConfirmImport = async () => {
-    await extensionApi.violation.setWords(accountId, previewWords);
-    setWords(previewWords);
-    setPreviewModalOpen(false);
-    setPreviewWords([]);
-    message.success(`已导入 ${previewWords.length} 个违规词`);
-  };
+  }, []);
 
   const subscribeLogs = () => {
-    unsubscribeRef.current = extensionApi.violation.onLog(accountId, (log: LogEntry) => {
+    unsubscribeRef.current = extensionApi.compliance.onLog(accountId, (log: LogEntry) => {
       setLogs(prev => [...prev, log]);
     });
   };
@@ -88,10 +69,10 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
     unsubscribeRef.current = null;
   };
 
-  // --- Batch scan ---
+  // --- 批量扫描 ---
   const handleBatchScan = async () => {
-    if (words.length === 0) {
-      message.warning('请先上传违规词文件');
+    if (wordCount === 0) {
+      message.warning('全局违禁词库为空，请先到「设置 - 违禁词管理」导入词库');
       return;
     }
     setScanning(true);
@@ -102,7 +83,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
     setActiveResultTab('logs');
     subscribeLogs();
     try {
-      const result = await extensionApi.violation.batchScan(accountId, scanLimit);
+      const result = await extensionApi.compliance.batchScan(accountId, scanLimit);
       setViolations(result.violations);
       setScanResult({ scanned: result.scanned, total: result.violations.length });
       setActiveResultTab('result');
@@ -121,7 +102,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
     setDeleting(true);
     subscribeLogs();
     try {
-      const result = await extensionApi.violation.batchDelete(accountId, toDelete);
+      const result = await extensionApi.compliance.batchDelete(accountId, toDelete);
       message.success(`已删除 ${result.deleted} 条，失败 ${result.errors} 条`);
       setSelectedKeys([]);
       setViolations(prev => prev.filter(v => !toDelete.some(d => d.productId === v.productId)));
@@ -134,10 +115,10 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
     }
   };
 
-  // --- One-by-one scan ---
+  // --- 逐个扫描 ---
   const handleOneByOneStart = async () => {
-    if (words.length === 0) {
-      message.warning('请先上传违规词文件');
+    if (wordCount === 0) {
+      message.warning('全局违禁词库为空，请先到「设置 - 违禁词管理」导入词库');
       return;
     }
     setOneByOneScanning(true);
@@ -151,7 +132,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
 
   const handleNextViolation = async () => {
     if (stoppedRef.current) return;
-    const result = await extensionApi.violation.scanStep(accountId, 'next');
+    const result = await extensionApi.compliance.scanStep(accountId, 'next');
     if (stoppedRef.current) return;
     if (result.type === 'done') {
       setCurrentViolation(null);
@@ -160,7 +141,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
       if (result.reason) {
         message.warning(result.reason);
       } else {
-        message.info('扫描完成，未发现违规商品');
+        message.info('扫描完成，未发现违禁商品');
       }
     } else if (result.type === 'stopped') {
       setCurrentViolation(null);
@@ -179,7 +160,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
 
   const handleOneByOneDelete = async () => {
     if (!currentViolation || stoppedRef.current) return;
-    const result = await extensionApi.violation.scanStep(accountId, 'delete');
+    const result = await extensionApi.compliance.scanStep(accountId, 'delete');
     if (stoppedRef.current) return;
     if (result.type === 'stopped') {
       setCurrentViolation(null);
@@ -194,13 +175,14 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
 
   const handleStop = async () => {
     stoppedRef.current = true;
-    await extensionApi.violation.stop(accountId);
+    await extensionApi.compliance.stop(accountId);
     setScanning(false);
     setOneByOneScanning(false);
     setCurrentViolation(null);
     unsubscribeLogs();
   };
 
+  // 把命中违禁词的部分高亮成红色 Tag
   const highlightTitle = (title: string, matchedWords: string[]) => {
     let parts: { text: string; highlight: boolean }[] = [{ text: title, highlight: false }];
     for (const word of matchedWords) {
@@ -262,7 +244,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
           onConfirm={async () => {
             subscribeLogs();
             try {
-              const result = await extensionApi.violation.batchDelete(accountId, [record]);
+              const result = await extensionApi.compliance.batchDelete(accountId, [record]);
               if (result.deleted > 0) {
                 message.success('已删除');
                 setViolations(prev => prev.filter(v => v.productId !== record.productId));
@@ -284,55 +266,22 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* 操作栏 */}
-      <Card size="small">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-          {/* 左侧：词库状态 */}
-          <Space size={16}>
-            {words.length > 0 ? (
-              <>
-                <Tag color="green">已加载 {words.length} 个违规词</Tag>
-                <Button size="small" type="link" icon={<EyeOutlined />} onClick={() => setWordsExpanded(!wordsExpanded)}>
-                  {wordsExpanded ? '收起' : '查看'}
-                </Button>
-              </>
-            ) : (
-              <span style={{ color: '#999', fontSize: 13 }}>暂未加载违规词</span>
-            )}
-          </Space>
-          {/* 右侧：按钮组 */}
-          <Space size={8}>
-            {words.length > 0 && (
-              <Popconfirm
-                title="确认清空违规词库？"
-                onConfirm={async () => {
-                  await extensionApi.violation.setWords(accountId, []);
-                  setWords([]);
-                  message.success('已清空');
-                }}
-                okText="清空"
-                cancelText="取消"
-              >
-                <Button size="small" icon={<DeleteOutlined />}>清空词库</Button>
-              </Popconfirm>
-            )}
-            <Upload accept=".txt" showUploadList={false} beforeUpload={handleFileUpload}>
-              <Button size="small" type="primary" icon={<UploadOutlined />}>上传违规词文件</Button>
-            </Upload>
-          </Space>
-        </div>
-        {/* 词库展开区 */}
-        {wordsExpanded && words.length > 0 && (
-          <div style={{ marginTop: 8 }}>
-            <Input.TextArea
-              value={words.join('\n')}
-              readOnly
-              autoSize={{ minRows: 3, maxRows: 10 }}
-              style={{ fontFamily: 'monospace', fontSize: 12, color: '#666' }}
-            />
-          </div>
-        )}
-      </Card>
+      {/* 词库来源提示 */}
+      {wordCount === 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          message="全局违禁词库为空"
+          description="扫描依赖「设置 - 违禁词管理」中的全局词库，请先去导入违禁词后再扫描。"
+        />
+      )}
+      {wordCount > 0 && (
+        <Alert
+          type="info"
+          showIcon
+          message={<span>当前使用全局违禁词库（{wordCount} 个词）。词库管理请到「设置 - 违禁词管理」。</span>}
+        />
+      )}
 
       {/* 扫描控制 */}
       <Card size="small">
@@ -361,7 +310,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
                 size="small"
                 icon={<SearchOutlined />}
                 onClick={mode === 'batch' ? handleBatchScan : handleOneByOneStart}
-                disabled={words.length === 0}
+                disabled={wordCount === 0}
               >
                 开始扫描
               </Button>
@@ -392,9 +341,9 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
                   <Space size={12}>
                     <span style={{ fontSize: 13 }}>已扫描 <b>{scanResult.scanned}</b> 条</span>
                     {scanResult.total > 0 ? (
-                      <Tag color="error">{scanResult.total} 条违规</Tag>
+                      <Tag color="error">{scanResult.total} 条命中违禁词</Tag>
                     ) : (
-                      <Tag color="success">无违规</Tag>
+                      <Tag color="success">无违禁</Tag>
                     )}
                   </Space>
                   {violations.length > 0 && (
@@ -440,7 +389,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
                 </div>
               ) : (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#bbb' }}>
-                  {scanResult ? '无违规商品' : '尚未扫描'}
+                  {scanResult ? '无违禁商品' : '尚未扫描'}
                 </div>
               )}
             </div>
@@ -503,7 +452,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
             <div style={{ marginBottom: 12 }}>
               <Space>
                 <ExclamationCircleOutlined style={{ color: '#faad14', fontSize: 18 }} />
-                <span style={{ fontWeight: 600, fontSize: 15 }}>发现违规商品</span>
+                <span style={{ fontWeight: 600, fontSize: 15 }}>发现违禁商品</span>
               </Space>
             </div>
             <div style={{ marginBottom: 8, color: '#999', fontSize: 13 }}>
@@ -525,7 +474,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
               </div>
             </div>
             <div style={{ marginBottom: 16 }}>
-              <span style={{ color: '#999', fontSize: 13, marginRight: 8 }}>匹配到违规词：</span>
+              <span style={{ color: '#999', fontSize: 13, marginRight: 8 }}>匹配到违禁词：</span>
               {currentViolation.matchedWords.map(w => (
                 <Tag key={w} color="orange">{w}</Tag>
               ))}
@@ -538,37 +487,8 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
           </div>
         )}
       </Modal>
-
-      {/* 文件上传预览确认弹窗 */}
-      <Modal
-        title="确认导入违规词"
-        open={previewModalOpen}
-        onCancel={() => { setPreviewModalOpen(false); setPreviewWords([]); }}
-        footer={[
-          <Button key="cancel" onClick={() => { setPreviewModalOpen(false); setPreviewWords([]); }}>
-            取消
-          </Button>,
-          <Button key="confirm" type="primary" onClick={handleConfirmImport}>
-            确认导入 ({previewWords.length} 个词)
-          </Button>,
-        ]}
-        width={500}
-        centered
-      >
-        <div style={{ marginBottom: 12, color: '#666' }}>
-          从文件中解析到 <b style={{ color: '#1677ff' }}>{previewWords.length}</b> 个违规词，
-          {words.length > 0 && <span style={{ color: '#ff4d4f' }}>将替换当前已有的 {words.length} 个词</span>}
-          {words.length === 0 && '确认后将作为当前违规词库'}
-        </div>
-        <Input.TextArea
-          value={previewWords.join('\n')}
-          readOnly
-          autoSize={{ minRows: 6, maxRows: 16 }}
-          style={{ fontFamily: 'monospace', fontSize: 12 }}
-        />
-      </Modal>
     </div>
   );
 };
 
-export default React.memo(ViolationPage);
+export default React.memo(CompliancePage);

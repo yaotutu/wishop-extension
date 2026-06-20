@@ -30,16 +30,27 @@ export interface AiServiceSettings {
   model: string;
 }
 
+/**
+ * 违禁词相关设置。
+ * 当前只控制「系统默认违禁词」是否并入扫描。用户自定义词不受此开关影响。
+ */
+export interface ViolationWordsSettings {
+  /** 是否把系统默认违禁词并入扫描。默认 true（开箱即用，避免新用户词库为空时无法扫描）。 */
+  defaultWordsEnabled: boolean;
+}
+
 export interface AppSettings {
   shipmentCheck: ShipmentCheckSettings;
   purchaseLink: PurchaseLinkSettings;
   aiService: AiServiceSettings;
+  violationWords: ViolationWordsSettings;
 }
 
 export interface AppSettingsPatch {
   shipmentCheck?: Partial<ShipmentCheckSettings>;
   purchaseLink?: Partial<PurchaseLinkSettings>;
   aiService?: Partial<AiServiceSettings>;
+  violationWords?: Partial<ViolationWordsSettings>;
 }
 
 interface LegacyAiProductCopySettings {
@@ -92,10 +103,16 @@ export const DEFAULT_AI_SERVICE_SETTINGS: AiServiceSettings = {
   model: '',
 };
 
+// 默认开启系统默认违禁词并入扫描，保证新用户在未导入自定义词时也能正常检测。
+export const DEFAULT_VIOLATION_WORDS_SETTINGS: ViolationWordsSettings = {
+  defaultWordsEnabled: true,
+};
+
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   shipmentCheck: DEFAULT_SHIPMENT_CHECK_SETTINGS,
   purchaseLink: DEFAULT_PURCHASE_LINK_SETTINGS,
   aiService: DEFAULT_AI_SERVICE_SETTINGS,
+  violationWords: DEFAULT_VIOLATION_WORDS_SETTINGS,
 };
 
 function boundedNumber(value: unknown, fallback: number, min: number, max: number): number {
@@ -212,6 +229,14 @@ export function normalizeAiServiceSettings(input?: Partial<AiServiceSettings>): 
   };
 }
 
+export function normalizeViolationWordsSettings(input?: Partial<ViolationWordsSettings>): ViolationWordsSettings {
+  return {
+    defaultWordsEnabled: typeof input?.defaultWordsEnabled === 'boolean'
+      ? input.defaultWordsEnabled
+      : DEFAULT_VIOLATION_WORDS_SETTINGS.defaultWordsEnabled,
+  };
+}
+
 export function normalizeAppSettings(input?: AppSettingsPatch | LegacyAppSettingsPatch): AppSettings {
   // 旧版本把 AI 配置挂在复制商品或更早的 listing 语义下；归一化时统一提升到系统级 aiService。
   const legacyInput = input as LegacyAppSettingsPatch | undefined;
@@ -220,5 +245,6 @@ export function normalizeAppSettings(input?: AppSettingsPatch | LegacyAppSetting
     shipmentCheck: normalizeShipmentCheckSettings(input?.shipmentCheck),
     purchaseLink: normalizePurchaseLinkSettings(input?.purchaseLink),
     aiService: normalizeAiServiceSettings(input?.aiService || legacyAiService || DEFAULT_AI_SERVICE_SETTINGS),
+    violationWords: normalizeViolationWordsSettings(input?.violationWords),
   };
 }

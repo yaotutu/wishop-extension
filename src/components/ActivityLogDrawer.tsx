@@ -10,7 +10,7 @@ const { Text } = Typography;
 const domainLabels: Record<ActivityLogDomain, string> = {
   productCopy: '商品复制',
   productAudit: '商品提审',
-  violation: '违规词',
+  compliance: '商品合规',
   orders: '订单',
   store: '店铺',
   scheduler: '定时任务',

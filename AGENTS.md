@@ -24,7 +24,7 @@ Do not use for: refactoring, writing scripts from scratch, debugging business lo
 - `entrypoints/taobao.content.tsx` 注册淘宝/天猫页面的通用 content script，承载发货助手、采购单读取、退款和商品采集等淘宝工作流。
 - `src/App.tsx`、`src/main.tsx` 和 `src/index.css` 提供应用外壳和全局样式。
 - `src/components/` 放置通用 UI，例如布局、统计卡片和账号弹窗。
-- `src/pages/` 按业务域组织功能页面，包括 `orders`、`settings`、`store-management`、`product-listing`、`violation` 和 `common-functions`。
+- `src/pages/` 按业务域组织功能页面，包括 `orders`、`settings`、`store-management`、`product-listing`、`compliance` 和 `common-functions`。
 - `src/pages/orders/` 按职责拆分：`OrdersPage.tsx` 负责页面状态和动作，`components/` 负责表格列、工具栏、详情弹窗和货源弹窗，`order-display.ts` 负责订单展示辅助逻辑。
 - `src/background/` 包含后台运行时接线、功能处理器、定时任务、任务模块、服务、仓储和微信小店客户端代码。
 - `src/background/handlers.ts` 应保持为很薄的 runtime 消息传输层。新增 IPC 行为应通过 `src/background/router/`、`src/background/runtime-handlers/` 和 `src/background/services/` 实现。
@@ -84,7 +84,7 @@ Chrome 扩展开发时，dashboard 页面和 background service worker 可能不
 
 ## 代码风格与命名规范
 
-使用 TypeScript 模块、ES imports 和 React 函数组件。保持两个空格缩进、单引号和分号。React 组件使用 `PascalCase` 命名，例如 `OrdersPage.tsx`；hook 使用 `use` 前缀，例如 `useOrders.ts`；后台模块使用描述性的 kebab-case 文件名，例如 `violation-detect.ts`。IPC channel 字符串应按功能命名空间组织，例如 `accounts:list` 或 `scheduledJobs:update`。
+使用 TypeScript 模块、ES imports 和 React 函数组件。保持两个空格缩进、单引号和分号。React 组件使用 `PascalCase` 命名，例如 `OrdersPage.tsx`；hook 使用 `use` 前缀，例如 `useOrders.ts`；后台模块使用描述性的 kebab-case 文件名，例如 `compliance-detect.ts`。IPC channel 字符串应按功能命名空间组织，例如 `accounts:list` 或 `scheduledJobs:update`。
 
 ## 测试指南
 
@@ -100,7 +100,7 @@ Chrome 扩展开发时，dashboard 页面和 background service worker 可能不
 不要提交真实 app 凭证、access token 或客户数据。账号配置和微信 API 客户端值都应视为敏感信息。新增 `wxt.config.ts` host permissions 时保持范围尽量窄，并在 PR 中解释权限变化。
 
 # 优先级最高的规则，该规则由用户手写，不允许被覆盖，不允许修改
-- 该项目是一个chrome插件，主要功能是帮助商户管理微信小店铺，提供订单管理、店铺管理、违规检测等功能。
+- 该项目是一个chrome插件，主要功能是帮助商户管理微信小店铺，提供订单管理、店铺管理、商品合规扫描等功能。
 - 该项目使用了React、TypeScript和Ant Design等技术栈，代码结构清晰，模块划分合理，具有较好的可维护性和可扩展性。
 - 该项目的开发和测试需要使用WXT工具，WXT是一个专门用于开发微信小程序和微信插件的工具，提供了丰富的功能和调试支持。
 - 所有代码都应该添加详细的注释，给人看的注释。

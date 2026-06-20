@@ -3,7 +3,7 @@ import type { AddLogFn, LogEntry } from '../../shared/types';
 import { extensionDb, type AccountLogKind } from '../db/extension-db.ts';
 import { markAccountDirty } from './account-sync-state-repository.ts';
 
-export type ModuleLogKind = 'productAudit' | 'violation';
+export type ModuleLogKind = 'productAudit' | 'compliance';
 type StoreListener = (log: LogEntry) => void;
 
 const listeners = new Map<string, Set<StoreListener>>();
@@ -96,6 +96,6 @@ export async function clearModuleLogs(kind: ModuleLogKind, accountId: string): P
 }
 
 export const createScopedProductAuditLog = (accountId: string): AddLogFn => createScopedModuleLog('productAudit', accountId);
-export const createScopedViolationLog = (accountId: string): AddLogFn => createScopedModuleLog('violation', accountId);
+export const createScopedComplianceLog = (accountId: string): AddLogFn => createScopedModuleLog('compliance', accountId);
 export const getProductAuditLogs = (accountId: string): Promise<LogEntry[]> => getModuleLogs('productAudit', accountId);
 export const clearProductAuditLogs = (accountId: string): Promise<void> => clearModuleLogs('productAudit', accountId);

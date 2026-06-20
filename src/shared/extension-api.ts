@@ -63,6 +63,7 @@ import type {
   TaobaoProductSnapshot,
   ViolationMatch,
   ViolationScanResult,
+  ViolationWordModule,
   SyncWxCategoryProductRulesInput,
   WxDraftBoxProductPrepareResult,
   WxProductDraftSuggestionResult,
@@ -72,7 +73,7 @@ import type {
 } from './types';
 import type { ActivityLogEntry } from './activity-log';
 import type { NotificationEntry, NotificationPreference } from './notification';
-import type { AppSettings, AppSettingsPatch } from './settings';
+import type { AppSettings, AppSettingsPatch, ViolationWordsSettings } from './settings';
 import type { RuntimeArgs, RuntimeChannel, RuntimeResult } from './runtime-channels';
 
 let devRuntimeReloadScheduled = false;
@@ -336,18 +337,28 @@ export const extensionApi = {
     runNow: (jobId: string): Promise<ScheduledJobRunNowResult> => invoke('scheduledJobs:runNow', jobId),
     stopRun: (jobId: string): Promise<ScheduledJobStopRunResult> => invoke('scheduledJobs:stopRun', jobId),
   },
-  violation: {
-    getWords: (accountId: string): Promise<string[]> => invoke('violation:getWords', accountId),
-    setWords: (accountId: string, words: string[]): Promise<void> => invoke('violation:setWords', accountId, words),
-    batchScan: (accountId: string, limit?: number): Promise<ViolationScanResult> => invoke('violation:batchScan', accountId, limit),
+  // 违禁词库管理（全局通用 + 模块级 + 系统默认 + 设置），与账号无关。
+  violationWords: {
+    getGlobal: (): Promise<string[]> => invoke('violationWords:getGlobal'),
+    setGlobal: (words: string[]): Promise<void> => invoke('violationWords:setGlobal', words),
+    getModule: (module: ViolationWordModule): Promise<string[]> => invoke('violationWords:getModule', module),
+    setModule: (module: ViolationWordModule, words: string[]): Promise<void> => invoke('violationWords:setModule', module, words),
+    // 读取系统默认违禁词（按分类 + 合并总数 + 来源/版本元信息），用于设置页只读展示。
+    getDefaults: (): Promise<{ words: string[]; totalCount: number; violationWords: string[]; brands: string[]; source: string; updatedAt: string; version: number }> => invoke('violationWords:getDefaults'),
+    // 读取违禁词设置（当前只含是否启用系统默认词的开关）。
+    getSettings: (): Promise<ViolationWordsSettings> => invoke('violationWords:getSettings'),
+  },
+  // 商品合规扫描：针对具体店铺草稿箱扫描违禁词。词库来源是全局通用词库。
+  compliance: {
+    batchScan: (accountId: string, limit?: number): Promise<ViolationScanResult> => invoke('compliance:batchScan', accountId, limit),
     scanStep: (accountId: string, action: 'next' | 'skip' | 'delete'): Promise<
       | { type: 'done'; scanned?: number; reason?: string }
       | { type: 'stopped'; reason?: string }
       | ({ type: 'violation'; scanned: number } & ViolationMatch)
-    > => invoke('violation:scanStep', accountId, action),
-    batchDelete: (accountId: string, violations: ViolationMatch[]): Promise<{ deleted: number; errors: number; stopped: boolean }> => invoke('violation:batchDelete', accountId, violations),
-    stop: (accountId: string): Promise<void> => invoke('violation:stop', accountId),
-    onLog: (accountId: string, callback: (log: LogEntry) => void) => onRuntimeEvent(`violationLog:added:${accountId}`, callback),
+    > => invoke('compliance:scanStep', accountId, action),
+    batchDelete: (accountId: string, violations: ViolationMatch[]): Promise<{ deleted: number; errors: number; stopped: boolean }> => invoke('compliance:batchDelete', accountId, violations),
+    stop: (accountId: string): Promise<void> => invoke('compliance:stop', accountId),
+    onLog: (accountId: string, callback: (log: LogEntry) => void) => onRuntimeEvent(`complianceLog:added:${accountId}`, callback),
   },
   statusRules: {
     get: (): Promise<StatusRule[]> => invoke('statusRules:get'),

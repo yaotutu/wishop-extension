@@ -5,14 +5,14 @@ export interface Config {
   appSecret: string;
 }
 
-export type ScheduledJobModule = 'productCopy' | 'productAudit' | 'orders' | 'violation' | 'store' | 'system';
+export type ScheduledJobModule = 'productCopy' | 'productAudit' | 'orders' | 'compliance' | 'store' | 'system';
 export type ScheduledJobScope = 'account' | 'global' | 'system';
 export type ScheduledJobType =
   | 'productAudit.submitDrafts'
   | 'orders.checkShipmentStatus'
   | 'orders.syncRecent'
   | 'orders.backfillHistory'
-  | 'violation.scanProducts'
+  | 'compliance.scanProducts'
   | 'taobaoLogin.checkHeartbeat';
 export type ScheduledJobStatus = 'idle' | 'running' | 'waiting_user' | 'completed' | 'failed' | 'skipped' | 'cancelled';
 export type ScheduledJobRunMode = 'recurring' | 'untilComplete';
@@ -965,7 +965,7 @@ export interface CreateShippingSessionInput {
   paymentWorkflow?: ShippingPaymentWorkflow;
 }
 
-export type LicensedFeature = 'orders' | 'productCopy' | 'productAudit' | 'violation' | 'shipping';
+export type LicensedFeature = 'orders' | 'productCopy' | 'productAudit' | 'compliance' | 'shipping';
 
 export interface LicenseActivationInput {
   licenseKey: string;
@@ -1290,6 +1290,14 @@ export interface ViolationScanResult {
   reason?: string;
 }
 
+/**
+ * 模块级违禁词的作用域标识。违禁词库分两层：
+ * - 全局通用词库：所有模块、所有账号共享，用于无差别的合规检测。
+ * - 模块级词库：按业务模块划分，供该模块在处理商品文本时叠加自己的补充词库。
+ * 目前为「复制商品」流程预留（后期接入 prepare 阶段检测时使用）。
+ */
+export type ViolationWordModule = 'productCopy';
+
 // Status rule — maps editStatus codes to actions during task cycle
 export type StatusAction = 'submit' | 'delete' | 'skip';
 
@@ -1307,7 +1315,6 @@ export interface FullAccount {
   productAuditConfig: ProductAuditTaskConfig;
   productAuditLogs: LogEntry[];
   violationLogs: LogEntry[];
-  violationWords: string[];
   productSources: ProductSourceBinding[];
   orderAssociations: OrderAssociation[];
   realAddressCaches: OrderRealAddressCache[];

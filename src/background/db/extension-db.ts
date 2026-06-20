@@ -54,7 +54,11 @@ export interface AccountWorkspaceRecord {
     productAuditRules: ProductAuditFailureRule[];
     productAuditDefaultFailureAction: ProductAuditFailureDefaultAction;
     statusRules: StatusRule[];
-    violationWords: string[];
+    // 违禁词已全局化：不再随账号存储。globalViolationWords 是所有模块共享的通用词库；
+    // moduleViolationWords 按模块名（如 'productCopy'）存放各业务域的补充词库。
+    // 两者都写在 '__global_rules__' 这条全局 workspace 上，跨账号共享。
+    globalViolationWords: string[];
+    moduleViolationWords: Record<string, string[]>;
   };
   appSettings: AppSettings;
   notificationPreference: NotificationPreference;
@@ -62,7 +66,7 @@ export interface AccountWorkspaceRecord {
   updatedAt: number;
 }
 
-export type AccountLogKind = 'productAudit' | 'violation' | 'activity' | 'notification';
+export type AccountLogKind = 'productAudit' | 'compliance' | 'activity' | 'notification';
 
 export interface AccountLogRecord<TEntry = unknown> {
   id: string;
