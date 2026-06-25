@@ -22,16 +22,21 @@ Do not use for: refactoring, writing scripts from scratch, debugging business lo
 - `entrypoints/background.ts` 注册插件后台入口。
 - `entrypoints/dashboard/` 包含后台管理页面的 HTML 和 React 启动代码。
 - `entrypoints/taobao.content.tsx` 注册淘宝/天猫页面的通用 content script，承载发货助手、采购单读取、退款和商品采集等淘宝工作流。
+- `entrypoints/taobao-product-collector-main-world.content.ts` 是运行在 main world 的商品详情采集脚本，只负责读取商品公开字段并过滤掉地址、手机号等隐私信号；它通过自定义事件与 content script 通信，不直接调用后台 IPC。
 - `src/App.tsx`、`src/main.tsx` 和 `src/index.css` 提供应用外壳和全局样式。
 - `src/components/` 放置通用 UI，例如布局、统计卡片和账号弹窗。
-- `src/pages/` 按业务域组织功能页面，包括 `orders`、`settings`、`store-management`、`product-listing`、`compliance` 和 `common-functions`。
+- `src/pages/` 按业务域组织功能页面，包括 `orders`、`settings`、`store-management`、`product-copy`（复制上货）、`scheduled-jobs`（定时任务）、`compliance`（合规扫描）、`batch-operations`（批量操作）和 `common-functions`（常用功能）。
 - `src/pages/orders/` 按职责拆分：`OrdersPage.tsx` 负责页面状态和动作，`components/` 负责表格列、工具栏、详情弹窗和货源弹窗，`order-display.ts` 负责订单展示辅助逻辑。
-- `src/background/` 包含后台运行时接线、功能处理器、定时任务、任务模块、服务、仓储和微信小店客户端代码。
+- `src/background/` 包含后台运行时接线、功能处理器、定时任务、任务模块、服务、仓储、微信小店客户端和 AI 客户端代码。
 - `src/background/handlers.ts` 应保持为很薄的 runtime 消息传输层。新增 IPC 行为应通过 `src/background/router/`、`src/background/runtime-handlers/` 和 `src/background/services/` 实现。
 - `src/background/scheduler/` 是统一定时任务中心。新增定时任务只能通过这里注册执行器，不要在业务模块里单独创建 `chrome.alarms`、`setInterval` 或其它散落的定时循环。
-- `src/background/store/` 包含存储仓储。`src/background/store.ts` 仅保留为兼容导出层；新的后台代码应直接导入具体仓储。
+- `src/background/store/` 包含基于 `chrome.storage.local` 的存储仓储；`src/background/store.ts` 仅保留为兼容导出层，新的后台代码应直接导入具体仓储。体量较大、需要索引查询的持久化数据（订单快照、活动日志、通知、账号快照等）放在 `src/background/db/extension-db.ts` 的 Dexie/IndexedDB 表里，详见下文“持久化分层”。
+- `src/background/ai/` 放置 OpenAI 兼容客户端等外部 AI 调用封装，集中处理密钥脱敏和 URL 归一化。
+- `src/background/orders/` 是订单业务域，包含订单同步、订单领域服务、订单本地存储、订单索引文本和售后增强等模块。
 - `src/content/taobao/` 包含淘宝/天猫页面读取、自动化适配器、content runtime 和注入 UI。页面读取能力应按 `dom/`、`adapters/`、`runtime/` 和 UI 组件分层组织。
 - `src/hooks/`、`src/contexts/` 和 `src/shared/` 放置可复用 hook、Provider、共享类型、错误和 IPC 辅助方法。
+- `src/query/` 放置 TanStack Query 的 query client 和 query key 定义。
+- `src/stores/` 放置 Zustand 轻量 UI 状态和用户偏好（例如悬浮工具栏位置、折叠状态）。
 - `src/shared/runtime-channels.ts` 是 runtime IPC channel 参数和返回值类型的唯一事实来源。
 - `public/` 和 `assets/` 存放插件静态资源和图标。
 
@@ -65,9 +70,11 @@ Do not use for: refactoring, writing scripts from scratch, debugging business lo
 - `npm run dev` 启动 Chrome 目标的 WXT 开发服务器。
 - `npm run dev:firefox` 启动 Firefox 目标的开发模式。
 - `npm run compile` 运行 `tsc --noEmit` 做 TypeScript 校验。
+- `npm test` 运行 `tests/` 下的 `node:test` 测试（见“测试指南”中的已知限制）。
 - `npm run build` 构建 Chrome 插件包。
 - `npm run build:firefox` 构建 Firefox 版本。
 - `npm run zip` 和 `npm run zip:firefox` 创建可分发的插件压缩包。
+- `npm run data:wxshop-categories` 和 `npm run data:category-map:itemcats` 用于离线生成微信小店分类与淘宝类目映射数据，产物供后台分类规则缓存使用。
 
 ## 开发 Reload 指南
 
@@ -88,7 +95,13 @@ Chrome 扩展开发时，dashboard 页面和 background service worker 可能不
 
 ## 测试指南
 
-当前 `package.json` 没有配置自动化测试框架。每次修改后运行 `npm run compile`；涉及 background、manifest 或打包行为的修改，还要运行 `npm run build`。新增测试时，可以与功能代码放在一起，也可以放到专门的 `tests/` 目录。测试文件优先使用 `*.test.ts` 或 `*.test.tsx` 命名。
+项目使用 Node.js 内置的 `node:test` 测试框架（无需引入第三方 runner），测试文件统一放在 `tests/` 目录，命名 `*.test.ts`（需要 TS 类型时）或 `*.test.mjs`（纯运行逻辑）。运行全部测试用 `npm test`（等价于 `node --test --experimental-strip-types tests/*.test.ts tests/*.test.mjs`）。
+
+- 每次修改后运行 `npm run compile` 做 TypeScript 校验；涉及 background、manifest 或打包行为的修改，还要运行 `npm run build`。
+- 涉及业务逻辑、领域计算、适配器解析、repository 行为的改动，应补 `node:test` 用例并跑 `npm test`。
+- 测试通过 `import test from 'node:test'` 和 `import assert from 'node:assert/strict'` 编写；需要 IndexedDB 时引入 `fake-indexeddb/auto`。
+- **已知限制**：Node 的 `--experimental-strip-types` 只能擦除类型，不支持 TypeScript `enum` 语法。目前 `src/shared/types.ts` 中的 `export enum OrderStatus` 会触发 `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`，导致任何 **value import**（`import { OrderStatus }`）该枚举的测试无法运行。测试里应使用 `import type { OrderStatus }`（类型擦除）或直接用数字字面量（例如 `20 as OrderStatus`）规避；新增共享类型时优先用联合字面量类型而非 `enum`，以便测试可直接运行。
+- 新增测试时，可以与功能代码放在一起，也可以放到 `tests/` 目录。CI（`.github/workflows/build.yml`）目前只跑 `compile` 和 `build`，暂未跑测试。
 
 
 ## 交付前自检
