@@ -16,7 +16,7 @@ test('orders page defaults to pending shipment instead of all orders', () => {
 
   assert.match(
     source,
-    /useState<OrderStatus \| undefined>\(DEFAULT_ORDER_STATUS\)/,
+    /useState<OrderStatusFilterValue>\(DEFAULT_ORDER_STATUS\)/,
     'initial status filter should use the default status',
   );
 

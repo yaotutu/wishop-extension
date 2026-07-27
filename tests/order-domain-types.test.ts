@@ -10,7 +10,17 @@ test('order query keys include scope and search source', () => {
   const state: OrderSyncState = { scope: allScope, running: false, accountStates: [] };
 
   assert.equal(state.scope.type, 'all');
-  assert.deepEqual(queryKeys.orders.list(allScope, undefined, null, 'all'), ['orders', 'list', 'all', '', 'all', 'all', '', '']);
+  assert.deepEqual(queryKeys.orders.list(allScope, undefined, null, 'all'), [
+    'orders',
+    'list',
+    'all',
+    '',
+    'all',
+    'all',
+    'orders',
+    '',
+    '',
+  ]);
   assert.deepEqual(queryKeys.orders.search(accountScope, { search_type: 'order_id', keyword: '123' }, source), [
     'orders',
     'search',

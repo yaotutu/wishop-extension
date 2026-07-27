@@ -26,7 +26,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies
@@ -34,6 +34,9 @@ jobs:
 
       - name: Type check
         run: npm run compile
+
+      - name: Run tests
+        run: npm test
 
       - name: Build Chrome extension
         run: npm run build
