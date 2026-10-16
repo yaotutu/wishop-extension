@@ -1,7 +1,8 @@
 import type { StoreSchema } from './core';
 import { CURRENT_STORAGE_VERSION } from './core';
-import { DEFAULT_NOTIFICATION_PREFERENCE } from '../../shared/notification';
-import { DEFAULT_APP_SETTINGS } from '../../shared/settings';
+import { DEFAULT_NOTIFICATION_PREFERENCE, normalizeNotificationPreference } from '../../shared/notification';
+import { DEFAULT_APP_SETTINGS, normalizeAppSettings } from '../../shared/settings';
+import { extensionDb } from '../db/extension-db.ts';
 
 type RawStore = Partial<StoreSchema> & Record<string, unknown>;
 type Migration = (store: RawStore) => RawStore;
@@ -13,7 +14,7 @@ const migrations: Record<number, Migration> = {
       accounts: Array.isArray(store.accounts) ? store.accounts : [],
       activeAccountId: typeof store.activeAccountId === 'string' ? store.activeAccountId : '',
       scheduledJobs: Array.isArray(store.scheduledJobs) ? store.scheduledJobs : [],
-      skipKeywords: Array.isArray(store.skipKeywords) ? store.skipKeywords : [],
+      productAuditRules: [],
       storageVersion: 1,
     };
   },
@@ -44,7 +45,6 @@ const migrations: Record<number, Migration> = {
         if (!account || typeof account !== 'object') return account;
         const next = {
           ...account,
-          listingLogs: [],
           violationLogs: [],
         } as Record<string, unknown>;
         delete next.logs;
@@ -87,6 +87,77 @@ const migrations: Record<number, Migration> = {
       storageVersion: 9,
     };
   },
+  10(store) {
+    return {
+      ...store,
+      storageVersion: 10,
+    };
+  },
+  11(store) {
+    return {
+      ...store,
+      storageVersion: 11,
+    };
+  },
+  12(store) {
+    const appSettings = store.appSettings && typeof store.appSettings === 'object'
+      ? store.appSettings as unknown as Record<string, unknown>
+      : {};
+    // 本版本正式使用“复制商品”业务域，只搬迁设置开关，不迁移历史采集商品记录。
+    const normalizedAppSettings = { ...appSettings };
+    normalizedAppSettings.aiProductCopy = appSettings.aiProductCopy || appSettings.aiListing;
+    delete normalizedAppSettings.aiListing;
+    const notificationPreference = store.notificationPreference && typeof store.notificationPreference === 'object'
+      ? store.notificationPreference as unknown as Record<string, unknown>
+      : {};
+    const domainEnabled = notificationPreference.domainEnabled && typeof notificationPreference.domainEnabled === 'object'
+      ? { ...notificationPreference.domainEnabled as Record<string, unknown> }
+      : {};
+    const legacyListingEnabled = typeof domainEnabled.listing === 'boolean' ? domainEnabled.listing : undefined;
+    delete domainEnabled.listing;
+    return {
+      ...store,
+      appSettings: normalizeAppSettings(normalizedAppSettings),
+      notificationPreference: normalizeNotificationPreference({
+        ...notificationPreference,
+        domainEnabled: {
+          ...domainEnabled,
+          productCopy: typeof domainEnabled.productCopy === 'boolean'
+            ? domainEnabled.productCopy
+            : legacyListingEnabled ?? DEFAULT_NOTIFICATION_PREFERENCE.domainEnabled.productCopy,
+        },
+      }),
+      storageVersion: 12,
+    };
+  },
+  13(store) {
+    return {
+      ...store,
+      storageVersion: 13,
+    };
+  },
+  14(store) {
+    return {
+      ...store,
+      storageVersion: 14,
+    };
+  },
+  15(store) {
+    const appSettings = store.appSettings && typeof store.appSettings === 'object'
+      ? store.appSettings as unknown as Record<string, unknown>
+      : {};
+    return {
+      ...store,
+      appSettings: normalizeAppSettings(appSettings),
+      storageVersion: 15,
+    };
+  },
+  16(store) {
+    return {
+      ...store,
+      storageVersion: 16,
+    };
+  },
 };
 
 const LEGACY_BUSINESS_KEYS = [
@@ -94,6 +165,7 @@ const LEGACY_BUSINESS_KEYS = [
   'scheduledJobs',
   'skipKeywords',
   'blacklistRules',
+  'productAuditRules',
   'statusRules',
   'notificationPreference',
   'appSettings',
@@ -126,5 +198,8 @@ export async function migrateStore(): Promise<void> {
     remove(keys: string | string[]): Promise<void>;
   };
   await localStorage.remove([...LEGACY_BUSINESS_KEYS, ...legacyCacheKeys(store)]);
+  if ((typeof store.storageVersion === 'number' ? store.storageVersion : 0) < 12) {
+    await extensionDb.productCopyRecords.clear();
+  }
   await chrome.storage.local.set({ storageVersion: CURRENT_STORAGE_VERSION });
 }

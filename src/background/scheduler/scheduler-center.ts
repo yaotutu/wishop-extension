@@ -25,6 +25,15 @@ import {
 } from '../activity-logs/activity-log-service.ts';
 import { nextUntilCompleteRunSchedule } from './scheduled-job-alarm-schedule.ts';
 import { formatScheduledJobFailureLog } from './scheduled-job-error-detail.ts';
+import {
+  beginScheduledJobRun,
+  cancelScheduledJobRuns,
+  listActiveScheduledJobRuns,
+} from './scheduled-job-run-registry.ts';
+import {
+  SCHEDULED_JOB_CANCELLED_MESSAGE,
+  createCancelledScheduledJobResult,
+} from './scheduled-job-run-result.ts';
 
 const JOB_ALARM_PREFIX = 'scheduled-job:';
 const GLOBAL_JOB_ALARM_PREFIX = 'scheduled-job-global:';
@@ -33,6 +42,7 @@ export type ScheduledJobExecutor = (context: {
   job: ScheduledJob;
   accountId?: string;
   runId: string;
+  signal: AbortSignal;
 }) => Promise<ScheduledJobExecutorResult>;
 
 const executors = new Map<ScheduledJobType, ScheduledJobExecutor>();
@@ -112,6 +122,18 @@ async function patchStatsFor(
 
 export function registerScheduledJobExecutor(jobType: ScheduledJobType, executor: ScheduledJobExecutor): void {
   executors.set(jobType, executor);
+}
+
+export function getScheduledJobActiveRuns(jobId: string) {
+  // 调度任务列表需要展示“现在正在跑什么”。这里返回的是 service worker
+  // 生命周期内的运行态，不写入 IndexedDB，避免把瞬时执行状态混进业务存储。
+  return listActiveScheduledJobRuns(jobId);
+}
+
+export function cancelScheduledJobRun(jobId: string) {
+  // 停止动作只取消当前运行实例，不删除任务、不关闭下一次定时计划。
+  // 执行器通过 AbortSignal 协作退出，因此长任务需要把 signal 传到业务循环。
+  return cancelScheduledJobRuns(jobId);
 }
 
 export function parseJobAlarmSchedule(cronExpression: string, offsetMinutes = 0): chrome.alarms.AlarmCreateInfo | null {
@@ -232,6 +254,16 @@ function aggregateRunResults(results: ScheduledJobRunNowResult[]): ScheduledJobR
   const listed = results.reduce((sum, result) => sum + result.listed, 0);
   const failed = results.filter(result => result.status === 'failed');
   const completed = results.filter(result => result.status === 'completed');
+  const cancelled = results.filter(result => result.status === 'cancelled');
+  if (cancelled.length > 0) {
+    return {
+      listed,
+      status: 'cancelled',
+      message: `手动执行已停止，已完成 ${completed.length}/${results.length} 个账号`,
+      error: null,
+      completed: false,
+    };
+  }
   const status: ScheduledJobStatus = failed.length === results.length
     ? 'failed'
     : completed.length > 0
@@ -275,34 +307,46 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
 
   const runId = `${job.scope === 'global' ? 'global-job' : job.scope === 'system' ? 'system-job' : 'job'}-${job.id}-${Date.now()}`;
   const startedAt = Date.now();
-  await patchStatsFor(job, targetAccountId, {
-    lastRunDate: currentDate,
-    todayRunCount,
-    lastRunAt: startedAt,
-    lastStatus: 'running',
-    lastMessage: undefined,
-    lastListed: undefined,
-    lastError: undefined,
-  });
-
-  await recordActivityStarted({
-    domain: logDomain(job),
-    scope: logScope(job),
-    accountId: targetAccountId,
-    accountName: account?.name,
-    taskId: job.id,
-    taskName: job.name,
-    trigger: trigger(job),
+  const activeRun = beginScheduledJobRun({
+    jobId: job.id,
+    jobType: job.jobType,
     runId,
-    title: '定时任务开始执行',
-    detail: `任务类型：${job.jobType}`,
+    accountId: targetAccountId,
+    startedAt,
   });
 
   try {
+    await patchStatsFor(job, targetAccountId, {
+      lastRunDate: currentDate,
+      todayRunCount,
+      lastRunAt: startedAt,
+      lastStatus: 'running',
+      lastMessage: undefined,
+      lastListed: undefined,
+      lastError: undefined,
+    });
+
+    await recordActivityStarted({
+      domain: logDomain(job),
+      scope: logScope(job),
+      accountId: targetAccountId,
+      accountName: account?.name,
+      taskId: job.id,
+      taskName: job.name,
+      trigger: trigger(job),
+      runId,
+      title: '定时任务开始执行',
+      detail: `任务类型：${job.jobType}`,
+    });
+
     const executor = executors.get(job.jobType);
     if (!executor) throw new Error(`未注册定时任务执行器: ${job.jobType}`);
 
-    const result = await executor({ job, accountId, runId });
+    // 用户可能在任务刚进入运行队列时就点停止。这里仍走统一的结果落库逻辑，
+    // 避免任务统计停留在 running。
+    const result = activeRun.signal.aborted
+      ? createCancelledScheduledJobResult()
+      : await executor({ job, accountId, runId, signal: activeRun.signal });
     if (job.runMode === 'recurring' && result.completed) {
       throw new Error(`周期任务 ${job.jobType} 不允许返回 completed=true`);
     }
@@ -328,6 +372,22 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
         ? nextUntilCompleteRunSchedule()
         : parseJobAlarmSchedule(job.cronExpression);
       if (nextSchedule) await chrome.alarms.create(accountAlarmName(job.id), nextSchedule);
+    }
+
+    if (status === 'cancelled') {
+      await recordActivitySkipped({
+        domain: logDomain(job),
+        scope: logScope(job),
+        accountId: targetAccountId,
+        accountName: account?.name,
+        taskId: job.id,
+        taskName: job.name,
+        trigger: trigger(job),
+        runId,
+        title: '定时任务已停止',
+        detail,
+      });
+      return { listed: countIncrement, status, message: detail ?? null, error: null, completed: result.completed };
     }
 
     if (status === 'skipped') {
@@ -361,6 +421,32 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
     });
     return { listed: countIncrement, status, message: status === 'failed' ? null : detail ?? null, error: errorMessage ?? null, completed: result.completed };
   } catch (error) {
+    if (activeRun.signal.aborted) {
+      const message = SCHEDULED_JOB_CANCELLED_MESSAGE;
+      await patchStatsFor(job, targetAccountId, {
+        lastRunDate: currentDate,
+        todayRunCount,
+        lastFinishedAt: Date.now(),
+        lastStatus: 'cancelled',
+        lastMessage: message,
+        lastListed: 0,
+        lastError: undefined,
+      });
+      await recordActivitySkipped({
+        domain: logDomain(job),
+        scope: logScope(job),
+        accountId: targetAccountId,
+        accountName: account?.name,
+        taskId: job.id,
+        taskName: job.name,
+        trigger: trigger(job),
+        runId,
+        title: '定时任务已停止',
+        detail: message,
+      });
+      return { listed: 0, status: 'cancelled', message, error: null, completed: false };
+    }
+
     const failureLog = formatScheduledJobFailureLog({
       job,
       accountId: targetAccountId,
@@ -397,6 +483,8 @@ async function executeScheduledJob(job: ScheduledJob, accountId?: string): Promi
       },
     });
     return { listed: 1, status: 'failed', message: null, error: message, completed: false };
+  } finally {
+    activeRun.finish();
   }
 }
 
@@ -410,7 +498,9 @@ export async function runScheduledJobNow(jobId: string): Promise<ScheduledJobRun
     const accounts = (await getAccounts()).filter(account => !job.excludedAccountIds.includes(account.id));
     const results: ScheduledJobRunNowResult[] = [];
     for (const account of accounts) {
-      results.push(await executeScheduledJob(job, account.id));
+      const result = await executeScheduledJob(job, account.id);
+      results.push(result);
+      if (result.status === 'cancelled') break;
     }
     result = aggregateRunResults(results);
   } else {

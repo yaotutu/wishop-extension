@@ -42,6 +42,15 @@ export const queryKeys = {
   productSources: {
     list: (accountId: string) => ['productSources', accountId] as const,
   },
+  productCopy: {
+    list: ['productCopy', 'list'] as const,
+    draftParameterOptions: (accountId: string) => ['productCopy', 'draftParameterOptions', accountId] as const,
+    createdProduct: (accountId: string, copyId: string) => ['productCopy', 'createdProduct', accountId, copyId] as const,
+    defaultSettings: (accountId: string) => ['productCopy', 'defaultSettings', accountId] as const,
+  },
+  wxCategoryData: {
+    productRuleCacheStatus: ['wxCategoryData', 'productRuleCacheStatus'] as const,
+  },
   orderAssociations: {
     list: (accountId: string) => ['orderAssociations', accountId] as const,
   },
@@ -52,11 +61,14 @@ export const queryKeys = {
   quota: {
     item: (accountId: string) => ['quota', accountId] as const,
   },
-  listingLogs: {
-    list: (accountId: string) => ['listingLogs', accountId] as const,
+  productAuditLogs: {
+    list: (accountId: string) => ['productAuditLogs', accountId] as const,
   },
   activityLogs: {
     list: ['activityLogs'] as const,
+  },
+  appSettings: {
+    item: ['appSettings'] as const,
   },
   notifications: {
     list: ['notifications'] as const,
@@ -65,16 +77,17 @@ export const queryKeys = {
   scheduledJobs: {
     list: ['scheduledJobs'] as const,
     orderSyncRecent: ['scheduledJobs', 'orders', 'syncRecent'] as const,
-    accountListing: (accountId: string) => ['scheduledJobs', 'listing', 'account', accountId] as const,
-    globalListing: ['scheduledJobs', 'listing', 'global'] as const,
+    accountProductAudit: (accountId: string) => ['scheduledJobs', 'productAudit', 'account', accountId] as const,
+    globalProductAudit: ['scheduledJobs', 'productAudit', 'global'] as const,
   },
-  taskConfig: {
-    item: (accountId: string) => ['taskConfig', accountId] as const,
+  productAuditConfig: {
+    item: (accountId: string) => ['productAuditConfig', accountId] as const,
+  },
+  productAuditFailurePolicy: {
+    item: ['productAuditFailurePolicy'] as const,
+    defaults: ['productAuditFailurePolicy', 'defaults'] as const,
   },
   rules: {
-    blacklist: ['rules', 'blacklist'] as const,
-    blacklistDefaultCodes: ['rules', 'blacklist', 'defaultCodes'] as const,
-    skipKeywords: ['rules', 'skipKeywords'] as const,
     status: ['rules', 'status'] as const,
   },
 };

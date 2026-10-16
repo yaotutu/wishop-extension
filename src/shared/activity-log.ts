@@ -1,7 +1,7 @@
 import type { ActivityLogNotificationIntent } from './notification';
 
 export type ActivityLogLevel = 'info' | 'success' | 'warning' | 'error';
-export type ActivityLogDomain = 'listing' | 'violation' | 'orders' | 'store' | 'scheduler' | 'system';
+export type ActivityLogDomain = 'productCopy' | 'productAudit' | 'compliance' | 'orders' | 'store' | 'scheduler' | 'system';
 export type ActivityLogScope = 'global' | 'account';
 export type ActivityLogEvent = 'started' | 'queued' | 'waiting_user' | 'completed' | 'skipped' | 'failed';
 export type ActivityLogTrigger = 'manual' | 'scheduled' | 'globalScheduled' | 'background';
@@ -14,6 +14,7 @@ export interface ActivityLogSummary {
   scanned?: number;
   listed?: number;
   deleted?: number;
+  uploadedImages?: number;
   skipped?: number;
   errors?: number;
 }

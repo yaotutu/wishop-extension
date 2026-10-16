@@ -50,7 +50,7 @@ export function CredentialErrorProvider({ onNavigateToSettings, children }: Cred
       >
         <p>{message}</p>
         <p style={{ color: '#999', fontSize: 13 }}>
-          请前往「店铺管理」页面检查并更新该店铺的 AppID 和 AppSecret。
+          请前往「设置 - 店铺管理」检查并更新该店铺的 AppID 和 AppSecret。
         </p>
       </Modal>
     </CredentialErrorContext.Provider>

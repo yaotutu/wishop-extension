@@ -1,34 +1,41 @@
 import { installRuntimeHandlers } from '../src/background/handlers';
 import { installPurchaseLookupTabCleanup } from '../src/background/purchase-lookup/purchase-lookup-session-service';
-import { registerListingScheduledJobs } from '../src/background/scheduler/listing-job-executor';
+import { installProductCopyTabCleanup } from '../src/background/services/product-copy-session-service';
+import { registerProductAuditScheduledJobs } from '../src/background/scheduler/product-audit-job-executor';
 import {
   ensureOrderShipmentCheckScheduledJob,
   installOrderShipmentCheckDispatchListener,
   registerOrderShipmentScheduledJobs,
 } from '../src/background/scheduler/order-shipment-job-executor';
 import { ensureOrderHistoryBackfillScheduledJob, ensureOrderSyncScheduledJob, registerOrderSyncScheduledJobs } from '../src/background/scheduler/order-sync-job-executor';
+import { registerTaobaoLoginHeartbeatScheduledJobs, ensureTaobaoLoginHeartbeatScheduledJob } from '../src/background/scheduler/taobao-login-heartbeat-job-executor';
 import { installScheduledJobAlarmListener, startAllScheduledJobs } from '../src/background/scheduler/scheduler-center';
 import { installShippingPaymentSuccessWatcher, installShippingTabCleanup } from '../src/background/shipping/shipping-session-service';
 import { migrateStore } from '../src/background/store';
+import { cleanupProductAuditLegacyData } from '../src/background/store/product-audit-legacy-cleanup';
 import { installTaobaoRefundTabCleanup } from '../src/background/taobao-refund/taobao-refund-session-service';
 import { installTaobaoWorkTabCleanup } from '../src/background/taobao-workspace/work-tab-service';
 
 export default defineBackground(() => {
-  registerListingScheduledJobs();
+  registerProductAuditScheduledJobs();
   registerOrderShipmentScheduledJobs();
   registerOrderSyncScheduledJobs();
+  registerTaobaoLoginHeartbeatScheduledJobs();
   installRuntimeHandlers();
   installShippingTabCleanup();
   installShippingPaymentSuccessWatcher();
   installPurchaseLookupTabCleanup();
+  installProductCopyTabCleanup();
   installTaobaoRefundTabCleanup();
   installTaobaoWorkTabCleanup();
   installOrderShipmentCheckDispatchListener();
   installScheduledJobAlarmListener();
   void migrateStore().then(async () => {
+    await cleanupProductAuditLegacyData();
     await ensureOrderSyncScheduledJob();
     await ensureOrderHistoryBackfillScheduledJob();
     await ensureOrderShipmentCheckScheduledJob();
+    await ensureTaobaoLoginHeartbeatScheduledJob();
     await startAllScheduledJobs();
   });
 

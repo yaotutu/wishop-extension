@@ -4,7 +4,7 @@ Activity logs are structured, user-readable business events. They are used for a
 
 Rules:
 
-- Record important task-level events only. Product-level or API-level details stay in DiagnosticLogger output or module-owned page logs such as listing logs or violation logs.
+- Record important task-level events only. Product-level or API-level details stay in DiagnosticLogger output or module-owned page logs such as product audit logs or compliance logs.
 - Manual tasks are allowed when the task is important, long-running, or high-impact.
 - Scheduled and background tasks must record skipped, completed, and failed outcomes.
 - Loops must not write one activity log per item. Write one summary after the loop.

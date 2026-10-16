@@ -3,7 +3,7 @@ import { recordActivityFailed } from '../activity-logs/activity-log-service.ts';
 import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 import { shipOrderFromPurchase } from '../services/order-delivery-service';
 import { getAppSettings } from '../store/settings-repository';
-import { getClient } from '../wxshop/client-registry';
+import { getOrdersClient } from '../wxshop/client-registry';
 import { evaluateAutoShipmentDecision, type AutoShipmentDecision } from './auto-shipment-decision';
 
 function logAutoShipmentSkip(
@@ -55,7 +55,7 @@ export async function maybeAutoShipFromPurchase(
   const decision = await evaluateAutoShipmentDecision({
     settings,
     snapshot,
-    readWxOrder: async () => (await getClient(session.accountId)).getOrderDetail(session.orderId),
+    readWxOrder: async () => (await getOrdersClient(session.accountId)).getOrderDetail(session.orderId),
   });
 
   if (decision.action === 'skip') {

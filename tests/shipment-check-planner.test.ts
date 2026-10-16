@@ -56,6 +56,7 @@ function makeAssociation(orderId: string, patch: Partial<OrderAssociation['linke
       platformOrderId: `tb-${orderId}`,
       platformOrderStatus: '买家已付款',
       logisticsStatus: '',
+      linkSource: 'payment_success',
       logisticsCompany: '',
       trackingNumber: '',
       createdAt: 1700000000000,

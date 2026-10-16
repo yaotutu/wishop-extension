@@ -1,5 +1,6 @@
 import type { TaobaoSecurityChallengeKind, TaobaoSecurityChallengeSnapshot } from '../../../shared/types';
-import { normalizeText } from '../dom/text';
+import { normalizeText } from '../dom/text.ts';
+import { detectLoginHostRedirect, detectLoginPopupWidget } from '../dom/login-detector.ts';
 
 interface ChallengeSignal {
   kind: TaobaoSecurityChallengeKind;
@@ -31,6 +32,17 @@ function domSignal(): ChallengeSignal {
 function classifySignals(url: string, title: string, text: string): { kind: TaobaoSecurityChallengeKind; signals: string[] } {
   const signals: string[] = [];
   const lowerUrl = url.toLowerCase();
+
+  // 登录态反向信号优先：复用 dom/login-detector 的实测判定逻辑。
+  // 修复历史漏判：原逻辑只认 URL 含 login/passport 或正文"登录后继续"，
+  // 但干活页未登录是整页跳转（host 变 login.taobao.com），首页未登录是页内弹窗（host 不变），
+  // 两种形态原来的判定都覆盖不全。
+  const hostRedirect = detectLoginHostRedirect();
+  if (hostRedirect.matched && hostRedirect.signal) signals.push(hostRedirect.signal);
+  const popup = detectLoginPopupWidget();
+  if (popup.matched && popup.signal) signals.push(popup.signal);
+  const loginStateDetected = hostRedirect.matched || popup.matched;
+
   const urlMatches = includesAny(lowerUrl, ['login.taobao.com', 'passport.taobao.com', 'punish', 'sec.taobao.com', 'verify', 'captcha']);
   signals.push(...urlMatches.map(item => `url:${item}`));
 
@@ -52,7 +64,8 @@ function classifySignals(url: string, title: string, text: string): { kind: Taob
   const dom = domSignal();
   if (dom.matched) signals.push(`dom:${dom.reason}`);
 
-  if (urlMatches.some(item => item.includes('login') || item.includes('passport')) || text.includes('登录后继续')) {
+  // 登录态判定：复用 login-state-adapter 的实测信号命中，或沿用旧的 URL/文案判定。
+  if (loginStateDetected || urlMatches.some(item => item.includes('login') || item.includes('passport')) || text.includes('登录后继续')) {
     return { kind: 'login', signals };
   }
   if (text.includes('拖动滑块') || dom.kind === 'slider') return { kind: 'slider', signals };

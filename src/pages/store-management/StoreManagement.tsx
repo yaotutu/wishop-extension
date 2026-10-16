@@ -174,12 +174,21 @@ const StoreManagement: React.FC<StoreManagementProps> = ({
         await switchAccount(firstImportedAccountId);
       }
 
-      setImportFailures(failures);
+      // 后端在事务内按 appId 拒绝重复（抛 DuplicateAppIdError），失败的条目归到 importFailures 展示。
+      // 成功的条目已入库，从 preview 中移除，避免同一份导入文件被再次点「开始导入」二次提交。
       if (successCount > 0) {
         message.success(`已导入 ${successCount} 个店铺`);
       }
       if (failures.length > 0) {
         message.warning(`${failures.length} 个店铺导入失败`);
+        setImportFailures(failures);
+        // 清空 preview：成功条目已入库不再需要提交，失败条目改由 importFailures 表格展示。
+        setImportPreview(null);
+      } else if (successCount > 0) {
+        // 全部成功：关弹窗并清空 preview，杜绝同一份导入文件被反复提交。
+        setImportModalOpen(false);
+        resetImportState();
+        return;
       }
     } finally {
       setImporting(false);

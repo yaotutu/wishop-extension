@@ -1,47 +1,44 @@
-import type { BlacklistRule, StatusRule } from '../../shared/types';
-import { DEFAULT_BLACKLIST, DEFAULT_STATUS_RULES } from './core.ts';
+import type { ProductAuditFailurePolicy, StatusRule } from '../../shared/types';
+import {
+  DEFAULT_PRODUCT_AUDIT_FAILURE_DEFAULT_ACTION,
+  DEFAULT_PRODUCT_AUDIT_FAILURE_RULES,
+  DEFAULT_STATUS_RULES,
+} from './core.ts';
 import {
   ensureAccountWorkspace,
-  mergeBlacklistRules,
   mergeStatusRules,
   updateAccountWorkspace,
 } from './workspace-repository.ts';
 
 const GLOBAL_RULE_WORKSPACE_ID = '__global_rules__';
 
-export async function getViolationWords(accountId: string): Promise<string[]> {
-  return (await ensureAccountWorkspace(accountId)).rules.violationWords;
+function normalizeProductAuditFailurePolicy(policy: ProductAuditFailurePolicy): ProductAuditFailurePolicy {
+  return {
+    rules: policy.rules.filter(rule => rule.action !== 'deleteDraft'),
+    defaultAction: DEFAULT_PRODUCT_AUDIT_FAILURE_DEFAULT_ACTION,
+  };
 }
 
-export async function setViolationWords(accountId: string, words: string[]): Promise<void> {
-  await updateAccountWorkspace(accountId, workspace => {
-    workspace.rules.violationWords = words;
+export function getDefaultProductAuditFailurePolicy(): ProductAuditFailurePolicy {
+  return normalizeProductAuditFailurePolicy({
+    rules: DEFAULT_PRODUCT_AUDIT_FAILURE_RULES,
+    defaultAction: DEFAULT_PRODUCT_AUDIT_FAILURE_DEFAULT_ACTION,
   });
 }
 
-export function getDefaultBlacklistCodes(): number[] {
-  return DEFAULT_BLACKLIST.map(rule => rule.code);
-}
-
-export async function getBlacklistRules(): Promise<BlacklistRule[]> {
-  const stored = (await ensureAccountWorkspace(GLOBAL_RULE_WORKSPACE_ID)).rules.blacklistRules;
-  return stored.length > 0 ? mergeBlacklistRules(stored) : DEFAULT_BLACKLIST;
-}
-
-export async function setBlacklistRules(rules: BlacklistRule[]): Promise<void> {
-  const defaultCodes = new Set(DEFAULT_BLACKLIST.map(rule => rule.code));
-  await updateAccountWorkspace(GLOBAL_RULE_WORKSPACE_ID, workspace => {
-    workspace.rules.blacklistRules = rules.filter(rule => !defaultCodes.has(rule.code));
+export async function getProductAuditFailurePolicy(): Promise<ProductAuditFailurePolicy> {
+  const rules = (await ensureAccountWorkspace(GLOBAL_RULE_WORKSPACE_ID)).rules;
+  return normalizeProductAuditFailurePolicy({
+    rules: rules.productAuditRules,
+    defaultAction: rules.productAuditDefaultFailureAction,
   });
 }
 
-export async function getSkipKeywords(): Promise<string[]> {
-  return (await ensureAccountWorkspace(GLOBAL_RULE_WORKSPACE_ID)).rules.skipKeywords;
-}
-
-export async function setSkipKeywords(keywords: string[]): Promise<void> {
+export async function setProductAuditFailurePolicy(policy: ProductAuditFailurePolicy): Promise<void> {
+  const normalizedPolicy = normalizeProductAuditFailurePolicy(policy);
   await updateAccountWorkspace(GLOBAL_RULE_WORKSPACE_ID, workspace => {
-    workspace.rules.skipKeywords = keywords;
+    workspace.rules.productAuditRules = normalizedPolicy.rules;
+    workspace.rules.productAuditDefaultFailureAction = normalizedPolicy.defaultAction;
   });
 }
 

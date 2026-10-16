@@ -34,6 +34,7 @@ function formatSummary(summary?: ActivityLogSummary): string | undefined {
     summary.scanned !== undefined ? `扫描 ${summary.scanned}` : '',
     summary.listed !== undefined ? `提审 ${summary.listed}` : '',
     summary.deleted !== undefined ? `删除 ${summary.deleted}` : '',
+    summary.uploadedImages !== undefined ? `上传图片 ${summary.uploadedImages}` : '',
     summary.skipped !== undefined ? `跳过 ${summary.skipped}` : '',
     summary.errors !== undefined ? `错误 ${summary.errors}` : '',
   ].filter(Boolean);

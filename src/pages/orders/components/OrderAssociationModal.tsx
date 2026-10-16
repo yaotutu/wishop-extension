@@ -80,6 +80,8 @@ export const OrderAssociationModal: React.FC<Props> = ({ open, association, savi
           platformOrderId: value.platformOrderId || '',
           platformOrderStatus: value.platformOrderStatus || '',
           logisticsStatus: value.logisticsStatus || '',
+          // 手填入口固定 manual，实际写入时后端会走统一关联入口的优先级判断。
+          linkSource: 'manual',
           logisticsCompany: value.logisticsCompany || '',
           trackingNumber: value.trackingNumber || '',
           remark: value.remark || '',

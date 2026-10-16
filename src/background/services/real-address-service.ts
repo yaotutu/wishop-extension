@@ -1,5 +1,5 @@
 import type { OrderRealAddressCache } from '../../shared/types';
-import { getClient } from '../wxshop/client-registry';
+import { getOrdersClient } from '../wxshop/client-registry';
 import { getRealAddressCache, getRealAddressCaches, setRealAddressCache } from '../store/real-address-repository';
 
 export async function listRealAddressCaches(accountId: string): Promise<OrderRealAddressCache[]> {
@@ -11,6 +11,6 @@ export async function getCachedRealAddress(accountId: string, orderId: string): 
 }
 
 export async function fetchAndCacheRealAddress(accountId: string, orderId: string): Promise<OrderRealAddressCache> {
-  const address = await (await getClient(accountId)).decodeOrderSensitiveInfo(orderId);
+  const address = await (await getOrdersClient(accountId)).decodeOrderSensitiveInfo(orderId);
   return setRealAddressCache(accountId, orderId, address);
 }

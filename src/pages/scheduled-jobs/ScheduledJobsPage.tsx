@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Empty, Space, Table, Tag, Tooltip, message } from 'antd';
+import { Button, Empty, Popconfirm, Space, Table, Tag, Tooltip, message } from 'antd';
 import type { TableProps } from 'antd';
-import { PlayCircleOutlined, ReloadOutlined } from '@ant-design/icons';
+import { PlayCircleOutlined, ReloadOutlined, StopOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { extensionApi } from '../../shared/extension-api';
 import type { Account, ScheduledJob, ScheduledJobRunStats, ScheduledJobStatus, ScheduledJobView } from '../../shared/types';
@@ -13,19 +13,21 @@ interface ScheduledJobsPageProps {
 }
 
 const moduleLabels: Record<ScheduledJob['module'], string> = {
-  listing: '商品提审',
+  productCopy: '商品复制',
+  productAudit: '商品提审',
   orders: '订单管理',
-  violation: '违规检测',
+  compliance: '商品合规扫描',
   store: '店铺管理',
   system: '系统',
 };
 
 const jobTypeLabels: Record<ScheduledJob['jobType'], string> = {
-  'listing.submitDrafts': '提交待审核商品',
+  'productAudit.submitDrafts': '提交待审核草稿',
   'orders.checkShipmentStatus': '检测发货状态',
   'orders.syncRecent': '同步近期订单',
   'orders.backfillHistory': '补拉历史订单',
-  'violation.scanProducts': '扫描违规商品',
+  'compliance.scanProducts': '合规扫描商品',
+  'taobaoLogin.checkHeartbeat': '淘宝登录态心跳',
 };
 
 const statusColors: Record<ScheduledJobStatus, string> = {
@@ -35,6 +37,7 @@ const statusColors: Record<ScheduledJobStatus, string> = {
   completed: 'success',
   failed: 'error',
   skipped: 'default',
+  cancelled: 'warning',
 };
 
 const statusLabels: Record<ScheduledJobStatus, string> = {
@@ -44,6 +47,7 @@ const statusLabels: Record<ScheduledJobStatus, string> = {
   completed: '完成',
   failed: '失败',
   skipped: '跳过',
+  cancelled: '已停止',
 };
 
 function formatTime(timestamp?: number): string {
@@ -70,6 +74,7 @@ function statusPriority(status: ScheduledJobStatus): number {
       return 4;
     case 'completed':
       return 3;
+    case 'cancelled':
     case 'skipped':
       return 2;
     case 'idle':
@@ -114,6 +119,32 @@ function effectiveStats(job: ScheduledJobView): ScheduledJobRunStats {
   };
 }
 
+function activeRunsFor(job: ScheduledJobView) {
+  // activeRuns 来自 background 当前内存，表示真实正在跑的实例；
+  // 旧页面或旧后台返回空值时按空数组处理，避免调度页崩溃。
+  return job.activeRuns || [];
+}
+
+function activeRunDurationText(startedAt: number, now: number): string {
+  const seconds = Math.max(0, Math.floor((now - startedAt) / 1000));
+  if (seconds < 60) return `${seconds} 秒`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} 分 ${seconds % 60} 秒`;
+  return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分`;
+}
+
+function activeRunsDetail(job: ScheduledJobView, accountNameById: Map<string, string>, now: number): string {
+  // 全账号任务可能同时存在多个账号实例，tooltip 展示账号和运行时长，
+  // 让用户能判断停止按钮会影响哪些后台执行。
+  const runs = activeRunsFor(job);
+  if (runs.length === 0) return '';
+  return runs.map(run => {
+    const accountName = run.accountId ? accountNameById.get(run.accountId) || run.accountId : '系统任务';
+    const stopText = run.requestedStopAt ? '，正在停止' : '';
+    return `${accountName}：已运行 ${activeRunDurationText(run.startedAt, now)}${stopText}`;
+  }).join('；');
+}
+
 function lifecycleLabel(job: ScheduledJobView): { text: string; color: string } {
   if (job.enabled) return { text: '已启用', color: 'green' };
   if (job.completedAt != null) return { text: '已完成', color: 'success' };
@@ -124,6 +155,7 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
   const queryClient = useQueryClient();
   const [now, setNow] = useState(() => Date.now());
   const [runningJobId, setRunningJobId] = useState('');
+  const [stoppingJobId, setStoppingJobId] = useState('');
   const accountNameById = useMemo(
     () => new Map(accounts.map(account => [account.id, account.name])),
     [accounts],
@@ -137,7 +169,7 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
   const { data = [], isLoading, refetch, isFetching } = useQuery({
     queryKey: queryKeys.scheduledJobs.list,
     queryFn: () => extensionApi.scheduledJobs.list(),
-    refetchInterval: 5000,
+    refetchInterval: 3000,
   });
 
   const runNowMutation = useMutation({
@@ -148,6 +180,8 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
     onSuccess: (result) => {
       if (result.status === 'failed') {
         message.error(result.error || '任务执行失败');
+      } else if (result.status === 'cancelled') {
+        message.warning(result.message || '任务已停止');
       } else if (result.status === 'skipped') {
         message.warning(result.message || result.error || '任务已跳过');
       } else {
@@ -164,14 +198,40 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
     },
   });
 
+  const stopRunMutation = useMutation({
+    mutationFn: (jobId: string) => extensionApi.scheduledJobs.stopRun(jobId),
+    onMutate: (jobId) => {
+      setStoppingJobId(jobId);
+    },
+    onSuccess: (result) => {
+      if (result.stoppedRunCount > 0) {
+        message.success(result.message);
+      } else {
+        message.warning(result.message);
+      }
+      void queryClient.invalidateQueries({ queryKey: queryKeys.scheduledJobs.list });
+      void refetch();
+    },
+    onError: (err: any) => {
+      message.error(`停止任务失败: ${err?.message || String(err)}`);
+    },
+    onSettled: () => {
+      setStoppingJobId('');
+    },
+  });
+
   const rows = useMemo(
-    () => [...data].sort((a, b) => b.updatedAt - a.updatedAt),
+    () => [...data].sort((a, b) => {
+      const activeDiff = Number(activeRunsFor(b).length > 0) - Number(activeRunsFor(a).length > 0);
+      if (activeDiff !== 0) return activeDiff;
+      return b.updatedAt - a.updatedAt;
+    }),
     [data],
   );
 
   const enabledCount = rows.filter(job => job.enabled).length;
   const globalCount = rows.filter(job => job.scope === 'global').length;
-  const runningCount = rows.filter(job => effectiveStats(job).lastStatus === 'running').length;
+  const runningCount = rows.filter(job => activeRunsFor(job).length > 0).length;
 
   const columns: TableProps<ScheduledJobView>['columns'] = [
     {
@@ -196,12 +256,20 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
       key: 'status',
       width: 130,
       render: (_, job) => {
-        const status = job.completedAt != null ? 'completed' : effectiveStats(job).lastStatus || 'idle';
+        const activeRuns = activeRunsFor(job);
+        const status = activeRuns.length > 0 ? 'running' : job.completedAt != null ? 'completed' : effectiveStats(job).lastStatus || 'idle';
         const lifecycle = lifecycleLabel(job);
         return (
           <Space size={4} vertical>
             <Tag color={lifecycle.color}>{lifecycle.text}</Tag>
             <Tag color={statusColors[status]}>{statusLabels[status]}</Tag>
+            {activeRuns.length > 0 && (
+              <Tooltip title={activeRunsDetail(job, accountNameById, now)}>
+                <Tag color={activeRuns.some(run => run.requestedStopAt) ? 'warning' : 'processing'}>
+                  {activeRuns.some(run => run.requestedStopAt) ? '正在停止' : `运行实例 ${activeRuns.length}`}
+                </Tag>
+              </Tooltip>
+            )}
           </Space>
         );
       },
@@ -274,10 +342,18 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
       width: 180,
       render: (_, job) => {
         const stats = effectiveStats(job);
+        const activeRuns = activeRunsFor(job);
         const detail = stats.lastError || stats.lastMessage;
         return (
           <Space size={4} vertical>
             <span>{formatTime(stats.lastRunAt)}</span>
+            {activeRuns.length > 0 && (
+              <Tooltip title={activeRunsDetail(job, accountNameById, now)}>
+                <span style={{ maxWidth: 160, color: '#1677ff', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {activeRuns.length} 个实例运行中
+                </span>
+              </Tooltip>
+            )}
             {detail && (
               <Tooltip title={detail}>
                 <span style={{ maxWidth: 150, color: stats.lastError ? '#cf1322' : '#666', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -299,19 +375,45 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
     {
       title: '操作',
       key: 'actions',
-      width: 120,
+      width: 190,
       fixed: 'right',
-      render: (_, job) => (
-        <Button
-          size="small"
-          icon={<PlayCircleOutlined />}
-          disabled={!job.enabled}
-          loading={runNowMutation.isPending && runningJobId === job.id}
-          onClick={() => runNowMutation.mutate(job.id)}
-        >
-          立即执行
-        </Button>
-      ),
+      render: (_, job) => {
+        const activeRuns = activeRunsFor(job);
+        return (
+          <Space size={6} wrap>
+            <Tooltip title={activeRuns.length > 0 ? '任务运行中，先停止本次执行后再手动执行' : undefined}>
+              <Button
+                size="small"
+                icon={<PlayCircleOutlined />}
+                disabled={!job.enabled || activeRuns.length > 0}
+                loading={runNowMutation.isPending && runningJobId === job.id}
+                onClick={() => runNowMutation.mutate(job.id)}
+              >
+                立即执行
+              </Button>
+            </Tooltip>
+            {activeRuns.length > 0 && (
+              <Popconfirm
+                title="停止本次执行"
+                description="只停止当前正在运行的实例，不会删除任务或关闭后续定时计划。"
+                okText="停止"
+                cancelText="取消"
+                okButtonProps={{ danger: true }}
+                onConfirm={() => stopRunMutation.mutate(job.id)}
+              >
+                <Button
+                  danger
+                  size="small"
+                  icon={<StopOutlined />}
+                  loading={stopRunMutation.isPending && stoppingJobId === job.id}
+                >
+                  停止本次
+                </Button>
+              </Popconfirm>
+            )}
+          </Space>
+        );
+      },
     },
   ];
 
@@ -337,7 +439,7 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
           columns={columns}
           dataSource={rows}
           pagination={{ pageSize: 20, showSizeChanger: false }}
-          scroll={{ x: 1280, y: 'calc(100vh - 190px)' }}
+          scroll={{ x: 1360, y: 'calc(100vh - 190px)' }}
           locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无调度任务" /> }}
         />
       </div>

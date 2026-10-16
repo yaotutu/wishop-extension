@@ -5,16 +5,35 @@ export interface Config {
   appSecret: string;
 }
 
-export type ScheduledJobModule = 'listing' | 'orders' | 'violation' | 'store' | 'system';
+export type ScheduledJobModule = 'productCopy' | 'productAudit' | 'orders' | 'compliance' | 'store' | 'system';
 export type ScheduledJobScope = 'account' | 'global' | 'system';
 export type ScheduledJobType =
-  | 'listing.submitDrafts'
+  | 'productAudit.submitDrafts'
   | 'orders.checkShipmentStatus'
   | 'orders.syncRecent'
   | 'orders.backfillHistory'
-  | 'violation.scanProducts';
-export type ScheduledJobStatus = 'idle' | 'running' | 'waiting_user' | 'completed' | 'failed' | 'skipped';
+  | 'compliance.scanProducts'
+  | 'taobaoLogin.checkHeartbeat';
+export type ScheduledJobStatus = 'idle' | 'running' | 'waiting_user' | 'completed' | 'failed' | 'skipped' | 'cancelled';
 export type ScheduledJobRunMode = 'recurring' | 'untilComplete';
+
+export interface ScheduledJobActiveRun {
+  jobId: string;
+  jobType: ScheduledJobType;
+  runId: string;
+  accountId?: string;
+  startedAt: number;
+  /**
+   * 用户点击停止后先标记 requestedStopAt，再由执行器通过 AbortSignal 协作退出。
+   * 这个字段只描述当前后台内存里的运行实例，不作为持久化任务状态来源。
+   */
+  requestedStopAt?: number;
+}
+
+export interface ScheduledJobStopRunResult {
+  stoppedRunCount: number;
+  message: string;
+}
 
 export interface ScheduledJobRunStats {
   lastRunDate: string;
@@ -74,6 +93,7 @@ export type ScheduledJobInput<TPayload = unknown> =
 
 export type ScheduledJobView<TPayload = unknown> = ScheduledJob<TPayload> & {
   nextRunAt: number | null;
+  activeRuns: ScheduledJobActiveRun[];
 };
 
 export interface ScheduledJobExecutorResult {
@@ -97,16 +117,67 @@ export interface LogEntry {
   runId: string;
   productId: string;
   productTitle: string;
-  action: 'list' | 'delete' | 'check' | 'skip';
+  action: 'list' | 'submitAudit' | 'delete' | 'check' | 'skip' | 'keepDraft' | 'stopTask';
   status: 'success' | 'failed';
   errorCode?: number;
   errorMsg?: string;
+  decisionAction?: ProductAuditFailureAction;
+  decisionReason?: string;
+  matchedRuleId?: string;
 }
 
-export interface TaskConfig {
-  listUnreviewed: boolean;
-  listUnreviewedQuantity: number;
-  autoDeleteFailed: boolean;
+export type ProductAuditFailureAction = 'stopTask' | 'keepDraft' | 'deleteDraft';
+export type ProductAuditFailureDefaultAction = 'keepDraft' | 'deleteDraft';
+export type ProductAuditFailureRuleMatch =
+  | { type: 'outerErrorCode'; code: number }
+  | { type: 'embeddedErrorCode'; code: number }
+  | { type: 'keyword'; keyword: string };
+
+/**
+ * 商品提审失败处理规则只在微信提审接口返回失败后生效。
+ * 提审成功时不会进入这套规则管道，也不会触发停止、保留或删除动作。
+ */
+export interface ProductAuditFailureRule {
+  id: string;
+  enabled: boolean;
+  action: ProductAuditFailureAction;
+  match: ProductAuditFailureRuleMatch;
+  description?: string;
+  priority?: number;
+}
+
+/**
+ * 商品提审失败策略是全局配置，单账号手动任务和全账号定时任务共用这一套策略。
+ */
+export interface ProductAuditFailurePolicy {
+  rules: ProductAuditFailureRule[];
+  defaultAction: ProductAuditFailureDefaultAction;
+}
+
+export interface ProductAuditFailureDecision {
+  action: ProductAuditFailureAction;
+  reason: string;
+  matchedRule?: ProductAuditFailureRule;
+  outerErrorCode: number;
+  embeddedErrorCodes: number[];
+}
+
+export interface ProductAuditTaskConfig {
+  submitUnauditedDrafts: boolean;
+  submitLimit: number;
+}
+
+export interface ProductAuditTaskResult {
+  scanned: number;
+  submitted: number;
+  kept: number;
+  deleted: number;
+  errors: number;
+  skipped: number;
+  stopped: boolean;
+  reason?: string;
+  errorCodes?: ErrorCodeSummary[];
+  pendingCount?: number;
 }
 
 export interface DraftProduct {
@@ -115,6 +186,25 @@ export interface DraftProduct {
   headImgs: string[];
   status: number;
   editStatus: number;
+}
+
+/**
+ * 从执行记录发起草稿删除时，页面只传商品定位信息。
+ * 后台会用 accountId 找到统一微信小店 client，不允许页面接触 token 或 appSecret。
+ */
+export interface DraftProductDeleteInput {
+  productId: string;
+  productTitle?: string;
+  runId?: string;
+}
+
+/**
+ * 草稿删除结果需要保留微信错误码，方便用户把不可删除原因回看成执行记录。
+ */
+export interface DraftProductDeleteResult {
+  success: boolean;
+  errorCode?: number;
+  error?: string;
 }
 
 export interface QuotaResult {
@@ -131,18 +221,6 @@ export interface ErrorCodeSummary {
   msg: string;
 }
 
-export interface TaskCycleResult {
-  scanned: number;
-  deleted: number;
-  listed: number;
-  errors: number;
-  skipped: number;
-  stopped: boolean;
-  reason?: string;
-  errorCodes?: ErrorCodeSummary[];
-  pendingCount?: number;
-}
-
 export interface Account {
   id: string;
   name: string;
@@ -157,6 +235,11 @@ export interface ProductSourceItem {
   url: string;
   quantity: number;
   remark: string;
+  sourceType?: 'manual' | 'productCopy' | '1688';
+  sourcePlatform?: 'taobao' | 'tmall' | '1688' | 'manual';
+  sourceItemId?: string;
+  sourceTitle?: string;
+  createdBy?: 'manual' | 'productCopy';
   createdAt: number;
   updatedAt: number;
 }
@@ -166,8 +249,17 @@ export interface ProductSourceBinding {
   sources: ProductSourceItem[];
 }
 
+export interface ProductQrcodeResult {
+  productId: string;
+  qrcodeUrl: string;
+}
+
 export type LinkedOrderPlatform = 'taobao' | 'tmall' | '1688' | 'manual';
 export type PurchaseShipmentCheckStatus = 'queued' | 'running' | 'waiting_user' | 'completed' | 'failed' | 'skipped';
+
+// 采购订单的关联来源，决定 applyLinkedOrder 的优先级比较。新增来源时：
+// 1) 在此扩展枚举；2) 在 LINK_SOURCE_DEFAULT_ORDER 追加默认位置；3) 设置页会自动展示。
+export type LinkSource = 'manual' | 'merchant_notes' | 'payment_success';
 
 export interface LinkedPlatformOrder {
   id: string;
@@ -175,6 +267,7 @@ export interface LinkedPlatformOrder {
   platformOrderId: string;
   platformOrderStatus: string;
   logisticsStatus: string;
+  linkSource: LinkSource;
   logisticsCompany?: string;
   trackingNumber?: string;
   remark?: string;
@@ -245,6 +338,49 @@ export interface TaobaoSecurityChallengeSnapshot {
   matchedSignals: string[];
 }
 
+/**
+ * 淘宝登录态判定结果。
+ *
+ * 这套判定基于真实 DOM 实测（4 类页面 × 2 种登录态共 8 组数据），
+ * 采用「未登录反向信号 + 已登录正向信号」双向交叉判定：
+ * - 反向信号是未登录的充分条件（命中即未登录，覆盖正向信号）。
+ * - 正向信号是已登录的强证据（反向信号缺失时才采信）。
+ * - 两者都不命中时返回 'unknown'，绝不瞎猜，由调用方决定复核或等待。
+ */
+export type TaobaoLoginState = 'logged-in' | 'logged-out' | 'unknown';
+
+/**
+ * 登录态检测的来源，用于区分状态是怎么得到的，便于调试与 UI 展示。
+ * - 'content-report'：content script 在页面导航后主动回报。
+ * - 'heartbeat'：后台定时心跳探测的结果。
+ * - 'pre-action-probe'：用户触发淘宝操作前的即时探测结果。
+ */
+export type TaobaoLoginSource = 'content-report' | 'heartbeat' | 'pre-action-probe';
+
+/**
+ * 淘宝页面类型，按登录态判定规则所需区分。
+ * 首页与干活页的未登录机制不同（首页页内弹窗 vs 干活页整页跳转登录域）。
+ */
+export type TaobaoPageType = 'home' | 'bought-list' | 'order-detail' | 'product-detail' | 'checkout' | 'other';
+
+/**
+ * 淘宝登录态快照，是后台内存态登录态的唯一事实来源。
+ * 它是观察数据，不持久化（按 AGENTS.md，观察数据不应作为持久业务状态来源）。
+ */
+export interface TaobaoLoginSnapshot {
+  state: TaobaoLoginState;
+  source: TaobaoLoginSource;
+  detectedAt: number;
+  /** 命中的判定信号列表（便于调试与日志，例如 ['host:login.taobao.com']）。 */
+  signals: string[];
+  /** 未登录时的可读原因（如"整页跳转到登录域"）。 */
+  reason?: string;
+  /** 探测时所在页面类型。 */
+  pageType?: TaobaoPageType;
+  /** 探测时的页面 URL（仅保留 host + path，不含 query，避免泄露敏感参数）。 */
+  url?: string;
+}
+
 export interface TaobaoPurchaseOrderSnapshot {
   platformOrderId: string;
   platformOrderStatus: string;
@@ -252,6 +388,477 @@ export interface TaobaoPurchaseOrderSnapshot {
   logisticsCompany?: string;
   trackingNumber?: string;
   remark?: string;
+}
+
+export interface TaobaoProductSkuSpec {
+  pid?: string;
+  vid?: string;
+  name: string;
+  value: string;
+}
+
+export interface TaobaoProductSkuGroup {
+  pid?: string;
+  name: string;
+  values: string[];
+}
+
+export interface TaobaoProductSkuPropertyValue {
+  vid?: string;
+  name: string;
+  imageUrl?: string;
+}
+
+export interface TaobaoProductSkuProperty {
+  pid?: string;
+  name: string;
+  values: TaobaoProductSkuPropertyValue[];
+}
+
+export interface TaobaoProductSkuMatrixItem {
+  id: string;
+  skuId?: string;
+  propPath?: string;
+  specs: TaobaoProductSkuSpec[];
+  priceText: string;
+  priceMoney?: number;
+  stockText: string;
+  quantity?: number;
+  imageUrl: string;
+  logisticsTime?: string;
+}
+
+export interface TaobaoProductParam {
+  name: string;
+  value: string;
+  group: 'basic' | 'enhance' | 'other';
+}
+
+export interface TaobaoProductSellerSnapshot {
+  shopName: string;
+  sellerId: string;
+  shopId: string;
+}
+
+export interface TaobaoProductSourceCategorySnapshot {
+  id?: string;
+  name?: string;
+  path?: string[];
+}
+
+export type TaobaoProductImageRole = 'main' | 'detail' | 'sku' | 'fallback' | 'unknown';
+export type TaobaoProductImageSource = 'pageModel' | 'detailDom' | 'documentDom' | 'skuModel' | 'fallback';
+
+export interface TaobaoProductImageAsset {
+  url: string;
+  normalizedUrl: string;
+  role: TaobaoProductImageRole;
+  source: TaobaoProductImageSource;
+  sourceSelector?: string;
+  width?: number;
+  height?: number;
+  naturalWidth?: number;
+  naturalHeight?: number;
+  lazyAttrs?: Record<string, string>;
+  flags: string[];
+}
+
+export interface TaobaoProductDetailContent {
+  text: string;
+  source: 'detailDom' | 'documentDom' | 'pageModel' | 'none';
+  images: TaobaoProductImageAsset[];
+}
+
+export interface TaobaoProductCollectionDiagnostics {
+  usedPageModel: boolean;
+  usedDocumentFallback: boolean;
+  sources: Record<string, string>;
+  warnings: string[];
+}
+
+export interface TaobaoProductSnapshot {
+  identity: {
+    url: string;
+    platform: 'taobao' | 'tmall';
+    itemId: string;
+  };
+  title: string;
+  shop: {
+    name: string;
+  };
+  category: {
+    source?: TaobaoProductSourceCategorySnapshot;
+  };
+  seller: TaobaoProductSellerSnapshot;
+  price: {
+    rangeText: string;
+  };
+  images: {
+    main: string[];
+    detail: string[];
+    assets: TaobaoProductImageAsset[];
+  };
+  detail: {
+    text: string;
+    source: TaobaoProductDetailContent['source'];
+    images: string[];
+  };
+  params: TaobaoProductParam[];
+  sku: {
+    groups: TaobaoProductSkuGroup[];
+    properties: TaobaoProductSkuProperty[];
+    matrix: TaobaoProductSkuMatrixItem[];
+  };
+  sales: {
+    text: string;
+  };
+  delivery: {
+    text: string;
+  };
+  rawModel?: unknown;
+  diagnostics: TaobaoProductCollectionDiagnostics;
+  collectedAt: number;
+}
+
+export interface ProductCopyRecord extends TaobaoProductSnapshot {
+  id: string;
+  sourceUrl: string;
+  missingFields: string[];
+  updatedAt: number;
+}
+
+export interface ProductCopyCreatedProductRecord {
+  id: string;
+  accountId: string;
+  copyId: string;
+  platform: 'taobao' | 'tmall';
+  itemId: string;
+  sourceUrl: string;
+  title: string;
+  productId: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface CreateProductCopySessionInput {
+  url: string;
+}
+
+export interface WxProductDraftAttribute {
+  attrKey: string;
+  attrValue: string;
+}
+
+export interface WxCategoryProductRuleAttr {
+  name: string;
+  type: string;
+  values: string[];
+  required: boolean;
+  appendAllowed: boolean;
+  hint?: string;
+}
+
+export interface WxCategoryProductRuleCacheItem {
+  id: string;
+  catId: string;
+  catIds: string[];
+  categoryPath: string[];
+  path: string;
+  releaseMode: number;
+  productAttrs: WxCategoryProductRuleAttr[];
+  saleAttrs: WxCategoryProductRuleAttr[];
+  requiredProductAttrs: WxCategoryProductRuleAttr[];
+  fetchedByAccountId: string;
+  updatedAt: number;
+  lastError?: string;
+}
+
+export interface WxCategoryProductRuleCacheStatus {
+  total: number;
+  cached: number;
+  failed: number;
+  missing: number;
+  syncing: boolean;
+  processed: number;
+  skipped: number;
+  startedAt?: number;
+  finishedAt?: number;
+  currentCatId?: string;
+  currentPath?: string;
+  lastUpdatedAt?: number;
+  lastError?: string;
+}
+
+export interface SyncWxCategoryProductRulesInput {
+  accountId: string;
+  force?: boolean;
+  limit?: number;
+}
+
+export interface SyncWxCategoryProductRulesResult extends WxCategoryProductRuleCacheStatus {
+  started: boolean;
+}
+
+export interface ProductCopyCategoryOption {
+  key: string;
+  catIds: string[];
+  names: string[];
+  path: string;
+}
+
+export interface ProductCopyFreightTemplateOption {
+  templateId: string;
+  name?: string;
+  label: string;
+}
+
+export interface ProductCopyAfterSaleAddressOption {
+  addressId: string;
+  label: string;
+  defaultSend: boolean;
+  defaultRecv: boolean;
+  sendAddr: boolean;
+  recvAddr: boolean;
+}
+
+export interface ProductCopyDraftParameterOptions {
+  categories: ProductCopyCategoryOption[];
+  freightTemplates: ProductCopyFreightTemplateOption[];
+  afterSaleAddresses: ProductCopyAfterSaleAddressOption[];
+  fetchedAt: number;
+}
+
+export type ProductCopyPriceRounding = 'cent' | 'jiao' | 'yuan';
+
+export interface ProductCopyPricingSettings {
+  multiplier: number;
+  addAmountFen: number;
+  rounding: ProductCopyPriceRounding;
+}
+
+export interface ProductCopyContentSettings {
+  titlePrefix: string;
+  titleSuffix: string;
+  mainImageSkipFirst: number;
+  mainImageSkipLast: number;
+  detailImageSkipFirst: number;
+  detailImageSkipLast: number;
+  maxDetailImages?: number;
+}
+
+export interface ProductCopySkuSettings {
+  defaultStockNum: number;
+  unifiedStockNum?: number;
+  zeroStockReplacement?: number;
+  minSkuPriceFen?: number;
+}
+
+export interface ProductCopyDefaultSettings {
+  accountId: string;
+  expressTemplateId?: string;
+  afterSaleAddressId?: string;
+  brandId?: string;
+  autoSourceBinding: boolean;
+  pricing: ProductCopyPricingSettings;
+  content: ProductCopyContentSettings;
+  sku: ProductCopySkuSettings;
+  updatedAt: number;
+}
+
+export type ProductCopyDefaultSettingsPatch = Partial<Omit<ProductCopyDefaultSettings, 'accountId' | 'updatedAt'>>;
+
+export interface WxProductCategoryPath {
+  catIds: string[];
+  names: string[];
+  leaf: boolean;
+  qualificationTips?: string[];
+}
+
+export type WxProductCategoryCandidateSource = 'wxStaticSnapshot';
+
+export type WxProductCategoryCandidateScope = 'wxStaticAll';
+
+export interface WxProductCategoryCandidate extends WxProductCategoryPath {
+  source: WxProductCategoryCandidateSource;
+}
+
+export interface WxProductCategoryLookupSummary {
+  source: WxProductCategoryCandidateSource;
+  status: 'matched';
+  candidateScope?: WxProductCategoryCandidateScope;
+  candidateCount: number;
+  warnings: string[];
+}
+
+export interface WxProductDraftPreparedAttr {
+  attr_key: string;
+  attr_value: string;
+}
+
+export interface WxProductDraftPreparedSku {
+  thumb_img: string;
+  sale_price: number;
+  stock_num: number;
+  sku_code?: string;
+  sku_attrs: WxProductDraftPreparedAttr[];
+  sku_deliver_info: {
+    stock_type: number;
+  };
+}
+
+export interface WxProductDraftPreparedRequest {
+  out_product_id: string;
+  title: string;
+  short_title?: string;
+  head_imgs: string[];
+  deliver_method: number;
+  deliver_acct_type: number[];
+  desc_info?: {
+    imgs?: string[];
+    desc?: string;
+  };
+  cats: [];
+  cats_v2: Array<{ cat_id: string }>;
+  attrs?: WxProductDraftPreparedAttr[];
+  brand_id?: string;
+  express_info?: {
+    template_id: string;
+  };
+  after_sale_info?: {
+    after_sale_address_id: number;
+  };
+  extra_service: {
+    is_open_cod: number;
+    seven_day_return: number;
+    freight_insurance: number;
+  };
+  skus: WxProductDraftPreparedSku[];
+  listing: 0 | 1;
+}
+
+export type WxProductDraftBoxPreparedRequest = WxProductDraftPreparedRequest & { listing: 0 };
+
+export interface CreateWxDraftBoxProductInput {
+  accountId: string;
+  copyId: string;
+  catIds: string[];
+  expressTemplateId?: string;
+  afterSaleAddressId?: string;
+  brandId?: string;
+  defaultStockNum?: number;
+  pricing?: ProductCopyPricingSettings;
+  content?: ProductCopyContentSettings;
+  sku?: ProductCopySkuSettings;
+  autoSourceBinding?: boolean;
+  attrs?: WxProductDraftAttribute[];
+}
+
+export type CreateWxDraftBoxProductPrepareInput = CreateWxDraftBoxProductInput;
+
+interface WxProductDraftPrepareResultSummary {
+  title: string;
+  headImageCount: number;
+  detailImageCount: number;
+  skuCount: number;
+  attrCount: number;
+}
+
+export interface WxDraftBoxProductPrepareResult {
+  accountId: string;
+  copyId: string;
+  request: WxProductDraftBoxPreparedRequest;
+  uploadedImageCount: number;
+  preparedAt: number;
+  warnings: string[];
+  summary: WxProductDraftPrepareResultSummary & {
+    listing: false;
+  };
+}
+
+export interface CreatePreparedWxDraftBoxProductInput {
+  accountId: string;
+  copyId: string;
+  request: WxProductDraftBoxPreparedRequest;
+  uploadedImageCount: number;
+  autoSourceBinding?: boolean;
+}
+
+export interface WxProductDraftCreationResult {
+  accountId: string;
+  copyId: string;
+  productId: string;
+  createTime?: string;
+  listing: 0;
+  uploadedImageCount: number;
+}
+
+export interface DeleteCreatedWxDraftBoxProductInput {
+  accountId: string;
+  copyId: string;
+  productId: string;
+  productTitle?: string;
+}
+
+export interface DeleteCreatedWxDraftBoxProductResult {
+  accountId: string;
+  copyId: string;
+  productId: string;
+  deleted: boolean;
+  errorCode?: number;
+  error?: string;
+}
+
+export interface CreateWxProductDraftSuggestionInput {
+  accountId?: string;
+  copyId: string;
+}
+
+export interface WxProductDraftSuggestionResult {
+  copyId: string;
+  catIds: string[];
+  categoryPath?: string[];
+  categoryCandidateSource?: WxProductCategoryCandidateSource;
+  categoryCandidates?: WxProductCategoryCandidate[];
+  categoryLookup?: WxProductCategoryLookupSummary;
+  attrs: WxProductDraftAttribute[];
+  confidence: number;
+  reason: string;
+  warnings: string[];
+}
+
+export interface ProductAuditCategoryPrecheckInput {
+  accountId: string;
+  catId: string;
+}
+
+export interface ProductAuditCategoryPrecheckResult {
+  accountId: string;
+  catId: string;
+  allPass: boolean;
+  failReasons: string[];
+  checkedAt: number;
+}
+
+export type ProductCopySessionStatus =
+  | 'created'
+  | 'queued'
+  | 'opened'
+  | 'page-ready'
+  | 'waiting-user-verification'
+  | 'completed'
+  | 'failed';
+
+export interface ProductCopySession {
+  id: string;
+  url: string;
+  status: ProductCopySessionStatus;
+  createdAt: number;
+  updatedAt: number;
+  expiresAt: number;
+  tabId?: number;
+  copyId?: string;
+  lastError?: string;
+  challenge?: TaobaoSecurityChallengeSnapshot;
 }
 
 export interface PurchaseLookupSession {
@@ -358,7 +965,7 @@ export interface CreateShippingSessionInput {
   paymentWorkflow?: ShippingPaymentWorkflow;
 }
 
-export type LicensedFeature = 'orders' | 'listing' | 'violation' | 'shipping';
+export type LicensedFeature = 'orders' | 'productCopy' | 'productAudit' | 'compliance' | 'shipping';
 
 export interface LicenseActivationInput {
   licenseKey: string;
@@ -669,25 +1276,58 @@ export interface OrderRefreshResult {
   finishedAt: number;
 }
 
-export interface ViolationMatch {
-  productId: string;
-  title: string;
-  matchedWords: string[];
+/**
+ * 可扫描字段定义。合规扫描的 FieldExtractor 产出这个清单，
+ * 描述「本次要从商品的哪些字段里抽文本去匹配」。
+ * 放在 shared 层是因为命中结果会跨前后端流转。
+ */
+export interface ScanField {
+  /** 字段标识，稳定不变，用于命中结果回指。如 'title' / 'desc' / 'attrs' */
+  key: string;
+  /** 给用户看的字段中文名。如「标题」「描述」 */
+  label: string;
+  /** 该字段实际待匹配的文本。多个属性/SKU 可拼成一段文本。 */
+  text: string;
 }
 
-export interface ViolationScanResult {
+/**
+ * 单条命中明细。合规扫描的 WordMatcher 产出，ScanItem.matches 的元素。
+ */
+export interface FieldMatch {
+  /** 命中在哪个字段，回指 ScanField.key */
+  fieldKey: string;
+  /** 命中的违禁词 */
+  word: string;
+}
+
+/**
+ * 扫描结果对象。合规扫描器每条商品产出一个。
+ * 前端用 matches 渲染命中明细（可按 fieldKey 分组），用 scannedFields 回看原始文本（可选）。
+ */
+export interface ScanItem {
+  productId: string;
+  title: string;
+  /** 本次扫描实际覆盖的字段清单（含文本）。用于结果区展示「扫了哪些字段」。 */
+  scannedFields: ScanField[];
+  /** 命中明细。空数组表示该商品无违禁。 */
+  matches: FieldMatch[];
+}
+
+export interface ComplianceScanResult {
   scanned: number;
-  violations: ViolationMatch[];
+  violations: ScanItem[];
   errors: number;
   stopped: boolean;
   reason?: string;
 }
 
-// Blacklist rule — error codes that should stop the task immediately
-export interface BlacklistRule {
-  code: number;
-  description?: string;
-}
+/**
+ * 模块级违禁词的作用域标识。违禁词库分两层：
+ * - 全局通用词库：所有模块、所有账号共享，用于无差别的合规检测。
+ * - 模块级词库：按业务模块划分，供该模块在处理商品文本时叠加自己的补充词库。
+ * 目前为「复制商品」流程预留（后期接入 prepare 阶段检测时使用）。
+ */
+export type ViolationWordModule = 'productCopy';
 
 // Status rule — maps editStatus codes to actions during task cycle
 export type StatusAction = 'submit' | 'delete' | 'skip';
@@ -703,10 +1343,9 @@ export interface FullAccount {
   id: string;
   name: string;
   config: Config;
-  taskConfig: TaskConfig;
-  listingLogs: LogEntry[];
+  productAuditConfig: ProductAuditTaskConfig;
+  productAuditLogs: LogEntry[];
   violationLogs: LogEntry[];
-  violationWords: string[];
   productSources: ProductSourceBinding[];
   orderAssociations: OrderAssociation[];
   realAddressCaches: OrderRealAddressCache[];

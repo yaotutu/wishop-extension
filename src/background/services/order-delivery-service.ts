@@ -6,8 +6,8 @@ import {
   recordActivityFailed,
   recordActivityStarted,
 } from '../activity-logs/activity-log-service.ts';
-import { getClient } from '../wxshop/client-registry';
-import type { DeliveryCompany, SendOrderDeliveryPayload } from '../wxshop/client';
+import { getOrdersClient } from '../wxshop/client-registry';
+import type { DeliveryCompany, SendOrderDeliveryPayload } from '../wxshop/orders/types';
 
 interface ShipOrderFromPurchaseOptions {
   wxOrder?: Order;
@@ -130,7 +130,7 @@ export async function shipOrderFromPurchase(
   });
 
   try {
-    const client = await getClient(input.accountId);
+    const client = await getOrdersClient(input.accountId);
     const order = options.wxOrder || await client.getOrderDetail(input.orderId);
     assertShippableOrder(order);
 

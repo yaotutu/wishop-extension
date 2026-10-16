@@ -6,8 +6,10 @@ import { getActivePurchaseLookupKeys, openPurchaseLookupSessionTab } from '../pu
 import { getOrderAssociations, updateLinkedOrderShipmentCheck } from '../store/order-association-repository';
 import { addScheduledJob, getScheduledJob, getScheduledJobs, updateScheduledJob } from '../store/scheduled-job-repository';
 import { getAppSettings } from '../store/settings-repository';
-import { getClient } from '../wxshop/client-registry';
+import { getOrdersClient } from '../wxshop/client-registry';
+import { getTaobaoLoginSnapshot } from '../taobao-login/taobao-login-service';
 import { registerScheduledJobExecutor } from './scheduler-center';
+import { createCancelledScheduledJobResult } from './scheduled-job-run-result';
 import {
   buildShipmentCheckDispatchPlan,
   selectShipmentCheckCandidates,
@@ -45,7 +47,7 @@ function parseDispatchAlarmName(name: string): ShipmentCheckCandidate | null {
 
 async function fetchPendingShipmentOrders(accountId: string): Promise<Order[]> {
   const settings = (await getAppSettings()).shipmentCheck;
-  const api = await getClient(accountId);
+  const api = await getOrdersClient(accountId);
   const nowSeconds = Math.floor(Date.now() / 1000);
   const lookbackDays = Math.min(settings.orderLookbackDays, MAX_SHIPMENT_CHECK_ORDER_LOOKBACK_DAYS);
   const createTimeRange = {
@@ -83,6 +85,18 @@ async function dispatchShipmentCheck(candidate: ShipmentCheckCandidate): Promise
       lastShipmentCheckFinishedAt: Date.now(),
       lastShipmentCheckStatus: 'skipped',
       lastShipmentCheckError: '发货状态检测已关闭',
+    });
+    return;
+  }
+
+  // 无人值守路径：淘宝未登录时跳过本次，避免反复打开工作页产生失败任务堆积。
+  // 用户重新登录后，下一轮检测会自动恢复。
+  const loginSnapshot = getTaobaoLoginSnapshot();
+  if (loginSnapshot.state === 'logged-out') {
+    await updateLinkedOrderShipmentCheck(candidate.accountId, candidate.orderId, {
+      lastShipmentCheckFinishedAt: Date.now(),
+      lastShipmentCheckStatus: 'skipped',
+      lastShipmentCheckError: '淘宝未登录，已跳过本轮发货状态检测',
     });
     return;
   }
@@ -139,8 +153,9 @@ export async function ensureOrderShipmentCheckScheduledJob(): Promise<ScheduledJ
 }
 
 export function registerOrderShipmentScheduledJobs(): void {
-  registerScheduledJobExecutor('orders.checkShipmentStatus', async ({ accountId }) => {
+  registerScheduledJobExecutor('orders.checkShipmentStatus', async ({ accountId, signal }) => {
     if (!accountId) throw new Error('缺少账号 ID');
+    if (signal.aborted) return createCancelledScheduledJobResult();
     const settings = normalizeShipmentCheckSettings((await getAppSettings()).shipmentCheck);
     if (!settings.enabled) {
       return { listed: 0, status: 'skipped' as const, message: null, error: '发货状态检测已关闭', completed: false };
@@ -150,6 +165,8 @@ export function registerOrderShipmentScheduledJobs(): void {
       fetchPendingShipmentOrders(accountId),
       getOrderAssociations(accountId),
     ]);
+    if (signal.aborted) return createCancelledScheduledJobResult();
+
     const associationsByOrderId = Object.fromEntries(associations.map(association => [association.orderId, association]));
     const candidates = selectShipmentCheckCandidates({
       accountId,
@@ -160,6 +177,7 @@ export function registerOrderShipmentScheduledJobs(): void {
       activeKeys: getActivePurchaseLookupKeys(),
     });
     const plan = buildShipmentCheckDispatchPlan({ candidates, settings, now: Date.now() });
+    if (signal.aborted) return createCancelledScheduledJobResult();
     await scheduleDispatches(plan, settings);
 
     return {

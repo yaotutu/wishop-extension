@@ -1,13 +1,26 @@
 import type { ActivityLogEntry } from './activity-log';
 import type { NotificationEntry, NotificationPreference } from './notification';
-import type { AppSettings, AppSettingsPatch } from './settings';
+import type { AppSettings, AppSettingsPatch, ViolationWordsSettings } from './settings';
 import type {
   Account,
-  BlacklistRule,
+  ProductCopyCreatedProductRecord,
+  ProductCopyDefaultSettings,
+  ProductCopyDefaultSettingsPatch,
+  ProductCopyDraftParameterOptions,
+  ProductCopyRecord,
   Config,
+  CreatePreparedWxDraftBoxProductInput,
+  CreateProductCopySessionInput,
+  CreateWxDraftBoxProductInput,
+  CreateWxDraftBoxProductPrepareInput,
+  CreateWxProductDraftSuggestionInput,
+  DeleteCreatedWxDraftBoxProductInput,
+  DeleteCreatedWxDraftBoxProductResult,
   CreateShippingSessionInput,
   DeliveryCompanyOption,
   DraftProduct,
+  DraftProductDeleteInput,
+  DraftProductDeleteResult,
   LicenseActivationInput,
   LicenseState,
   LogEntry,
@@ -28,23 +41,38 @@ import type {
   CreateTaobaoRefundSessionInput,
   ProductSourceBinding,
   ProductSourceItem,
+  ProductQrcodeResult,
+  ProductCopySession,
+  ProductAuditCategoryPrecheckInput,
+  ProductAuditCategoryPrecheckResult,
+  ProductAuditFailurePolicy,
+  ProductAuditTaskConfig,
+  ProductAuditTaskResult,
   PurchaseLookupSession,
   QuotaResult,
   ScheduledJob,
   ScheduledJobInput,
   ScheduledJobView,
   ScheduledJobRunNowResult,
+  ScheduledJobStopRunResult,
   ShippingSession,
   TaobaoRefundPrepareSnapshot,
   TaobaoRefundSession,
   StatusRule,
   TaobaoWorkspaceRole,
+  TaobaoLoginSnapshot,
   TaobaoSecurityChallengeSnapshot,
   TaobaoPurchaseOrderSnapshot,
-  TaskConfig,
-  TaskCycleResult,
-  ViolationMatch,
-  ViolationScanResult,
+  TaobaoProductSnapshot,
+  ScanItem,
+  ComplianceScanResult,
+  ViolationWordModule,
+  SyncWxCategoryProductRulesInput,
+  WxDraftBoxProductPrepareResult,
+  WxProductDraftSuggestionResult,
+  WxProductDraftCreationResult,
+  SyncWxCategoryProductRulesResult,
+  WxCategoryProductRuleCacheStatus,
 } from './types';
 
 export interface RuntimeChannels {
@@ -58,7 +86,8 @@ export interface RuntimeChannels {
   'config:set': { args: [accountId: string, config: Config]; result: { success: boolean; error?: string } };
 
   'drafts:fetch': { args: [accountId: string, reset?: boolean]; result: { products: DraftProduct[]; hasMore: boolean } };
-  'drafts:list': { args: [accountId: string, productId: string]; result: { success: boolean; error?: string } };
+  'drafts:submitAudit': { args: [accountId: string, productId: string]; result: { success: boolean; error?: string } };
+  'drafts:delete': { args: [accountId: string, input: DraftProductDeleteInput]; result: DraftProductDeleteResult };
 
   'orders:list': {
     args: [scope: OrderScope, filters?: OrderListFilters];
@@ -106,6 +135,29 @@ export interface RuntimeChannels {
   'productSources:list': { args: [accountId: string]; result: ProductSourceBinding[] };
   'productSources:set': { args: [accountId: string, productId: string, sources: ProductSourceItem[]]; result: ProductSourceBinding };
   'productSources:remove': { args: [accountId: string, productId: string, sourceId: string]; result: ProductSourceBinding };
+  'products:getQrcode': { args: [accountId: string, productId: string]; result: ProductQrcodeResult };
+
+  'productCopy:list': { args: []; result: ProductCopyRecord[] };
+  'productCopy:remove': { args: [copyId: string]; result: void };
+  'productCopy:getDraftParameterOptions': { args: [accountId: string]; result: ProductCopyDraftParameterOptions };
+  'productCopy:getCreatedProduct': { args: [accountId: string, copyId: string]; result: ProductCopyCreatedProductRecord | null };
+  'productCopy:getDefaultSettings': { args: [accountId: string]; result: ProductCopyDefaultSettings };
+  'productCopy:saveDefaultSettings': { args: [accountId: string, patch: ProductCopyDefaultSettingsPatch]; result: ProductCopyDefaultSettings };
+  'productCopy:open': { args: [input: CreateProductCopySessionInput]; result: ProductCopySession };
+  'productCopy:getCurrentTabSession': { args: []; result: ProductCopySession | null };
+  'productCopy:markPageReady': { args: [sessionId: string]; result: ProductCopySession };
+  'productCopy:reportChallenge': { args: [sessionId: string, snapshot: TaobaoSecurityChallengeSnapshot]; result: ProductCopySession };
+  'productCopy:resolveChallenge': { args: [sessionId: string]; result: ProductCopySession };
+  'productCopy:complete': { args: [sessionId: string, snapshot: TaobaoProductSnapshot]; result: ProductCopyRecord };
+  'productCopy:fail': { args: [sessionId: string, error: string]; result: ProductCopySession };
+  'productCopy:suggestWxCategoryFromFullList': { args: [input: CreateWxProductDraftSuggestionInput]; result: WxProductDraftSuggestionResult };
+  'productCopy:prepareWxDraftBoxProduct': { args: [input: CreateWxDraftBoxProductPrepareInput]; result: WxDraftBoxProductPrepareResult };
+  'productCopy:createPreparedWxDraftBoxProduct': { args: [input: CreatePreparedWxDraftBoxProductInput]; result: WxProductDraftCreationResult };
+  'productCopy:createWxDraftBoxProduct': { args: [input: CreateWxDraftBoxProductInput]; result: WxProductDraftCreationResult };
+  'productCopy:deleteCreatedWxDraftBoxProduct': { args: [input: DeleteCreatedWxDraftBoxProductInput]; result: DeleteCreatedWxDraftBoxProductResult };
+
+  'wxCategoryData:downloadProductRules': { args: [input: SyncWxCategoryProductRulesInput]; result: SyncWxCategoryProductRulesResult };
+  'wxCategoryData:getProductRuleCacheStatus': { args: []; result: WxCategoryProductRuleCacheStatus };
 
   'shipping:open': { args: [input: CreateShippingSessionInput]; result: ShippingSession };
   'shipping:getCurrentTabSession': { args: []; result: ShippingSession | null };
@@ -113,11 +165,16 @@ export interface RuntimeChannels {
   'shipping:complete': { args: [sessionId: string]; result: ShippingSession };
   'shipping:fail': { args: [sessionId: string, error: string]; result: ShippingSession };
   'taobaoWorkspace:getCurrentRole': { args: []; result: TaobaoWorkspaceRole | null };
+  // 淘宝登录态：getState 读内存态、probeNow 触发一次即时探测、reportFromContent 由 content 主动回报。
+  'taobaoLogin:getState': { args: []; result: TaobaoLoginSnapshot };
+  'taobaoLogin:probeNow': { args: []; result: TaobaoLoginSnapshot };
+  'taobaoLogin:reportFromContent': { args: [snapshot: TaobaoLoginSnapshot]; result: void };
+  'taobaoLogin:openLoginPage': { args: []; result: void };
 
   'quota:get': { args: [accountId: string, force?: boolean]; result: QuotaResult };
 
-  'listingLogs:get': { args: [accountId: string]; result: LogEntry[] };
-  'listingLogs:clear': { args: [accountId: string]; result: void };
+  'productAudit:logsGet': { args: [accountId: string]; result: LogEntry[] };
+  'productAudit:logsClear': { args: [accountId: string]; result: void };
   'activityLogs:list': { args: []; result: ActivityLogEntry[] };
   'activityLogs:clear': { args: []; result: void };
   'notifications:list': { args: []; result: NotificationEntry[] };
@@ -134,30 +191,34 @@ export interface RuntimeChannels {
   'scheduledJobs:update': { args: [jobId: string, patch: Partial<ScheduledJob>]; result: void };
   'scheduledJobs:remove': { args: [jobId: string]; result: void };
   'scheduledJobs:runNow': { args: [jobId: string]; result: ScheduledJobRunNowResult };
+  'scheduledJobs:stopRun': { args: [jobId: string]; result: ScheduledJobStopRunResult };
 
-  'taskConfig:get': { args: [accountId: string]; result: TaskConfig };
-  'taskConfig:set': { args: [accountId: string, config: TaskConfig]; result: void };
-  'task:run': { args: [accountId: string, config: TaskConfig]; result: TaskCycleResult };
-  'task:stop': { args: [accountId: string]; result: void };
+  'productAudit:configGet': { args: [accountId: string]; result: ProductAuditTaskConfig };
+  'productAudit:configSet': { args: [accountId: string, config: ProductAuditTaskConfig]; result: void };
+  'productAudit:run': { args: [accountId: string, config: ProductAuditTaskConfig]; result: ProductAuditTaskResult };
+  'productAudit:stop': { args: [accountId: string]; result: void };
+  'productAudit:precheckCategory': { args: [input: ProductAuditCategoryPrecheckInput]; result: ProductAuditCategoryPrecheckResult };
 
-  'violation:getWords': { args: [accountId: string]; result: string[] };
-  'violation:setWords': { args: [accountId: string, words: string[]]; result: void };
-  'violation:batchScan': { args: [accountId: string, limit?: number]; result: ViolationScanResult };
-  'violation:scanStep': {
+  'violationWords:getGlobal': { args: []; result: string[] };
+  'violationWords:setGlobal': { args: [words: string[]]; result: void };
+  'violationWords:getModule': { args: [module: ViolationWordModule]; result: string[] };
+  'violationWords:setModule': { args: [module: ViolationWordModule, words: string[]]; result: void };
+  'violationWords:getDefaults': { args: []; result: { words: string[]; totalCount: number; violationWords: string[]; brands: string[]; source: string; updatedAt: string; version: number } };
+  'violationWords:getSettings': { args: []; result: ViolationWordsSettings };
+  'compliance:batchScan': { args: [accountId: string, limit?: number]; result: ComplianceScanResult };
+  'compliance:scanStep': {
     args: [accountId: string, action: 'next' | 'skip' | 'delete'];
     result:
       | { type: 'done'; scanned?: number; reason?: string }
       | { type: 'stopped'; reason?: string }
-      | ({ type: 'violation'; scanned: number } & ViolationMatch);
+      | ({ type: 'violation'; scanned: number } & ScanItem);
   };
-  'violation:batchDelete': { args: [accountId: string, violations: ViolationMatch[]]; result: { deleted: number; errors: number; stopped: boolean } };
-  'violation:stop': { args: [accountId: string]; result: void };
+  'compliance:batchDelete': { args: [accountId: string, violations: ScanItem[]]; result: { deleted: number; errors: number; stopped: boolean } };
+  'compliance:stop': { args: [accountId: string]; result: void };
 
-  'blacklistRules:get': { args: []; result: BlacklistRule[] };
-  'blacklistRules:getDefaultCodes': { args: []; result: number[] };
-  'blacklistRules:set': { args: [rules: BlacklistRule[]]; result: void };
-  'skipKeywords:get': { args: []; result: string[] };
-  'skipKeywords:set': { args: [keywords: string[]]; result: void };
+  'productAudit:failurePolicyGet': { args: []; result: ProductAuditFailurePolicy };
+  'productAudit:failurePolicyGetDefaults': { args: []; result: ProductAuditFailurePolicy };
+  'productAudit:failurePolicySet': { args: [policy: ProductAuditFailurePolicy]; result: void };
   'statusRules:get': { args: []; result: StatusRule[] };
   'statusRules:set': { args: [rules: StatusRule[]]; result: void };
   'statusRules:reset': { args: []; result: StatusRule[] };

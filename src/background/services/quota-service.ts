@@ -1,5 +1,5 @@
 import type { QuotaResult } from '../../shared/types';
-import { getClient } from '../wxshop/client-registry';
+import { getListingClient } from '../wxshop/client-registry';
 
 const QUOTA_CACHE_TTL_MS = 60_000;
 
@@ -32,7 +32,7 @@ export async function getAuditQuota(accountId: string, force = false): Promise<Q
   }
 
   const startedAt = Date.now();
-  const quota = await (await getClient(accountId)).getAuditQuota();
+  const quota = await (await getListingClient(accountId)).getAuditQuota();
   const fetchedAt = Date.now();
   const value: QuotaResult = {
     ...quota,

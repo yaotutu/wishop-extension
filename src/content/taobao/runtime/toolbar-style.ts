@@ -6,7 +6,7 @@ export const toolbarCss = `
     z-index: 2147483647 !important;
     pointer-events: none !important;
   }
-  .wishop-shipping-toolbar {
+  .dianxiaoqi-shipping-toolbar {
     box-sizing: border-box;
     position: fixed;
     z-index: 2147483647;
@@ -23,17 +23,17 @@ export const toolbarCss = `
     font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     pointer-events: auto;
   }
-  .wishop-shipping-toolbar * {
+  .dianxiaoqi-shipping-toolbar * {
     box-sizing: border-box;
   }
-  .wishop-shipping-toolbar--collapsed {
+  .dianxiaoqi-shipping-toolbar--collapsed {
     width: auto;
     min-width: 0;
     padding: 0;
     overflow: visible;
     border-color: #1677ff;
   }
-  .wishop-shipping-header {
+  .dianxiaoqi-shipping-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -43,20 +43,20 @@ export const toolbarCss = `
     user-select: none;
     touch-action: none;
   }
-  .wishop-shipping-title {
+  .dianxiaoqi-shipping-title {
     display: flex;
     flex-direction: column;
     min-width: 0;
   }
-  .wishop-shipping-header strong {
+  .dianxiaoqi-shipping-header strong {
     font-size: 14px;
     line-height: 20px;
   }
-  .wishop-shipping-status {
+  .dianxiaoqi-shipping-status {
     color: #1677ff;
     font-size: 12px;
   }
-  .wishop-shipping-icon-button {
+  .dianxiaoqi-shipping-icon-button {
     width: 28px;
     height: 28px;
     border: 1px solid #d9d9d9;
@@ -66,11 +66,11 @@ export const toolbarCss = `
     cursor: pointer;
     flex: 0 0 auto;
   }
-  .wishop-shipping-icon-button:hover {
+  .dianxiaoqi-shipping-icon-button:hover {
     border-color: #1677ff;
     color: #1677ff;
   }
-  .wishop-shipping-collapsed-button {
+  .dianxiaoqi-shipping-collapsed-button {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -85,23 +85,23 @@ export const toolbarCss = `
     cursor: pointer;
     white-space: nowrap;
   }
-  .wishop-shipping-grid {
+  .dianxiaoqi-shipping-grid {
     display: grid;
     gap: 8px;
   }
-  .wishop-shipping-card {
+  .dianxiaoqi-shipping-card {
     min-width: 0;
     padding: 8px;
     border: 1px solid #f0f0f0;
     border-radius: 6px;
     background: #fafafa;
   }
-  .wishop-shipping-grid label {
+  .dianxiaoqi-shipping-grid label {
     display: block;
     color: #8c8c8c;
     font-size: 12px;
   }
-  .wishop-shipping-grid p {
+  .dianxiaoqi-shipping-grid p {
     margin: 2px 0;
     display: -webkit-box;
     max-height: 60px;
@@ -112,13 +112,13 @@ export const toolbarCss = `
     font-weight: 600;
     line-height: 20px;
   }
-  .wishop-shipping-grid small {
+  .dianxiaoqi-shipping-grid small {
     display: block;
     color: #595959;
     overflow-wrap: anywhere;
     line-height: 18px;
   }
-  .wishop-shipping-inline-primary {
+  .dianxiaoqi-shipping-inline-primary {
     width: 100%;
     height: 30px;
     margin-top: 6px;
@@ -129,33 +129,33 @@ export const toolbarCss = `
     cursor: pointer;
     font-weight: 600;
   }
-  .wishop-shipping-inline-primary:hover {
+  .dianxiaoqi-shipping-inline-primary:hover {
     background: #4096ff;
     border-color: #4096ff;
   }
-  .wishop-shipping-inline-primary:disabled {
+  .dianxiaoqi-shipping-inline-primary:disabled {
     cursor: not-allowed;
     opacity: 0.65;
   }
-  .wishop-shipping-inline-actions {
+  .dianxiaoqi-shipping-inline-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
     margin-top: 6px;
   }
-  .wishop-shipping-inline-actions .wishop-shipping-inline-primary {
+  .dianxiaoqi-shipping-inline-actions .dianxiaoqi-shipping-inline-primary {
     margin-top: 0;
   }
-  .wishop-shipping-inline-actions--single {
+  .dianxiaoqi-shipping-inline-actions--single {
     grid-template-columns: 1fr;
   }
-  .wishop-shipping-actions {
+  .dianxiaoqi-shipping-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
     margin-top: 10px;
   }
-  .wishop-shipping-actions button {
+  .dianxiaoqi-shipping-actions button {
     height: 28px;
     padding: 0 10px;
     border: 1px solid #d9d9d9;
@@ -165,23 +165,33 @@ export const toolbarCss = `
     cursor: pointer;
     white-space: nowrap;
   }
-  .wishop-shipping-actions button:hover {
+  .dianxiaoqi-shipping-actions button:hover {
     border-color: #1677ff;
     color: #1677ff;
   }
-  .wishop-shipping-notice {
+  .dianxiaoqi-shipping-notice {
     margin-top: 8px;
     color: #389e0d;
     font-size: 12px;
   }
-  .wishop-shipping-profit-value {
+  .dianxiaoqi-shipping-login-warning {
+    margin-top: 8px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    background: #fff1f0;
+    border: 1px solid #ffa39e;
+    color: #cf1322;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .dianxiaoqi-shipping-profit-value {
     font-size: 14px;
     color: #1677ff;
   }
-  .wishop-shipping-profit-value--negative {
+  .dianxiaoqi-shipping-profit-value--negative {
     color: #cf1322;
   }
-  .wishop-purchase-lookup {
+  .dianxiaoqi-purchase-lookup {
     box-sizing: border-box;
     position: fixed;
     top: 24px;
@@ -198,45 +208,45 @@ export const toolbarCss = `
     font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     pointer-events: auto;
   }
-  .wishop-purchase-lookup * {
+  .dianxiaoqi-purchase-lookup * {
     box-sizing: border-box;
   }
-  .wishop-purchase-lookup__header {
+  .dianxiaoqi-purchase-lookup__header {
     display: flex;
     justify-content: space-between;
     gap: 8px;
     margin-bottom: 8px;
   }
-  .wishop-purchase-lookup__header strong {
+  .dianxiaoqi-purchase-lookup__header strong {
     font-size: 14px;
   }
-  .wishop-purchase-lookup__header span {
+  .dianxiaoqi-purchase-lookup__header span {
     color: #fa8c16;
     font-size: 12px;
     white-space: nowrap;
   }
-  .wishop-purchase-lookup__body {
+  .dianxiaoqi-purchase-lookup__body {
     padding: 8px;
     border: 1px solid #f0f0f0;
     border-radius: 6px;
     background: #fff7e6;
   }
-  .wishop-purchase-lookup__body p {
+  .dianxiaoqi-purchase-lookup__body p {
     margin: 0 0 6px;
     font-weight: 600;
   }
-  .wishop-purchase-lookup__body ul {
+  .dianxiaoqi-purchase-lookup__body ul {
     margin: 0;
     padding-left: 18px;
   }
-  .wishop-purchase-lookup__body li,
-  .wishop-purchase-lookup small {
+  .dianxiaoqi-purchase-lookup__body li,
+  .dianxiaoqi-purchase-lookup small {
     overflow-wrap: anywhere;
   }
-  .wishop-purchase-lookup__actions {
+  .dianxiaoqi-purchase-lookup__actions {
     margin-top: 8px;
   }
-  .wishop-purchase-lookup__actions button {
+  .dianxiaoqi-purchase-lookup__actions button {
     height: 30px;
     padding: 0 10px;
     border: 1px solid #fa8c16;
@@ -245,16 +255,20 @@ export const toolbarCss = `
     color: #fff;
     cursor: pointer;
   }
-  .wishop-purchase-lookup__actions button:disabled {
+  .dianxiaoqi-purchase-lookup__actions button:disabled {
     cursor: not-allowed;
     opacity: 0.65;
   }
-  .wishop-work-tab-notice {
+  .dianxiaoqi-work-tab-notice {
     box-sizing: border-box;
     position: fixed;
     top: 12px;
-    left: 50%;
-    transform: translateX(-50%);
+    /* 默认靠右上角，避免遮挡页面主体内容（尤其是淘宝登录页的二维码，位于页面中央）。 */
+    right: 16px;
+    left: auto;
+    transform: none;
+    width: min(360px, calc(100vw - 32px));
+    padding: 8px 10px;
     z-index: 2147483647;
     width: min(520px, calc(100vw - 32px));
     padding: 10px 12px;
@@ -266,47 +280,20 @@ export const toolbarCss = `
     font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     pointer-events: auto;
   }
-  .wishop-work-tab-notice--shipping {
-    top: 12px;
-    right: 16px;
-    left: auto;
-    transform: none;
-    width: min(360px, calc(100vw - 32px));
-    padding: 8px 10px;
-  }
-  .wishop-work-tab-notice--task {
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: min(640px, calc(100vw - 48px));
-    padding: 28px 32px;
-    text-align: center;
-    border-color: rgba(250, 140, 22, 0.38);
-    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.2);
-  }
-  .wishop-work-tab-notice__header {
+  /* shipping 与 task 两种角色共用右上角轻量提示条，避免遮挡页面主体内容。 */
+  .dianxiaoqi-work-tab-notice__header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
     gap: 8px;
   }
-  .wishop-work-tab-notice strong {
+  .dianxiaoqi-work-tab-notice strong {
     display: block;
     margin-bottom: 2px;
     color: #1677ff;
     font-size: 14px;
   }
-  .wishop-work-tab-notice--task strong {
-    margin-bottom: 10px;
-    color: #fa8c16;
-    font-size: 22px;
-    line-height: 30px;
-  }
-  .wishop-work-tab-notice--task span {
-    font-size: 15px;
-    line-height: 24px;
-  }
-  .wishop-work-tab-notice__close {
+  .dianxiaoqi-work-tab-notice__close {
     width: 24px;
     height: 24px;
     padding: 0;
@@ -318,23 +305,20 @@ export const toolbarCss = `
     flex: 0 0 auto;
     line-height: 20px;
   }
-  .wishop-work-tab-notice__close:hover {
+  .dianxiaoqi-work-tab-notice__close:hover {
     border-color: #1677ff;
     color: #1677ff;
   }
-  .wishop-work-tab-notice span {
+  .dianxiaoqi-work-tab-notice span {
     display: block;
     color: #595959;
     overflow-wrap: anywhere;
   }
-  .wishop-work-tab-notice__footer {
+  .dianxiaoqi-work-tab-notice__footer {
     margin-top: 8px;
   }
-  .wishop-work-tab-notice__state {
+  .dianxiaoqi-work-tab-notice__state {
     color: #8c8c8c;
     font-size: 12px;
-  }
-  .wishop-work-tab-notice--task .wishop-work-tab-notice__state {
-    font-size: 13px;
   }
 `;

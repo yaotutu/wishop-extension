@@ -28,7 +28,7 @@ export async function mountTaobaoToolbar(
    * the merchant page.
    */
   const ui = await createShadowRootUi<Root>(ctx, {
-    name: 'wishop-shipping-toolbar',
+    name: 'dianxiaoqi-shipping-toolbar',
     position: 'overlay',
     alignment: 'top-right',
     zIndex: 2147483647,

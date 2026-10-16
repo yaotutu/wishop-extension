@@ -1,8 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { Account, Config, FullAccount } from '../../shared/types';
 import { extensionDb, type AccountRecord } from '../db/extension-db.ts';
-import { DEFAULT_TASK_CONFIG } from './core.ts';
+import { DEFAULT_PRODUCT_AUDIT_CONFIG } from './core.ts';
 import { ensureAccountWorkspace } from './workspace-repository.ts';
+import { DuplicateAppIdError } from './account-errors.ts';
 
 const ACTIVE_ACCOUNT_ID_KEY = 'activeAccountId';
 
@@ -37,9 +38,8 @@ export async function getAccount(accountId: string): Promise<FullAccount | undef
   const workspace = await ensureAccountWorkspace(accountId);
   return {
     ...toAccount(account),
-    taskConfig: workspace.taskConfig,
-    violationWords: workspace.rules.violationWords,
-    listingLogs: [],
+    productAuditConfig: workspace.productAuditConfig,
+    productAuditLogs: [],
     violationLogs: [],
     productSources: workspace.productSources,
     orderAssociations: workspace.orderAssociations,
@@ -53,9 +53,8 @@ export async function addAccount(name: string, config: Config): Promise<FullAcco
     id: uuidv4(),
     name,
     config,
-    taskConfig: DEFAULT_TASK_CONFIG,
-    violationWords: [],
-    listingLogs: [],
+    productAuditConfig: DEFAULT_PRODUCT_AUDIT_CONFIG,
+    productAuditLogs: [],
     violationLogs: [],
     productSources: [],
     orderAssociations: [],
@@ -63,6 +62,13 @@ export async function addAccount(name: string, config: Config): Promise<FullAcco
     createdAt: timestamp,
   };
   await extensionDb.transaction('rw', extensionDb.accounts, extensionDb.accountWorkspaces, async () => {
+    // 按 appId 查重：Dexie 的 accounts 表把 appId 声明为普通索引（非唯一），
+    // 所以同一 appId 在数据层可以并存多条；这里在事务内显式拒绝重复新增，
+    // 既兜住批量导入的并发/二次提交，也防止「添加店铺」弹窗重复提交。
+    const existing = await extensionDb.accounts.where('appId').equals(config.appId).first();
+    if (existing) {
+      throw new DuplicateAppIdError({ appId: config.appId, existingName: existing.name });
+    }
     await extensionDb.accounts.put({
       id: account.id,
       appId: config.appId,

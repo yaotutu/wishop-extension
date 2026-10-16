@@ -101,8 +101,8 @@ function recentScanConfig(options: FetchRecentOrdersOptions): {
 }
 
 async function defaultResolveWxOrderClient(accountId: string): Promise<WxOrderClient> {
-  const { getClient } = await import('../wxshop/client-registry');
-  return getClient(accountId);
+  const { getOrdersClient } = await import('../wxshop/client-registry');
+  return getOrdersClient(accountId);
 }
 
 function assertValidTimeRange(

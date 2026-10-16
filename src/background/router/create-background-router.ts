@@ -7,6 +7,9 @@ import { createOrderRuntimeHandlers } from '../runtime-handlers/order-handlers';
 import { createOrderAssociationRuntimeHandlers } from '../runtime-handlers/order-association-handlers';
 import { createPurchaseLookupRuntimeHandlers } from '../runtime-handlers/purchase-lookup-handlers';
 import { createRealAddressRuntimeHandlers } from '../runtime-handlers/real-address-handlers';
+import { createProductRuntimeHandlers } from '../runtime-handlers/product-handlers';
+import { createProductCopyRuntimeHandlers } from '../runtime-handlers/product-copy-handlers';
+import { createProductAuditRuntimeHandlers } from '../runtime-handlers/product-audit-handlers';
 import { createProductSourceRuntimeHandlers } from '../runtime-handlers/product-source-handlers';
 import { createQuotaRuntimeHandlers } from '../runtime-handlers/quota-handlers';
 import { createRuleRuntimeHandlers } from '../runtime-handlers/rule-handlers';
@@ -14,14 +17,16 @@ import { createSchedulerRuntimeHandlers } from '../runtime-handlers/scheduler-ha
 import { createSettingsRuntimeHandlers } from '../runtime-handlers/settings-handlers';
 import { createShippingRuntimeHandlers } from '../runtime-handlers/shipping-handlers';
 import { createTaobaoWorkspaceRuntimeHandlers } from '../runtime-handlers/taobao-workspace-handlers';
+import { createTaobaoLoginRuntimeHandlers } from '../runtime-handlers/taobao-login-handlers';
 import { createTaobaoRefundRuntimeHandlers } from '../runtime-handlers/taobao-refund-handlers';
-import { createTaskRuntimeHandlers } from '../runtime-handlers/task-handlers';
-import { createViolationRuntimeHandlers } from '../runtime-handlers/violation-handlers';
+import { createComplianceRuntimeHandlers } from '../runtime-handlers/compliance-handlers';
+import { createViolationWordRuntimeHandlers } from '../runtime-handlers/violation-word-handlers';
 import { createLicenseRuntimeHandlers } from '../runtime-handlers/license-handlers';
+import { createWxCategoryDataRuntimeHandlers } from '../runtime-handlers/wx-category-data-handlers';
 import { assertFeatureAccess } from '../licensing/licensing-service';
-import { clearDraftPagination, fetchDrafts, listDraft } from '../services/draft-service';
-import { runTask } from '../services/task-runner-service';
-import { runViolationBatchScan, runViolationStep, type ScanSessionState } from '../services/violation-service';
+import { clearDraftPagination, deleteDraft, fetchDrafts, submitDraftAudit } from '../services/draft-service';
+import { runProductAuditTask } from '../services/product-audit-task-service';
+import { runComplianceBatchScan, runComplianceStep, type ScanSessionState } from '../services/compliance-service';
 import type { SessionManager } from '../utils/session-manager';
 import { createRuntimeRouter, type RuntimeFeatureMap, type RuntimeRouter } from './runtime-router';
 
@@ -66,11 +71,33 @@ const FEATURE_CHANNELS = {
   'productSources:list': 'orders',
   'productSources:set': 'orders',
   'productSources:remove': 'orders',
-  'drafts:fetch': 'listing',
-  'drafts:list': 'listing',
-  'quota:get': 'listing',
-  'listingLogs:get': null,
-  'listingLogs:clear': null,
+  'products:getQrcode': 'orders',
+  'productCopy:list': 'productCopy',
+  'productCopy:remove': 'productCopy',
+  'productCopy:getDraftParameterOptions': 'productCopy',
+  'productCopy:getCreatedProduct': 'productCopy',
+  'productCopy:getDefaultSettings': 'productCopy',
+  'productCopy:saveDefaultSettings': 'productCopy',
+  'productCopy:open': 'productCopy',
+  'productCopy:getCurrentTabSession': 'productCopy',
+  'productCopy:markPageReady': 'productCopy',
+  'productCopy:reportChallenge': 'productCopy',
+  'productCopy:resolveChallenge': 'productCopy',
+  'productCopy:complete': 'productCopy',
+  'productCopy:fail': 'productCopy',
+  'productCopy:suggestWxCategoryFromFullList': 'productCopy',
+  'productCopy:prepareWxDraftBoxProduct': 'productCopy',
+  'productCopy:createPreparedWxDraftBoxProduct': 'productCopy',
+  'productCopy:createWxDraftBoxProduct': 'productCopy',
+  'productCopy:deleteCreatedWxDraftBoxProduct': 'productCopy',
+  'wxCategoryData:downloadProductRules': 'productCopy',
+  'wxCategoryData:getProductRuleCacheStatus': 'productCopy',
+  'drafts:fetch': 'productAudit',
+  'drafts:submitAudit': 'productAudit',
+  'drafts:delete': 'productAudit',
+  'quota:get': 'productAudit',
+  'productAudit:logsGet': null,
+  'productAudit:logsClear': null,
   'activityLogs:list': null,
   'activityLogs:clear': null,
   'notifications:list': null,
@@ -81,35 +108,44 @@ const FEATURE_CHANNELS = {
   'notifications:updatePreference': null,
   'settings:get': null,
   'settings:update': null,
-  'scheduledJobs:list': 'listing',
-  'scheduledJobs:add': 'listing',
-  'scheduledJobs:update': 'listing',
-  'scheduledJobs:remove': 'listing',
-  'scheduledJobs:runNow': 'listing',
-  'task:run': 'listing',
-  'task:stop': 'listing',
-  'taskConfig:get': 'listing',
-  'taskConfig:set': 'listing',
-  'violation:getWords': 'violation',
-  'violation:setWords': 'violation',
-  'violation:batchScan': 'violation',
-  'violation:scanStep': 'violation',
-  'violation:batchDelete': 'violation',
-  'violation:stop': 'violation',
-  'blacklistRules:get': 'listing',
-  'blacklistRules:getDefaultCodes': 'listing',
-  'blacklistRules:set': 'listing',
-  'skipKeywords:get': 'listing',
-  'skipKeywords:set': 'listing',
-  'statusRules:get': 'listing',
-  'statusRules:set': 'listing',
-  'statusRules:reset': 'listing',
+  'scheduledJobs:list': null,
+  'scheduledJobs:add': null,
+  'scheduledJobs:update': null,
+  'scheduledJobs:remove': null,
+  'scheduledJobs:runNow': null,
+  'scheduledJobs:stopRun': null,
+  'productAudit:run': 'productAudit',
+  'productAudit:stop': 'productAudit',
+  'productAudit:precheckCategory': 'productAudit',
+  'productAudit:configGet': 'productAudit',
+  'productAudit:configSet': 'productAudit',
+  'violationWords:getGlobal': 'compliance',
+  'violationWords:setGlobal': 'compliance',
+  'violationWords:getModule': 'compliance',
+  'violationWords:setModule': 'compliance',
+  'violationWords:getDefaults': 'compliance',
+  'violationWords:getSettings': 'compliance',
+  'compliance:batchScan': 'compliance',
+  'compliance:scanStep': 'compliance',
+  'compliance:batchDelete': 'compliance',
+  'compliance:stop': 'compliance',
+  'productAudit:failurePolicyGet': 'productAudit',
+  'productAudit:failurePolicyGetDefaults': 'productAudit',
+  'productAudit:failurePolicySet': 'productAudit',
+  'statusRules:get': 'productAudit',
+  'statusRules:set': 'productAudit',
+  'statusRules:reset': 'productAudit',
   'shipping:open': 'shipping',
   'shipping:getCurrentTabSession': 'shipping',
   'shipping:markPageReady': 'shipping',
   'shipping:complete': 'shipping',
   'shipping:fail': 'shipping',
   'taobaoWorkspace:getCurrentRole': 'shipping',
+  // 淘宝登录态检测不收费，映射到 null；登录态本身是观测能力，不绑定 LicensedFeature。
+  'taobaoLogin:getState': null,
+  'taobaoLogin:probeNow': null,
+  'taobaoLogin:reportFromContent': null,
+  'taobaoLogin:openLoginPage': null,
   'license:get': null,
   'license:activate': null,
   'license:refresh': null,
@@ -123,6 +159,7 @@ interface CreateBackgroundRouterOptions {
   getCurrentTabShippingSession: (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
   getCurrentTabPurchaseLookupSession: (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
   getCurrentTabTaobaoRefundSession: (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
+  getCurrentTabProductCopySession: (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
 }
 
 /**
@@ -142,27 +179,33 @@ export function createBackgroundRouter(options: CreateBackgroundRouterOptions): 
     ...createOrderAssociationRuntimeHandlers(),
     ...createPurchaseLookupRuntimeHandlers(options.getCurrentTabPurchaseLookupSession),
     ...createTaobaoRefundRuntimeHandlers(options.getCurrentTabTaobaoRefundSession),
+    ...createProductCopyRuntimeHandlers(options.getCurrentTabProductCopySession),
+    ...createWxCategoryDataRuntimeHandlers(),
     ...createDraftRuntimeHandlers({
       fetchDrafts,
-      listDraft,
+      submitDraftAudit,
+      deleteDraft,
     }),
+    ...createProductRuntimeHandlers(),
     ...createProductSourceRuntimeHandlers(),
     ...createShippingRuntimeHandlers(options.getCurrentTabShippingSession),
     ...createTaobaoWorkspaceRuntimeHandlers(),
+    ...createTaobaoLoginRuntimeHandlers(),
     ...createSchedulerRuntimeHandlers(),
-    ...createTaskRuntimeHandlers({
-      runTask: (accountId, config) => runTask(accountId, config, options.taskSessions),
-      stopTask(accountId) {
+    ...createProductAuditRuntimeHandlers({
+      run: (accountId, config) => runProductAuditTask(accountId, config, options.taskSessions),
+      stop(accountId) {
         options.taskSessions.stop(accountId);
       },
     }),
-    ...createViolationRuntimeHandlers({
-      batchScan: (accountId, limit) => runViolationBatchScan(accountId, options.scanSessions, limit),
-      scanStep: (accountId, action) => runViolationStep(accountId, options.scanSessions, action),
+    ...createComplianceRuntimeHandlers({
+      batchScan: (accountId, limit) => runComplianceBatchScan(accountId, options.scanSessions, limit),
+      scanStep: (accountId, action) => runComplianceStep(accountId, options.scanSessions, action),
       stop(accountId) {
         options.scanSessions.stop(accountId);
       },
     }),
+    ...createViolationWordRuntimeHandlers(),
     ...createRuleRuntimeHandlers(),
     ...createQuotaRuntimeHandlers(),
     ...createLogRuntimeHandlers(),

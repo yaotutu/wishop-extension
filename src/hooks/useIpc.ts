@@ -4,8 +4,8 @@ export type {
   LogEntry,
   DraftProduct,
   QuotaResult,
-  TaskConfig,
-  TaskCycleResult,
+  ProductAuditTaskConfig,
+  ProductAuditTaskResult,
   Account,
   Order,
   OrderStatus,
@@ -20,10 +20,12 @@ export type { NotificationEntry, NotificationPreference } from '../shared/notifi
 export { useAccounts } from './useAccounts';
 export { useConfig } from './useConfig';
 export { useGlobalSchedulers, useSchedulers } from './useScheduler';
-export type { ListingScheduledJob } from './useScheduler';
+export type { ProductAuditScheduledJob } from './useScheduler';
 export { useActivityLogs } from './useActivityLogs';
 export { useNotifications } from './useNotifications';
-export { useListingLogs } from './useListingLogs';
+export { useProductAuditConfig } from './useProductAuditConfig';
+export { useProductAuditFailurePolicy } from './useProductAuditFailurePolicy';
+export { useProductAuditLogs } from './useProductAuditLogs';
 export { useQuota } from './useQuota';
 export { useDrafts } from './useDrafts';
 export { useOrders } from './useOrders';
@@ -36,6 +38,7 @@ export {
   useOrderSyncStateQuery,
   useOrdersQuery,
   useProductSourcesQuery,
+  useProductQrcodeMutation,
   useRealAddressCachesQuery,
   useRefreshOrdersMutation,
   useSaveOrderAssociationMutation,
@@ -43,4 +46,3 @@ export {
   useShipOrderFromPurchaseMutation,
   useUpdateAppSettingsMutation,
 } from './useOrderQueries';
-export { useTaskConfig } from './useTaskConfig';

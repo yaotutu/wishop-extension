@@ -1,10 +1,23 @@
 import type {
   Account,
-  BlacklistRule,
+  ProductCopyCreatedProductRecord,
+  ProductCopyDefaultSettings,
+  ProductCopyDefaultSettingsPatch,
+  ProductCopyDraftParameterOptions,
+  ProductCopyRecord,
   Config,
+  CreatePreparedWxDraftBoxProductInput,
+  CreateProductCopySessionInput,
+  CreateWxDraftBoxProductInput,
+  CreateWxDraftBoxProductPrepareInput,
+  CreateWxProductDraftSuggestionInput,
+  DeleteCreatedWxDraftBoxProductInput,
+  DeleteCreatedWxDraftBoxProductResult,
   CreateShippingSessionInput,
   DeliveryCompanyOption,
   DraftProduct,
+  DraftProductDeleteInput,
+  DraftProductDeleteResult,
   LicenseActivationInput,
   LicenseState,
   LogEntry,
@@ -25,27 +38,42 @@ import type {
   CreateTaobaoRefundSessionInput,
   ProductSourceBinding,
   ProductSourceItem,
+  ProductQrcodeResult,
+  ProductCopySession,
+  ProductAuditCategoryPrecheckInput,
+  ProductAuditCategoryPrecheckResult,
+  ProductAuditFailurePolicy,
+  ProductAuditTaskConfig,
+  ProductAuditTaskResult,
   PurchaseLookupSession,
   QuotaResult,
   ScheduledJob,
   ScheduledJobInput,
   ScheduledJobView,
   ScheduledJobRunNowResult,
+  ScheduledJobStopRunResult,
   ShippingSession,
   StatusRule,
   TaobaoWorkspaceRole,
+  TaobaoLoginSnapshot,
   TaobaoRefundPrepareSnapshot,
   TaobaoRefundSession,
   TaobaoSecurityChallengeSnapshot,
   TaobaoPurchaseOrderSnapshot,
-  TaskConfig,
-  TaskCycleResult,
-  ViolationMatch,
-  ViolationScanResult,
+  TaobaoProductSnapshot,
+  ScanItem,
+  ComplianceScanResult,
+  ViolationWordModule,
+  SyncWxCategoryProductRulesInput,
+  WxDraftBoxProductPrepareResult,
+  WxProductDraftSuggestionResult,
+  WxProductDraftCreationResult,
+  SyncWxCategoryProductRulesResult,
+  WxCategoryProductRuleCacheStatus,
 } from './types';
 import type { ActivityLogEntry } from './activity-log';
 import type { NotificationEntry, NotificationPreference } from './notification';
-import type { AppSettings, AppSettingsPatch } from './settings';
+import type { AppSettings, AppSettingsPatch, ViolationWordsSettings } from './settings';
 import type { RuntimeArgs, RuntimeChannel, RuntimeResult } from './runtime-channels';
 
 let devRuntimeReloadScheduled = false;
@@ -57,13 +85,13 @@ function shouldAutoReloadRuntime(errorMessage: string): boolean {
 function scheduleDevRuntimeReload(errorMessage: string): void {
   if (devRuntimeReloadScheduled) return;
   devRuntimeReloadScheduled = true;
-  console.warn(`[wishop] ${errorMessage}。开发环境检测到前后台版本不一致，正在自动重新加载插件。`);
+  console.warn(`[dianxiaoqi] ${errorMessage}。开发环境检测到前后台版本不一致，正在自动重新加载插件。`);
   window.setTimeout(() => {
     try {
       const runtime = chrome.runtime as typeof chrome.runtime & { reload?: () => void };
       runtime.reload?.();
     } catch (error) {
-      console.warn('[wishop] 自动重新加载插件失败，请手动在 chrome://extensions 重新加载。', error);
+      console.warn('[dianxiaoqi] 自动重新加载插件失败，请手动在 chrome://extensions 重新加载。', error);
     }
   }, 300);
 }
@@ -106,7 +134,8 @@ export const extensionApi = {
   },
   drafts: {
     fetch: (accountId: string, reset?: boolean): Promise<{ products: DraftProduct[]; hasMore: boolean }> => invoke('drafts:fetch', accountId, reset),
-    list: (accountId: string, productId: string): Promise<{ success: boolean; error?: string }> => invoke('drafts:list', accountId, productId),
+    submitAudit: (accountId: string, productId: string): Promise<{ success: boolean; error?: string }> => invoke('drafts:submitAudit', accountId, productId),
+    delete: (accountId: string, input: DraftProductDeleteInput): Promise<DraftProductDeleteResult> => invoke('drafts:delete', accountId, input),
   },
   orders: {
     list: (
@@ -126,14 +155,17 @@ export const extensionApi = {
     shipFromPurchase: (input: ShipOrderFromPurchaseInput): Promise<ShipOrderFromPurchaseResult> =>
       invoke('orders:shipFromPurchase', input),
   },
-  orderAssociations: {
-    list: (accountId: string): Promise<OrderAssociation[]> => invoke('orderAssociations:list', accountId),
-    set: (
-      accountId: string,
-      orderId: string,
-      input: Pick<OrderAssociation, 'internalRemark' | 'linkedOrders'>,
-    ): Promise<OrderAssociation> => invoke('orderAssociations:set', accountId, orderId, input),
-  },
+ orderAssociations: {
+   list: (accountId: string): Promise<OrderAssociation[]> => invoke('orderAssociations:list', accountId),
+   set: (
+     accountId: string,
+     orderId: string,
+     input: Pick<OrderAssociation, 'internalRemark' | 'linkedOrders'>,
+   ): Promise<OrderAssociation> => invoke('orderAssociations:set', accountId, orderId, input),
+   // 后台自动写入关联（如备注提取）后通知前端刷新。
+   onChanged: (callback: (payload: { accountId: string }) => void) =>
+     onRuntimeEvent('orderAssociations:changed', callback),
+ },
   purchaseLookup: {
     open: (input: CreatePurchaseLookupSessionInput): Promise<PurchaseLookupSession> => invoke('purchaseLookup:open', input),
     getCurrentTabSession: (): Promise<PurchaseLookupSession | null> => invoke('purchaseLookup:getCurrentTabSession'),
@@ -180,6 +212,59 @@ export const extensionApi = {
     set: (accountId: string, productId: string, sources: ProductSourceItem[]): Promise<ProductSourceBinding> => invoke('productSources:set', accountId, productId, sources),
     remove: (accountId: string, productId: string, sourceId: string): Promise<ProductSourceBinding> => invoke('productSources:remove', accountId, productId, sourceId),
   },
+  products: {
+    getQrcode: (accountId: string, productId: string): Promise<ProductQrcodeResult> => invoke('products:getQrcode', accountId, productId),
+  },
+  productCopy: {
+    list: (): Promise<ProductCopyRecord[]> => invoke('productCopy:list'),
+    remove: (copyId: string): Promise<void> => invoke('productCopy:remove', copyId),
+    getDraftParameterOptions: (accountId: string): Promise<ProductCopyDraftParameterOptions> =>
+      invoke('productCopy:getDraftParameterOptions', accountId),
+    getCreatedProduct: (accountId: string, copyId: string): Promise<ProductCopyCreatedProductRecord | null> =>
+      invoke('productCopy:getCreatedProduct', accountId, copyId),
+    getDefaultSettings: (accountId: string): Promise<ProductCopyDefaultSettings> =>
+      invoke('productCopy:getDefaultSettings', accountId),
+    saveDefaultSettings: (accountId: string, patch: ProductCopyDefaultSettingsPatch): Promise<ProductCopyDefaultSettings> =>
+      invoke('productCopy:saveDefaultSettings', accountId, patch),
+    open: (input: CreateProductCopySessionInput): Promise<ProductCopySession> =>
+      invoke('productCopy:open', input),
+    getCurrentTabSession: (): Promise<ProductCopySession | null> =>
+      invoke('productCopy:getCurrentTabSession'),
+    markPageReady: (sessionId: string): Promise<ProductCopySession> =>
+      invoke('productCopy:markPageReady', sessionId),
+    reportChallenge: (
+      sessionId: string,
+      snapshot: TaobaoSecurityChallengeSnapshot,
+    ): Promise<ProductCopySession> => invoke('productCopy:reportChallenge', sessionId, snapshot),
+    resolveChallenge: (sessionId: string): Promise<ProductCopySession> =>
+      invoke('productCopy:resolveChallenge', sessionId),
+    complete: (sessionId: string, snapshot: TaobaoProductSnapshot): Promise<ProductCopyRecord> =>
+      invoke('productCopy:complete', sessionId, snapshot),
+    fail: (sessionId: string, error: string): Promise<ProductCopySession> =>
+      invoke('productCopy:fail', sessionId, error),
+    suggestWxCategoryFromFullList: (input: CreateWxProductDraftSuggestionInput): Promise<WxProductDraftSuggestionResult> =>
+      invoke('productCopy:suggestWxCategoryFromFullList', input),
+    prepareWxDraftBoxProduct: (input: CreateWxDraftBoxProductPrepareInput): Promise<WxDraftBoxProductPrepareResult> =>
+      invoke('productCopy:prepareWxDraftBoxProduct', input),
+    createPreparedWxDraftBoxProduct: (input: CreatePreparedWxDraftBoxProductInput): Promise<WxProductDraftCreationResult> =>
+      invoke('productCopy:createPreparedWxDraftBoxProduct', input),
+    createWxDraftBoxProduct: (input: CreateWxDraftBoxProductInput): Promise<WxProductDraftCreationResult> =>
+      invoke('productCopy:createWxDraftBoxProduct', input),
+    deleteCreatedWxDraftBoxProduct: (input: DeleteCreatedWxDraftBoxProductInput): Promise<DeleteCreatedWxDraftBoxProductResult> =>
+      invoke('productCopy:deleteCreatedWxDraftBoxProduct', input),
+    onCompleted: (callback: (listing: ProductCopyRecord) => void) =>
+      onRuntimeEvent('productCopy:completed', callback),
+    onFailed: (callback: (payload: { url: string; error: string }) => void) =>
+      onRuntimeEvent('productCopy:failed', callback),
+    onChallenge: (callback: (payload: { url: string; reason: string }) => void) =>
+      onRuntimeEvent('productCopy:challenge', callback),
+  },
+  wxCategoryData: {
+    downloadProductRules: (input: SyncWxCategoryProductRulesInput): Promise<SyncWxCategoryProductRulesResult> =>
+      invoke('wxCategoryData:downloadProductRules', input),
+    getProductRuleCacheStatus: (): Promise<WxCategoryProductRuleCacheStatus> =>
+      invoke('wxCategoryData:getProductRuleCacheStatus'),
+  },
   shipping: {
     open: (input: CreateShippingSessionInput): Promise<ShippingSession> => invoke('shipping:open', input),
     getCurrentTabSession: (): Promise<ShippingSession | null> => invoke('shipping:getCurrentTabSession'),
@@ -195,13 +280,31 @@ export const extensionApi = {
   taobaoWorkspace: {
     getCurrentRole: (): Promise<TaobaoWorkspaceRole | null> => invoke('taobaoWorkspace:getCurrentRole'),
   },
+  // 淘宝登录态：读取后台内存态快照、触发即时探测、content 主动回报，并订阅状态变化事件。
+  taobaoLogin: {
+    getState: (): Promise<TaobaoLoginSnapshot> => invoke('taobaoLogin:getState'),
+    probeNow: (): Promise<TaobaoLoginSnapshot> => invoke('taobaoLogin:probeNow'),
+    reportFromContent: (snapshot: TaobaoLoginSnapshot): Promise<void> => invoke('taobaoLogin:reportFromContent', snapshot),
+    openLoginPage: (): Promise<void> => invoke('taobaoLogin:openLoginPage'),
+    onLoginChanged: (callback: (snapshot: TaobaoLoginSnapshot) => void) =>
+      onRuntimeEvent('taobaoLogin:changed', callback),
+  },
   quota: {
     get: (accountId: string, force = false): Promise<QuotaResult> => invoke('quota:get', accountId, force),
   },
-  listingLogs: {
-    get: (accountId: string): Promise<LogEntry[]> => invoke('listingLogs:get', accountId),
-    clear: (accountId: string): Promise<void> => invoke('listingLogs:clear', accountId),
-    onAdded: (accountId: string, callback: (log: LogEntry) => void) => onRuntimeEvent(`listingLog:added:${accountId}`, callback),
+  productAudit: {
+    getConfig: (accountId: string): Promise<ProductAuditTaskConfig> => invoke('productAudit:configGet', accountId),
+    setConfig: (accountId: string, config: ProductAuditTaskConfig): Promise<void> => invoke('productAudit:configSet', accountId, config),
+    run: (accountId: string, config: ProductAuditTaskConfig): Promise<ProductAuditTaskResult> => invoke('productAudit:run', accountId, config),
+    stop: (accountId: string): Promise<void> => invoke('productAudit:stop', accountId),
+    precheckCategory: (input: ProductAuditCategoryPrecheckInput): Promise<ProductAuditCategoryPrecheckResult> =>
+      invoke('productAudit:precheckCategory', input),
+    getLogs: (accountId: string): Promise<LogEntry[]> => invoke('productAudit:logsGet', accountId),
+    clearLogs: (accountId: string): Promise<void> => invoke('productAudit:logsClear', accountId),
+    onLogAdded: (accountId: string, callback: (log: LogEntry) => void) => onRuntimeEvent(`productAuditLog:added:${accountId}`, callback),
+    getFailurePolicy: (): Promise<ProductAuditFailurePolicy> => invoke('productAudit:failurePolicyGet'),
+    getDefaultFailurePolicy: (): Promise<ProductAuditFailurePolicy> => invoke('productAudit:failurePolicyGetDefaults'),
+    setFailurePolicy: (policy: ProductAuditFailurePolicy): Promise<void> => invoke('productAudit:failurePolicySet', policy),
   },
   activityLogs: {
     list: (): Promise<ActivityLogEntry[]> => invoke('activityLogs:list'),
@@ -232,36 +335,30 @@ export const extensionApi = {
     update: (jobId: string, patch: Partial<ScheduledJob>): Promise<void> => invoke('scheduledJobs:update', jobId, patch),
     remove: (jobId: string): Promise<void> => invoke('scheduledJobs:remove', jobId),
     runNow: (jobId: string): Promise<ScheduledJobRunNowResult> => invoke('scheduledJobs:runNow', jobId),
+    stopRun: (jobId: string): Promise<ScheduledJobStopRunResult> => invoke('scheduledJobs:stopRun', jobId),
   },
-  taskConfig: {
-    get: (accountId: string): Promise<TaskConfig> => invoke('taskConfig:get', accountId),
-    set: (accountId: string, config: TaskConfig): Promise<void> => invoke('taskConfig:set', accountId, config),
+  // 违禁词库管理（全局通用 + 模块级 + 系统默认 + 设置），与账号无关。
+  violationWords: {
+    getGlobal: (): Promise<string[]> => invoke('violationWords:getGlobal'),
+    setGlobal: (words: string[]): Promise<void> => invoke('violationWords:setGlobal', words),
+    getModule: (module: ViolationWordModule): Promise<string[]> => invoke('violationWords:getModule', module),
+    setModule: (module: ViolationWordModule, words: string[]): Promise<void> => invoke('violationWords:setModule', module, words),
+    // 读取系统默认违禁词（按分类 + 合并总数 + 来源/版本元信息），用于设置页只读展示。
+    getDefaults: (): Promise<{ words: string[]; totalCount: number; violationWords: string[]; brands: string[]; source: string; updatedAt: string; version: number }> => invoke('violationWords:getDefaults'),
+    // 读取违禁词设置（当前只含是否启用系统默认词的开关）。
+    getSettings: (): Promise<ViolationWordsSettings> => invoke('violationWords:getSettings'),
   },
-  task: {
-    run: (accountId: string, config: TaskConfig): Promise<TaskCycleResult> => invoke('task:run', accountId, config),
-    stop: (accountId: string): Promise<void> => invoke('task:stop', accountId),
-  },
-  violation: {
-    getWords: (accountId: string): Promise<string[]> => invoke('violation:getWords', accountId),
-    setWords: (accountId: string, words: string[]): Promise<void> => invoke('violation:setWords', accountId, words),
-    batchScan: (accountId: string, limit?: number): Promise<ViolationScanResult> => invoke('violation:batchScan', accountId, limit),
+  // 商品合规扫描：针对具体店铺草稿箱扫描违禁词。词库来源是全局通用词库。
+  compliance: {
+    batchScan: (accountId: string, limit?: number): Promise<ComplianceScanResult> => invoke('compliance:batchScan', accountId, limit),
     scanStep: (accountId: string, action: 'next' | 'skip' | 'delete'): Promise<
       | { type: 'done'; scanned?: number; reason?: string }
       | { type: 'stopped'; reason?: string }
-      | ({ type: 'violation'; scanned: number } & ViolationMatch)
-    > => invoke('violation:scanStep', accountId, action),
-    batchDelete: (accountId: string, violations: ViolationMatch[]): Promise<{ deleted: number; errors: number; stopped: boolean }> => invoke('violation:batchDelete', accountId, violations),
-    stop: (accountId: string): Promise<void> => invoke('violation:stop', accountId),
-    onLog: (accountId: string, callback: (log: LogEntry) => void) => onRuntimeEvent(`violationLog:added:${accountId}`, callback),
-  },
-  blacklistRules: {
-    get: (): Promise<BlacklistRule[]> => invoke('blacklistRules:get'),
-    getDefaultCodes: (): Promise<number[]> => invoke('blacklistRules:getDefaultCodes'),
-    set: (rules: BlacklistRule[]): Promise<void> => invoke('blacklistRules:set', rules),
-  },
-  skipKeywords: {
-    get: (): Promise<string[]> => invoke('skipKeywords:get'),
-    set: (keywords: string[]): Promise<void> => invoke('skipKeywords:set', keywords),
+      | ({ type: 'violation'; scanned: number } & ScanItem)
+    > => invoke('compliance:scanStep', accountId, action),
+    batchDelete: (accountId: string, violations: ScanItem[]): Promise<{ deleted: number; errors: number; stopped: boolean }> => invoke('compliance:batchDelete', accountId, violations),
+    stop: (accountId: string): Promise<void> => invoke('compliance:stop', accountId),
+    onLog: (accountId: string, callback: (log: LogEntry) => void) => onRuntimeEvent(`complianceLog:added:${accountId}`, callback),
   },
   statusRules: {
     get: (): Promise<StatusRule[]> => invoke('statusRules:get'),

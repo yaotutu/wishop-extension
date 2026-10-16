@@ -3,7 +3,7 @@ import test from 'node:test';
 import 'fake-indexeddb/auto';
 import { extensionDb } from '../src/background/db/extension-db.ts';
 import { addAccount, getAccount } from '../src/background/store/account-repository.ts';
-import { getTaskConfig, setTaskConfig } from '../src/background/store/task-config-repository.ts';
+import { getProductAuditConfig, setProductAuditConfig } from '../src/background/store/product-audit-config-repository.ts';
 import { getProductSources, setProductSources } from '../src/background/store/product-source-repository.ts';
 import { getOrderAssociations, setOrderAssociation } from '../src/background/store/order-association-repository.ts';
 import { getRealAddressCaches, setRealAddressCache } from '../src/background/store/real-address-repository.ts';
@@ -17,16 +17,20 @@ test('account repositories create account metadata and workspace data in Indexed
   await resetDb();
 
   const account = await addAccount('店铺一', { appId: 'app-1', appSecret: 'secret-1' });
-  await setTaskConfig(account.id, {
-    listUnreviewed: false,
-    listUnreviewedQuantity: 20,
-    autoDeleteFailed: false,
+  await setProductAuditConfig(account.id, {
+    submitUnauditedDrafts: false,
+    submitLimit: 20,
   });
   await setProductSources(account.id, 'product-1', [{
     id: '',
     url: 'https://item.taobao.com/item.htm?id=1',
     quantity: 2,
     remark: '主货源',
+    sourceType: 'productCopy',
+    sourcePlatform: 'taobao',
+    sourceItemId: '1',
+    sourceTitle: '淘宝货源商品',
+    createdBy: 'productCopy',
     createdAt: 0,
     updatedAt: 0,
   }]);
@@ -49,10 +53,12 @@ test('account repositories create account metadata and workspace data in Indexed
   const workspace = await extensionDb.accountWorkspaces.get(account.id);
 
   assert.equal(storedAccount?.name, '店铺一');
-  assert.equal(workspace?.taskConfig.listUnreviewed, false);
+  assert.equal(workspace?.productAuditConfig.submitUnauditedDrafts, false);
   assert.equal((await getAccount(account.id))?.config.appId, 'app-1');
-  assert.equal((await getTaskConfig(account.id)).listUnreviewedQuantity, 20);
+  assert.equal((await getProductAuditConfig(account.id)).submitLimit, 20);
   assert.equal((await getProductSources(account.id))[0]?.productId, 'product-1');
+  assert.equal((await getProductSources(account.id))[0]?.sources[0]?.sourceType, 'productCopy');
+  assert.equal((await getProductSources(account.id))[0]?.sources[0]?.sourceItemId, '1');
   assert.equal((await getOrderAssociations(account.id))[0]?.internalRemark, '已配货');
   assert.equal((await getRealAddressCaches(account.id))[0]?.address.user_name, '张三');
   assert.equal((await extensionDb.accountSyncStates.get(account.id))?.dirty, true);

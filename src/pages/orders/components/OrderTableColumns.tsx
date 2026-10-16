@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, Flex, Image, Space, Tag, Typography } from 'antd';
-import { CopyOutlined, EyeOutlined, LinkOutlined, PictureOutlined, RollbackOutlined, SendOutlined, ShoppingCartOutlined, SyncOutlined } from '@ant-design/icons';
+import { CopyOutlined, EyeOutlined, LinkOutlined, PictureOutlined, QrcodeOutlined, RollbackOutlined, SendOutlined, ShoppingCartOutlined, SyncOutlined } from '@ant-design/icons';
 import type { Order, OrderAssociation, OrderProductInfo, OrderRealAddressCache, ProductSourceItem } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
 import { formatOrderAddressLine, getOrderPhoneDisplay } from '../../../shared/address-format';
@@ -32,6 +32,7 @@ interface CreateOrderColumnsOptions {
   preparingTaobaoRefundOrderIds: Set<string>;
   onCopyText: (text: string | undefined, label: string) => void;
   onCopyImage: (imageUrl?: string) => void;
+  onOpenProductQrcode: (order: OrderTableRecord, product: OrderProductInfo) => void;
   onCopyAddress: (cache: OrderRealAddressCache) => void;
   onDecodeAddress: (order: OrderTableRecord) => void;
   onRefreshAddress: (order: OrderTableRecord) => void;
@@ -146,6 +147,16 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
                   style={{ padding: 0, height: 20, fontSize: 12 }}
                 >
                   复制标题
+                </Button>
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<QrcodeOutlined />}
+                  disabled={!product?.product_id}
+                  onClick={() => product && options.onOpenProductQrcode(record, product)}
+                  style={{ padding: 0, height: 20, fontSize: 12 }}
+                >
+                  商品码
                 </Button>
               </Space>
               <br />

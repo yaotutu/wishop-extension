@@ -6,13 +6,14 @@ export type NotificationUrgency = 'silent' | 'normal' | 'important';
 
 export type NotificationTopic =
   | 'taobao.security_challenge'
+  | 'taobao.login_required'
   | 'orders.auto_shipment_completed'
   | 'orders.auto_shipment_failed'
   | 'orders.shipment_failed'
   | 'orders.purchase_lookup_failed'
   | 'orders.refund_failed'
-  | 'listing.audit_failed'
-  | 'listing.audit_warning'
+  | 'productAudit.audit_failed'
+  | 'productAudit.audit_warning'
   | 'scheduled_job.failed'
   | 'system.credential_invalid';
 
@@ -54,19 +55,21 @@ export const DEFAULT_NOTIFICATION_PREFERENCE: NotificationPreference = {
   inAppEnabled: true,
   topicEnabled: {
     'taobao.security_challenge': true,
+    'taobao.login_required': true,
     'orders.auto_shipment_completed': true,
     'orders.auto_shipment_failed': true,
     'orders.shipment_failed': true,
     'orders.purchase_lookup_failed': true,
     'orders.refund_failed': true,
-    'listing.audit_failed': true,
-    'listing.audit_warning': true,
+    'productAudit.audit_failed': true,
+    'productAudit.audit_warning': true,
     'scheduled_job.failed': true,
     'system.credential_invalid': true,
   },
   domainEnabled: {
-    listing: true,
-    violation: true,
+    productCopy: true,
+    productAudit: true,
+    compliance: true,
     orders: true,
     store: true,
     scheduler: true,
@@ -88,6 +91,13 @@ export const NOTIFICATION_TOPIC_DEFINITIONS: NotificationTopicDefinition[] = [
     domain: 'orders',
     label: '淘宝/天猫需要处理',
     description: '工作页遇到登录、安全验证、访问受限等需要人工处理的情况。',
+    defaultUrgency: 'important',
+  },
+  {
+    topic: 'taobao.login_required',
+    domain: 'system',
+    label: '淘宝未登录',
+    description: '检测到淘宝/天猫未登录，相关读取与发货操作将被拦截，请先登录淘宝。',
     defaultUrgency: 'important',
   },
   {
@@ -126,15 +136,15 @@ export const NOTIFICATION_TOPIC_DEFINITIONS: NotificationTopicDefinition[] = [
     defaultUrgency: 'important',
   },
   {
-    topic: 'listing.audit_failed',
-    domain: 'listing',
+    topic: 'productAudit.audit_failed',
+    domain: 'productAudit',
     label: '商品提审失败',
     description: '手动或定时商品提审任务失败。',
     defaultUrgency: 'important',
   },
   {
-    topic: 'listing.audit_warning',
-    domain: 'listing',
+    topic: 'productAudit.audit_warning',
+    domain: 'productAudit',
     label: '商品提审异常摘要',
     description: '商品提审完成但存在跳过、错误、停止或配额异常。',
     defaultUrgency: 'normal',
@@ -154,3 +164,27 @@ export const NOTIFICATION_TOPIC_DEFINITIONS: NotificationTopicDefinition[] = [
     defaultUrgency: 'important',
   },
 ];
+
+export function normalizeNotificationPreference(value: unknown): NotificationPreference {
+  const input = value as Partial<NotificationPreference> | undefined;
+  const topicEnabled = Object.fromEntries(
+    NOTIFICATION_TOPIC_DEFINITIONS.map(definition => [
+      definition.topic,
+      input?.topicEnabled?.[definition.topic] ?? DEFAULT_NOTIFICATION_PREFERENCE.topicEnabled[definition.topic],
+    ]),
+  ) as Record<NotificationTopic, boolean>;
+
+  const domains = Object.keys(DEFAULT_NOTIFICATION_PREFERENCE.domainEnabled) as ActivityLogDomain[];
+  const domainEnabled = Object.fromEntries(
+    domains.map(domain => [
+      domain,
+      input?.domainEnabled?.[domain] ?? DEFAULT_NOTIFICATION_PREFERENCE.domainEnabled[domain],
+    ]),
+  ) as Record<ActivityLogDomain, boolean>;
+
+  return {
+    inAppEnabled: input?.inAppEnabled ?? DEFAULT_NOTIFICATION_PREFERENCE.inAppEnabled,
+    topicEnabled,
+    domainEnabled,
+  };
+}

@@ -17,6 +17,14 @@ export async function updateAppSettings(patch: AppSettingsPatch): Promise<AppSet
       ...current.shipmentCheck,
       ...patch.shipmentCheck,
     },
+    purchaseLink: {
+      ...current.purchaseLink,
+      ...patch.purchaseLink,
+    },
+    aiService: {
+      ...current.aiService,
+      ...patch.aiService,
+    },
   });
   await updateAccountWorkspace(APP_SETTINGS_WORKSPACE_ID, workspace => {
     workspace.appSettings = next;

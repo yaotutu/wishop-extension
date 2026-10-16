@@ -1,23 +1,32 @@
 import type { AccountWorkspaceRecord } from '../db/extension-db.ts';
 import { extensionDb } from '../db/extension-db.ts';
-import { DEFAULT_NOTIFICATION_PREFERENCE } from '../../shared/notification.ts';
+import { DEFAULT_NOTIFICATION_PREFERENCE, normalizeNotificationPreference } from '../../shared/notification.ts';
 import { DEFAULT_APP_SETTINGS, normalizeAppSettings } from '../../shared/settings.ts';
-import { DEFAULT_BLACKLIST, DEFAULT_STATUS_RULES, DEFAULT_TASK_CONFIG } from './core.ts';
+import {
+  DEFAULT_PRODUCT_AUDIT_CONFIG,
+  DEFAULT_PRODUCT_AUDIT_FAILURE_DEFAULT_ACTION,
+  DEFAULT_PRODUCT_AUDIT_FAILURE_RULES,
+  DEFAULT_STATUS_RULES,
+  normalizeProductAuditTaskConfig,
+} from './core.ts';
 import { markAccountDirty } from './account-sync-state-repository.ts';
 
 export function createDefaultAccountWorkspace(accountId: string, now = Date.now()): AccountWorkspaceRecord {
   return {
     accountId,
-    taskConfig: DEFAULT_TASK_CONFIG,
+    productAuditConfig: DEFAULT_PRODUCT_AUDIT_CONFIG,
     scheduledJobs: [],
     productSources: [],
     orderAssociations: [],
     realAddressCaches: [],
     rules: {
-      skipKeywords: [],
-      blacklistRules: [],
+      productAuditRules: DEFAULT_PRODUCT_AUDIT_FAILURE_RULES,
+      productAuditDefaultFailureAction: DEFAULT_PRODUCT_AUDIT_FAILURE_DEFAULT_ACTION,
       statusRules: [],
-      violationWords: [],
+      // 违禁词已全局化，账号 workspace 不再保留账号级词库。
+      // 这两个全局字段仅会在 '__global_rules__' 这条全局 workspace 上被实际读写。
+      globalViolationWords: [],
+      moduleViolationWords: {},
     },
     appSettings: DEFAULT_APP_SETTINGS,
     notificationPreference: DEFAULT_NOTIFICATION_PREFERENCE,
@@ -29,19 +38,22 @@ export function createDefaultAccountWorkspace(accountId: string, now = Date.now(
 export function normalizeAccountWorkspace(workspace: AccountWorkspaceRecord): AccountWorkspaceRecord {
   return {
     ...workspace,
-    taskConfig: workspace.taskConfig || DEFAULT_TASK_CONFIG,
-    scheduledJobs: Array.isArray(workspace.scheduledJobs) ? workspace.scheduledJobs : [],
+    productAuditConfig: normalizeProductAuditTaskConfig(workspace.productAuditConfig),
+    scheduledJobs: Array.isArray(workspace.scheduledJobs)
+      ? workspace.scheduledJobs.filter(job => (job as { jobType?: string }).jobType !== 'listing.submitDrafts')
+      : [],
     productSources: Array.isArray(workspace.productSources) ? workspace.productSources : [],
     orderAssociations: Array.isArray(workspace.orderAssociations) ? workspace.orderAssociations : [],
     realAddressCaches: Array.isArray(workspace.realAddressCaches) ? workspace.realAddressCaches : [],
     rules: {
-      skipKeywords: Array.isArray(workspace.rules?.skipKeywords) ? workspace.rules.skipKeywords : [],
-      blacklistRules: Array.isArray(workspace.rules?.blacklistRules) ? workspace.rules.blacklistRules : [],
+      productAuditRules: Array.isArray(workspace.rules?.productAuditRules) ? workspace.rules.productAuditRules : DEFAULT_PRODUCT_AUDIT_FAILURE_RULES,
+      productAuditDefaultFailureAction: workspace.rules?.productAuditDefaultFailureAction === 'deleteDraft' ? 'deleteDraft' : DEFAULT_PRODUCT_AUDIT_FAILURE_DEFAULT_ACTION,
       statusRules: Array.isArray(workspace.rules?.statusRules) ? workspace.rules.statusRules : [],
-      violationWords: Array.isArray(workspace.rules?.violationWords) ? workspace.rules.violationWords : [],
+      globalViolationWords: Array.isArray(workspace.rules?.globalViolationWords) ? workspace.rules.globalViolationWords : [],
+      moduleViolationWords: workspace.rules?.moduleViolationWords && typeof workspace.rules.moduleViolationWords === 'object' ? workspace.rules.moduleViolationWords : {},
     },
     appSettings: normalizeAppSettings(workspace.appSettings),
-    notificationPreference: workspace.notificationPreference || DEFAULT_NOTIFICATION_PREFERENCE,
+    notificationPreference: normalizeNotificationPreference(workspace.notificationPreference),
     orderSyncStates: workspace.orderSyncStates || {},
   };
 }
@@ -69,11 +81,6 @@ export async function updateAccountWorkspace(
   await extensionDb.accountWorkspaces.put(next);
   await markAccountDirty(accountId);
   return next;
-}
-
-export function mergeBlacklistRules(stored: AccountWorkspaceRecord['rules']['blacklistRules']) {
-  const codeSet = new Set(stored.map(rule => rule.code));
-  return [...stored, ...DEFAULT_BLACKLIST.filter(rule => !codeSet.has(rule.code))];
 }
 
 export function mergeStatusRules(stored: AccountWorkspaceRecord['rules']['statusRules']) {

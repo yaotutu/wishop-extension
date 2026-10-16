@@ -1,5 +1,5 @@
 import type { OrderListFilters, OrderScope, OrderSearchParams, OrderSearchSource, ShipOrderFromPurchaseInput } from '../../shared/types';
-import { getClient } from '../wxshop/client-registry';
+import { getOrdersClient } from '../wxshop/client-registry';
 import type { RuntimeHandlerMap } from '../router/runtime-router';
 import { shipOrderFromPurchase } from '../services/order-delivery-service';
 import type { OrderDomainService } from '../orders/order-domain-service';
@@ -27,10 +27,10 @@ export function createOrderRuntimeHandlers(deps: OrderHandlerDeps = { domain: or
       return deps.domain.syncState(args[0] as OrderScope);
     },
     async 'orders:decodeAddress'(args) {
-      return (await getClient(args[0] as string)).decodeOrderSensitiveInfo(args[1] as string);
+      return (await getOrdersClient(args[0] as string)).decodeOrderSensitiveInfo(args[1] as string);
     },
     async 'orders:listDeliveryCompanies'(args) {
-      const companies = await (await getClient(args[0] as string)).getDeliveryCompanyList(false);
+      const companies = await (await getOrdersClient(args[0] as string)).getDeliveryCompanyList(false);
       return companies.map(company => ({
         deliveryId: company.delivery_id,
         deliveryName: company.delivery_name,

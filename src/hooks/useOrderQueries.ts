@@ -12,6 +12,7 @@ import type {
   OrderTimeScope,
   ProductSourceBinding,
   ProductSourceItem,
+  ProductQrcodeResult,
   ScheduledJob,
   ScheduledJobView,
   ShipOrderFromPurchaseInput,
@@ -103,7 +104,7 @@ export function useOrderAutoSyncJobQuery() {
 
 export function useAppSettingsQuery() {
   return useQuery({
-    queryKey: ['appSettings'],
+    queryKey: queryKeys.appSettings.item,
     queryFn: () => extensionApi.settings.get(),
   });
 }
@@ -113,7 +114,7 @@ export function useUpdateAppSettingsMutation() {
   return useMutation({
     mutationFn: extensionApi.settings.update,
     onSuccess: (settings) => {
-      queryClient.setQueryData(['appSettings'], settings);
+      queryClient.setQueryData(queryKeys.appSettings.item, settings);
     },
   });
 }
@@ -197,6 +198,13 @@ export function useSaveProductSourcesMutation() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['productSources'] });
     },
+  });
+}
+
+export function useProductQrcodeMutation() {
+  return useMutation<ProductQrcodeResult, Error, { accountId: string; productId: string }>({
+    // 二维码链接由微信小店按商品状态实时返回，这里按点击即时获取，不写入持久化缓存。
+    mutationFn: ({ accountId, productId }) => extensionApi.products.getQrcode(accountId, productId),
   });
 }
 

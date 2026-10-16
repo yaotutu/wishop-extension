@@ -9,28 +9,28 @@ export interface CheckoutAddressFillResult {
 }
 
 interface CheckoutAddressFillRequest {
-  source: 'wishop-extension';
-  type: 'wishop:checkoutAddress:fill';
+  source: 'dianxiaoqi-extension';
+  type: 'dianxiaoqi:checkoutAddress:fill';
   requestId: string;
   address: OrderAddressInfo;
 }
 
 interface CheckoutAddressPingRequest {
-  source: 'wishop-extension';
-  type: 'wishop:checkoutAddress:ping';
+  source: 'dianxiaoqi-extension';
+  type: 'dianxiaoqi:checkoutAddress:ping';
   requestId: string;
 }
 
 interface CheckoutAddressFillResponse {
-  source: 'wishop-extension';
-  type: 'wishop:checkoutAddress:filled';
+  source: 'dianxiaoqi-extension';
+  type: 'dianxiaoqi:checkoutAddress:filled';
   requestId: string;
   result: CheckoutAddressFillResult;
 }
 
 interface CheckoutAddressReadyResponse {
-  source: 'wishop-extension';
-  type: 'wishop:checkoutAddress:ready';
+  source: 'dianxiaoqi-extension';
+  type: 'dianxiaoqi:checkoutAddress:ready';
   requestId?: string;
 }
 
@@ -266,12 +266,12 @@ async function fillAddressFrame(address: OrderAddressInfo): Promise<CheckoutAddr
 
 export function installCheckoutAddressFrameBridge(): void {
   if (!isTaobaoAddressFramePage()) return;
-  document.documentElement.setAttribute('data-wishop-checkout-address-bridge', 'ready');
+  document.documentElement.setAttribute('data-dianxiaoqi-checkout-address-bridge', 'ready');
 
   const postReady = (requestId?: string): void => {
     const response: CheckoutAddressReadyResponse = {
-      source: 'wishop-extension',
-      type: 'wishop:checkoutAddress:ready',
+      source: 'dianxiaoqi-extension',
+      type: 'dianxiaoqi:checkoutAddress:ready',
       requestId,
     };
     window.parent.postMessage(response, '*');
@@ -279,17 +279,17 @@ export function installCheckoutAddressFrameBridge(): void {
 
   window.addEventListener('message', event => {
     const data = event.data as Partial<CheckoutAddressFillRequest | CheckoutAddressPingRequest>;
-    if (data?.source !== 'wishop-extension' || !data.requestId) return;
-    if (data.type === 'wishop:checkoutAddress:ping') {
+    if (data?.source !== 'dianxiaoqi-extension' || !data.requestId) return;
+    if (data.type === 'dianxiaoqi:checkoutAddress:ping') {
       postReady(data.requestId);
       return;
     }
-    if (data.type !== 'wishop:checkoutAddress:fill' || !('address' in data) || !data.address) return;
+    if (data.type !== 'dianxiaoqi:checkoutAddress:fill' || !('address' in data) || !data.address) return;
     const requestId = data.requestId;
     void fillAddressFrame(data.address).then(result => {
       const response: CheckoutAddressFillResponse = {
-        source: 'wishop-extension',
-        type: 'wishop:checkoutAddress:filled',
+        source: 'dianxiaoqi-extension',
+        type: 'dianxiaoqi:checkoutAddress:filled',
         requestId,
         result,
       };
@@ -322,8 +322,8 @@ export async function fillTaobaoCheckoutAddress(address: OrderAddressInfo): Prom
 
   const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const message: CheckoutAddressFillRequest = {
-    source: 'wishop-extension',
-    type: 'wishop:checkoutAddress:fill',
+    source: 'dianxiaoqi-extension',
+    type: 'dianxiaoqi:checkoutAddress:fill',
     requestId,
     address,
   };
@@ -331,12 +331,12 @@ export async function fillTaobaoCheckoutAddress(address: OrderAddressInfo): Prom
   return new Promise(resolve => {
     const timer = window.setTimeout(() => {
       window.removeEventListener('message', handleMessage);
-      resolve({ filledFields: [], warnings: ['地址 iframe 未响应：请在扩展管理页重新加载微店管家，并重新打开淘宝下单页'] });
+      resolve({ filledFields: [], warnings: ['地址 iframe 未响应：请在扩展管理页重新加载店小七，并重新打开淘宝下单页'] });
     }, 5000);
 
     function handleMessage(event: MessageEvent): void {
       const data = event.data as Partial<CheckoutAddressFillResponse>;
-      if (data?.source !== 'wishop-extension' || data.type !== 'wishop:checkoutAddress:filled' || data.requestId !== requestId || !data.result) return;
+      if (data?.source !== 'dianxiaoqi-extension' || data.type !== 'dianxiaoqi:checkoutAddress:filled' || data.requestId !== requestId || !data.result) return;
       window.clearTimeout(timer);
       window.removeEventListener('message', handleMessage);
       resolve(data.result);
@@ -350,8 +350,8 @@ export async function fillTaobaoCheckoutAddress(address: OrderAddressInfo): Prom
 function waitForAddressFrameBridge(frameWindow: Window): Promise<boolean> {
   const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const message: CheckoutAddressPingRequest = {
-    source: 'wishop-extension',
-    type: 'wishop:checkoutAddress:ping',
+    source: 'dianxiaoqi-extension',
+    type: 'dianxiaoqi:checkoutAddress:ping',
     requestId,
   };
 
@@ -367,7 +367,7 @@ function waitForAddressFrameBridge(frameWindow: Window): Promise<boolean> {
 
     function handleMessage(event: MessageEvent): void {
       const data = event.data as Partial<CheckoutAddressReadyResponse>;
-      if (data?.source !== 'wishop-extension' || data.type !== 'wishop:checkoutAddress:ready') return;
+      if (data?.source !== 'dianxiaoqi-extension' || data.type !== 'dianxiaoqi:checkoutAddress:ready') return;
       if (data.requestId && data.requestId !== requestId) return;
       window.clearInterval(interval);
       window.clearTimeout(timer);

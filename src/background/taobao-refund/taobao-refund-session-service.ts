@@ -14,6 +14,7 @@ import {
   recordActivityWaitingUser,
 } from '../activity-logs/activity-log-service.ts';
 import { activateTaobaoWorkTab, openTaobaoWorkTab } from '../taobao-workspace/work-tab-service';
+import { requireTaobaoLoggedIn } from '../taobao-login/taobao-login-service';
 
 const SESSION_TTL_MS = 30 * 60 * 1000;
 const DEFAULT_REFUND_REASON = '不想要了';
@@ -72,7 +73,20 @@ function isTerminalSession(session: TaobaoRefundSession): boolean {
   return session.status === 'prepared' || session.status === 'submitted' || session.status === 'failed';
 }
 
+/**
+ * 是否有正在进行的退款会话。供登录态心跳探测判断工作页是否被占用（探测导航会打断进行中的任务）。
+ */
+export function hasActiveTaobaoRefundSession(): boolean {
+  if (!activeSessionId) return false;
+  const active = getFreshSession(activeSessionId);
+  if (active && !isTerminalSession(active)) return true;
+  activeSessionId = undefined;
+  return false;
+}
+
 export async function openTaobaoRefundSessionTab(input: CreateTaobaoRefundSessionInput): Promise<TaobaoRefundSession> {
+  // 前置登录态 gate：未登录直接拒绝，不建退款会话也不开工作页。
+  await requireTaobaoLoggedIn();
   const platformOrderId = input.platformOrderId.trim();
   if (!platformOrderId) throw new Error('当前订单还没有关联淘宝订单号');
   pruneExpiredSessions();

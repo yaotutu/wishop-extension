@@ -5,6 +5,7 @@ import { getAccounts } from '../store/account-repository';
 import { addScheduledJob, getScheduledJob, getScheduledJobs, updateScheduledJob, updateScheduledJobPayload } from '../store/scheduled-job-repository';
 import { orderSyncService } from '../orders/order-domain';
 import { registerScheduledJobExecutor } from './scheduler-center';
+import { createCancelledScheduledJobResult } from './scheduled-job-run-result';
 
 const DEFAULT_ORDER_SYNC_JOB_NAME = '订单自动同步';
 const DEFAULT_HISTORY_BACKFILL_JOB_NAME = '订单历史补拉';
@@ -79,7 +80,7 @@ export async function ensureOrderHistoryBackfillScheduledJob(): Promise<Schedule
   }) as Promise<ScheduledJob<OrderHistoryBackfillPayload>>;
 }
 
-async function runHistoryBackfillWindow(job: ScheduledJob): Promise<ScheduledJobExecutorResult> {
+async function runHistoryBackfillWindow(job: ScheduledJob, signal: AbortSignal): Promise<ScheduledJobExecutorResult> {
   const accounts = await getAccounts();
   const payload = normalizeBackfillPayload(job.payload);
   const cursorByAccountId = { ...(payload.cursorByAccountId || {}) };
@@ -91,6 +92,13 @@ async function runHistoryBackfillWindow(job: ScheduledJob): Promise<ScheduledJob
   const failures: string[] = [];
 
   for (const account of accounts) {
+    if (signal.aborted) {
+      // 历史补拉按账号窗口推进。停止时先保存已推进的 cursor，
+      // 避免下次运行重复补拉已经完成的账号窗口。
+      await updateScheduledJobPayload(job.id, { lookbackDays, cursorByAccountId } satisfies OrderHistoryBackfillPayload);
+      return createCancelledScheduledJobResult(Math.max(updatedOrderCount, processedAccountCount, 0));
+    }
+
     const plan = planOrderHistoryBackfillWindow({
       nowSeconds,
       lookbackDays,
@@ -147,8 +155,10 @@ async function runHistoryBackfillWindow(job: ScheduledJob): Promise<ScheduledJob
 }
 
 export function registerOrderSyncScheduledJobs(): void {
-  registerScheduledJobExecutor('orders.syncRecent', async () => {
+  registerScheduledJobExecutor('orders.syncRecent', async ({ signal }) => {
+    if (signal.aborted) return createCancelledScheduledJobResult();
     const result = await orderSyncService.refresh({ type: 'all' }, { reason: 'autoSync' });
+    if (signal.aborted) return createCancelledScheduledJobResult();
     const failedCount = result.failedAccounts.length;
     const message = failedCount > 0
       ? `订单自动同步完成，成功 ${result.refreshedAccountIds.length} 个账号，失败 ${failedCount} 个账号，扫描 ${result.fetchedOrderCount || 0} 条，新增/变更 ${result.updatedOrderCount} 条`
@@ -163,7 +173,7 @@ export function registerOrderSyncScheduledJobs(): void {
     };
   });
 
-  registerScheduledJobExecutor('orders.backfillHistory', async ({ job }) => {
-    return runHistoryBackfillWindow(job);
+  registerScheduledJobExecutor('orders.backfillHistory', async ({ job, signal }) => {
+    return runHistoryBackfillWindow(job, signal);
   });
 }
