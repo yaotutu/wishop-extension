@@ -2,9 +2,7 @@ import type { TaobaoLoginSnapshot, TaobaoLoginSource, TaobaoLoginState } from '.
 import { recordActivityWaitingUser } from '../activity-logs/activity-log-service.ts';
 import { createDiagnosticLogger } from '../logging/diagnostic-logger.ts';
 import { activateTaobaoWorkTab, ensureTaobaoTaskWorkTab } from '../taobao-workspace/work-tab-service.ts';
-import { hasActivePurchaseLookupSession } from '../purchase-lookup/purchase-lookup-session-service.ts';
 import { hasActiveProductCopySession } from '../services/product-copy-session-service.ts';
-import { hasActiveTaobaoRefundSession } from '../taobao-refund/taobao-refund-session-service.ts';
 
 /**
  * 淘宝登录态服务：后台内存态登录态的唯一事实来源。
@@ -152,7 +150,7 @@ export function buildTaobaoLoginSnapshot(params: {
  * 心跳探测前应让位，等任务跑完再探测。
  */
 function hasActiveTaobaoReadSession(): boolean {
-  return hasActivePurchaseLookupSession() || hasActiveProductCopySession() || hasActiveTaobaoRefundSession();
+  return hasActiveProductCopySession();
 }
 
 /**

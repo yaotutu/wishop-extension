@@ -1,10 +1,15 @@
+/**
+ * 持久化层的中央 barrel。
+ *
+ * 「复制商品」业务域需要的 store 能力按职责分组集中导出，调用方只需
+ * `import { ... } from '~/background/store'` 即可拿到所有仓库方法。
+ *
+ * 已删除的 product-audit / rule / license 域相关导出不再暴露。
+ */
 export type { AddLogFn } from '../shared/types';
 export type { StoreSchema } from './store/core';
 
 export {
-  DEFAULT_PRODUCT_AUDIT_CONFIG,
-  DEFAULT_PRODUCT_AUDIT_FAILURE_RULES,
-  DEFAULT_STATUS_RULES,
   CURRENT_STORAGE_VERSION,
   normalizeAccount,
   readStore,
@@ -28,37 +33,14 @@ export {
 
 export {
   addModuleLog,
-  clearProductAuditLogs,
   clearModuleLogs,
-  createScopedProductAuditLog,
   createScopedModuleLog,
-  createScopedComplianceLog,
-  getProductAuditLogs,
   getModuleLogs,
   onModuleLog,
 } from './store/log-repository';
-
-export {
-  getProductAuditConfig,
-  setProductAuditConfig,
-} from './store/product-audit-config-repository';
 
 export {
   getProductSources,
   removeProductSource,
   setProductSources,
 } from './store/product-source-repository';
-
-export {
-  getDefaultProductAuditFailurePolicy,
-  getDefaultStatusRules,
-  getProductAuditFailurePolicy,
-  getStatusRules,
-  setProductAuditFailurePolicy,
-  setStatusRules,
-} from './store/rule-repository';
-
-export {
-  getLicenseState,
-  setLicenseState,
-} from './store/license-repository';

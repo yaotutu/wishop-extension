@@ -15,7 +15,7 @@ test('Taobao content entrypoint is named for shared Taobao workflows', () => {
   assert.match(source('entrypoints/taobao.content.tsx'), /defineContentScript\(/);
 });
 
-test('product copy has an independent dashboard module boundary', () => {
+test('product copy is the only top-level dashboard module in product-copy-only build', () => {
   const layout = source('src/components/Layout.tsx');
   const preferences = source('src/stores/dashboard-ui-preferences-store.ts');
 
@@ -24,16 +24,9 @@ test('product copy has an independent dashboard module boundary', () => {
   assert.match(layout, /\{ key: 'productCopy', label: '复制商品' \}/);
   assert.match(layout, /activeModule === 'productCopy'/);
   assert.match(preferences, /'productCopy'/);
-  assert.match(layout, /activeModule === 'commonFunctions' && <ProductAuditPage/);
-});
-
-test('product audit rules are only editable from the global product audit page', () => {
-  const page = source('src/pages/common-functions/ProductAuditPage.tsx');
-
-  assert.match(page, /if \(scope === 'global'\)/);
-  assert.match(page, /globalView === 'tasks' \? renderGlobalTasksSection\(\) : renderRulesSection\(\)/);
-  assert.doesNotMatch(page, /handleAddRuleFromLog/);
-  assert.doesNotMatch(page, /handleAddKeywordKeepRule/);
+  // product-copy-only build 已经删了 commonFunctions / ProductAuditPage。
+  assert.equal(existsSync(resolve(root, 'src/pages/common-functions/ProductAuditPage.tsx')), false);
+  assert.doesNotMatch(layout, /commonFunctions/);
 });
 
 test('product audit task config does not carry account-local failure policy', () => {

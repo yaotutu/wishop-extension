@@ -1,3 +1,12 @@
+/**
+ * 淘宝 / Tmall 页面 content script 入口。
+ *
+ * 「复制商品」业务域下，这里只做三件事：
+ *  1. 在地址 frame 页（结算页收货地址）装桥接，便于从淘宝 iframe 读取地址。
+ *  2. 报告当前页登录态给后台（用于后台内存态登录态的事实输入）。
+ *  3. 如果当前 tab 属于「复制商品」工作台会话，触发复制工作流；
+ *     否则仅在工作台 tab 上显示身份提示。
+ */
 import { installCheckoutAddressFrameBridge, isTaobaoAddressFramePage } from '../src/content/taobao/adapters/checkout-address-adapter';
 import { detectTaobaoLoginState } from '../src/content/taobao/adapters/login-state-adapter';
 import { mountTaobaoToolbar } from '../src/content/taobao/runtime/mount-toolbar';
@@ -18,27 +27,14 @@ export default defineContentScript({
     if (window.top !== window) return;
 
     // 尽早把当前页的登录态回报给后台，作为后台全局登录态的事实输入。
-    // 任何淘宝页导航后（工作页、心跳探测页、用户手动浏览）都会触发，
-    // 让后台无需自己访问 DOM 就能掌握登录态。失败不影响后续工作流。
     reportLoginStateToBackground();
 
-    const {
-      shippingSession,
-      purchaseLookupSession,
-      taobaoRefundSession,
-      productCopySession,
-      workspaceRole,
-    } = await resolveTaobaoContentSessions();
+    const { productCopySession, workspaceRole } = await resolveTaobaoContentSessions();
     if (productCopySession) {
       await runProductCopyWorkflow(productCopySession);
     }
-    if (!shippingSession && !purchaseLookupSession && !taobaoRefundSession && !workspaceRole) return;
-    await mountTaobaoToolbar(ctx, {
-      shippingSession,
-      purchaseLookupSession,
-      taobaoRefundSession,
-      workspaceRole,
-    });
+    if (!workspaceRole) return;
+    await mountTaobaoToolbar(ctx, { workspaceRole });
   },
 });
 

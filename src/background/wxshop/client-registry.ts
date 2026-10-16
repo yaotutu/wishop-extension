@@ -1,24 +1,25 @@
+/**
+ * 微信小店客户端注册表。
+ *
+ * 「复制商品」业务域只用到商品发布（草稿、提审、类目查询、参数模板等）这一组 API，
+ * 所以这里只缓存 listing 客户端。订单/发货/退款相关客户端已随订单域一起删除。
+ */
 import type { ActivityLogDomain } from '../../shared/activity-log.ts';
 import { createWxShopListingClient } from './listing/api';
 import type { WxShopListingClient } from './listing/types';
-import { createWxShopOrdersClient } from './orders/api';
-import type { WxShopOrdersClient } from './orders/types';
 
 const listingClients = new Map<string, WxShopListingClient>();
-const ordersClients = new Map<string, WxShopOrdersClient>();
 
 function listingClientKey(accountId: string, domain: ActivityLogDomain): string {
   return `${domain}:${accountId}`;
 }
 
 /**
- * 商品发布域客户端。
- *
- * 只包含草稿、提审、删除和配额能力；后续复制商品 API 也归入这个功能域。
+ * 商品发布域客户端。复制商品生成的草稿也走这个客户端。
  */
 export async function getListingClient(
   accountId: string,
-  domain: ActivityLogDomain = 'productAudit',
+  domain: ActivityLogDomain = 'productCopy',
 ): Promise<WxShopListingClient> {
   const key = listingClientKey(accountId, domain);
   let client = listingClients.get(key);
@@ -30,22 +31,10 @@ export async function getListingClient(
 }
 
 /**
- * 订单域客户端。
- *
- * 只包含订单、售后、地址解密、快递公司和发货能力。
+ * 删除指定账号的所有 listing 客户端缓存。一般在 account 被删除/配置变更时调用。
  */
-export async function getOrdersClient(accountId: string): Promise<WxShopOrdersClient> {
-  let client = ordersClients.get(accountId);
-  if (!client) {
-    client = createWxShopOrdersClient(accountId);
-    ordersClients.set(accountId, client);
-  }
-  return client;
-}
-
 export function removeWxShopClients(accountId: string): void {
   for (const key of listingClients.keys()) {
     if (key.endsWith(`:${accountId}`)) listingClients.delete(key);
   }
-  ordersClients.delete(accountId);
 }

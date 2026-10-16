@@ -1,24 +1,25 @@
+/**
+ * 淘宝侧 Shadow DOM 工具栏挂载。
+ *
+ * 「复制商品」业务域下，content 端唯一需要在前台页面挂的工具栏元素是「工作台身份提示」，
+ * 用于在工作台 tab 顶部告诉用户当前页面身份。其他业务 toolbar（发货 / 采购 / 退款等）
+ * 都已随业务域一起删除。
+ */
 import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { createShadowRootUi } from 'wxt/utils/content-script-ui/shadow-root';
 import type { ContentScriptContext } from 'wxt/utils/content-script-context';
-import type { PurchaseLookupSession, ShippingSession, TaobaoRefundSession, TaobaoWorkspaceRole } from '../../../shared/types';
-import { PurchaseLookupToolbar } from '../PurchaseLookupToolbar';
-import { ShippingToolbar } from '../ShippingToolbar';
-import { TaobaoRefundToolbar } from '../TaobaoRefundToolbar';
+import type { TaobaoWorkspaceRole } from '../../../shared/types';
 import { toolbarCss } from './toolbar-style';
 import { installWorkspaceIdentity, WorkTabNotice } from './workspace-identity';
 
 interface MountTaobaoToolbarOptions {
-  shippingSession: ShippingSession | null;
-  purchaseLookupSession: PurchaseLookupSession | null;
-  taobaoRefundSession: TaobaoRefundSession | null;
   workspaceRole: TaobaoWorkspaceRole | null;
 }
 
 export async function mountTaobaoToolbar(
   ctx: ContentScriptContext,
-  { shippingSession, purchaseLookupSession, taobaoRefundSession, workspaceRole }: MountTaobaoToolbarOptions,
+  { workspaceRole }: MountTaobaoToolbarOptions,
 ): Promise<void> {
   const cleanupIdentity = workspaceRole ? installWorkspaceIdentity(workspaceRole) : undefined;
 
@@ -28,7 +29,7 @@ export async function mountTaobaoToolbar(
    * the merchant page.
    */
   const ui = await createShadowRootUi<Root>(ctx, {
-    name: 'dianxiaoqi-shipping-toolbar',
+    name: 'dianxiaoqi-product-copy-toolbar',
     position: 'overlay',
     alignment: 'top-right',
     zIndex: 2147483647,
@@ -44,9 +45,6 @@ export async function mountTaobaoToolbar(
       const root = createRoot(container);
       root.render(
         <>
-          {shippingSession && <ShippingToolbar session={shippingSession} />}
-          {purchaseLookupSession && <PurchaseLookupToolbar session={purchaseLookupSession} />}
-          {taobaoRefundSession && <TaobaoRefundToolbar session={taobaoRefundSession} />}
           {workspaceRole && <WorkTabNotice role={workspaceRole} />}
         </>,
       );

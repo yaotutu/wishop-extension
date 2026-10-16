@@ -35,18 +35,17 @@ test('product copy collection uses typed runtime channels and a thin router regi
   assert.match(source('src/shared/extension-api.ts'), /deleteCreatedWxDraftBoxProduct/);
   assert.doesNotMatch(source('src/shared/extension-api.ts'), /submitPreparedWxDraft/);
   assert.equal(existsSync(resolve(root, 'src/background/runtime-handlers/product-copy-handlers.ts')), true);
+  // product-copy-only build：router 不再传 feature map（鉴权域被一并移除），但 productCopy
+  // 这组 channel 必须仍被 createProductCopyRuntimeHandlers 注册。
   assert.match(source('src/background/router/create-background-router.ts'), /createProductCopyRuntimeHandlers/);
-  assert.match(source('src/background/router/create-background-router.ts'), /'productCopy:getDraftParameterOptions': 'productCopy'/);
-  assert.match(source('src/background/router/create-background-router.ts'), /'productCopy:getCreatedProduct': 'productCopy'/);
-  assert.match(source('src/background/router/create-background-router.ts'), /'productCopy:getDefaultSettings': 'productCopy'/);
-  assert.match(source('src/background/router/create-background-router.ts'), /'productCopy:saveDefaultSettings': 'productCopy'/);
-  assert.match(source('src/background/router/create-background-router.ts'), /'productCopy:deleteCreatedWxDraftBoxProduct': 'productCopy'/);
+  assert.match(source('src/background/router/create-background-router.ts'), /\.\.\.createProductCopyRuntimeHandlers\(/);
 });
 
-test('product audit owns pre-audit category precheck instead of product copy draft-box flow', () => {
-  assert.match(source('src/shared/runtime-channels.ts'), /'productAudit:precheckCategory'/);
-  assert.match(source('src/shared/extension-api.ts'), /precheckCategory/);
-  assert.equal(existsSync(resolve(root, 'src/background/services/product-audit-precheck-service.ts')), true);
+test('product copy draft-box flow does not depend on the removed product audit precheck service', () => {
+  // product-audit-precheck-service 已被删除；product-copy 草稿箱流程必须不再依赖它。
+  assert.equal(existsSync(resolve(root, 'src/background/services/product-audit-precheck-service.ts')), false);
+  assert.doesNotMatch(source('src/shared/runtime-channels.ts'), /'productAudit:precheckCategory'/);
+  assert.doesNotMatch(source('src/shared/extension-api.ts'), /precheckCategory/);
   assert.doesNotMatch(source('src/background/services/product-copy-wx-draft-service.ts'), /shouldRunCategoryPrecheckBeforeSubmit/);
   assert.doesNotMatch(source('src/background/services/product-copy-wx-draft-service.ts'), /precheckProductCategory/);
   assert.doesNotMatch(source('src/background/services/product-copy-wx-draft-mapper.ts'), /listing:\s*1/);

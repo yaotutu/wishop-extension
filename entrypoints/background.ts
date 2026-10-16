@@ -1,44 +1,31 @@
+/**
+ * 店小七 Chrome 扩展的后台 Service Worker 入口。
+ *
+ * 当前只承载「复制商品」一个业务域，所以这里只安装与该域相关的：
+ *  - runtime IPC 处理器（productCopy / productSource / product / account / log / notification / settings / wxCategoryData / activityLogs）
+ *  - 复制商品会话的 tab 清理监听
+ *  - 淘宝工作台 tab 清理监听（用于关闭商品采集工作台页时回收）
+ *  - 数据迁移（启动时跑一次，让旧用户的 store schema 升级到当前最小集）
+ *
+ * 定时任务、心跳、订单/退款/发货等其他域相关的初始化已经全部移除。
+ */
 import { installRuntimeHandlers } from '../src/background/handlers';
-import { installPurchaseLookupTabCleanup } from '../src/background/purchase-lookup/purchase-lookup-session-service';
 import { installProductCopyTabCleanup } from '../src/background/services/product-copy-session-service';
-import { registerProductAuditScheduledJobs } from '../src/background/scheduler/product-audit-job-executor';
-import {
-  ensureOrderShipmentCheckScheduledJob,
-  installOrderShipmentCheckDispatchListener,
-  registerOrderShipmentScheduledJobs,
-} from '../src/background/scheduler/order-shipment-job-executor';
-import { ensureOrderHistoryBackfillScheduledJob, ensureOrderSyncScheduledJob, registerOrderSyncScheduledJobs } from '../src/background/scheduler/order-sync-job-executor';
-import { registerTaobaoLoginHeartbeatScheduledJobs, ensureTaobaoLoginHeartbeatScheduledJob } from '../src/background/scheduler/taobao-login-heartbeat-job-executor';
-import { installScheduledJobAlarmListener, startAllScheduledJobs } from '../src/background/scheduler/scheduler-center';
-import { installShippingPaymentSuccessWatcher, installShippingTabCleanup } from '../src/background/shipping/shipping-session-service';
 import { migrateStore } from '../src/background/store';
-import { cleanupProductAuditLegacyData } from '../src/background/store/product-audit-legacy-cleanup';
-import { installTaobaoRefundTabCleanup } from '../src/background/taobao-refund/taobao-refund-session-service';
 import { installTaobaoWorkTabCleanup } from '../src/background/taobao-workspace/work-tab-service';
 
 export default defineBackground(() => {
-  registerProductAuditScheduledJobs();
-  registerOrderShipmentScheduledJobs();
-  registerOrderSyncScheduledJobs();
-  registerTaobaoLoginHeartbeatScheduledJobs();
+  // 注册 IPC：所有前端请求都从这一份路由表分发。
   installRuntimeHandlers();
-  installShippingTabCleanup();
-  installShippingPaymentSuccessWatcher();
-  installPurchaseLookupTabCleanup();
-  installProductCopyTabCleanup();
-  installTaobaoRefundTabCleanup();
-  installTaobaoWorkTabCleanup();
-  installOrderShipmentCheckDispatchListener();
-  installScheduledJobAlarmListener();
-  void migrateStore().then(async () => {
-    await cleanupProductAuditLegacyData();
-    await ensureOrderSyncScheduledJob();
-    await ensureOrderHistoryBackfillScheduledJob();
-    await ensureOrderShipmentCheckScheduledJob();
-    await ensureTaobaoLoginHeartbeatScheduledJob();
-    await startAllScheduledJobs();
-  });
 
+  // 关闭淘宝工作台/复制商品工作台时回收内存里的会话状态。
+  installProductCopyTabCleanup();
+  installTaobaoWorkTabCleanup();
+
+  // 启动时迁移一次 store schema（幂等）。保留这个 hook 是为了让旧用户升级时不至于读到缺失字段。
+  void migrateStore();
+
+  // 点击扩展图标时唤起 dashboard。
   chrome.action.onClicked.addListener(async () => {
     const dashboardUrl = chrome.runtime.getURL('/dashboard.html');
     const tabs = await chrome.tabs.query({ url: dashboardUrl });

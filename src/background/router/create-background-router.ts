@@ -1,33 +1,22 @@
+/**
+ * 运行时 channel 路由表。
+ *
+ * 「复制商品」业务域只用到的 channel 在这里注册为 feature map，
+ * 业务实现由各 runtime handler 模块负责。
+ *
+ * 历史上 routes 还包括订单 / 草稿 / 提审 / 调度 / 合规 / 退款 / 发货 等十几个
+ * 模块，全部随业务域删除。
+ */
 import { createAccountRuntimeHandlers } from '../runtime-handlers/account-handlers';
-import { createAppRuntimeHandlers } from '../runtime-handlers/app-handlers';
-import { createDraftRuntimeHandlers } from '../runtime-handlers/draft-handlers';
 import { createLogRuntimeHandlers } from '../runtime-handlers/log-handlers';
 import { createNotificationRuntimeHandlers } from '../runtime-handlers/notification-handlers';
-import { createOrderRuntimeHandlers } from '../runtime-handlers/order-handlers';
-import { createOrderAssociationRuntimeHandlers } from '../runtime-handlers/order-association-handlers';
-import { createPurchaseLookupRuntimeHandlers } from '../runtime-handlers/purchase-lookup-handlers';
-import { createRealAddressRuntimeHandlers } from '../runtime-handlers/real-address-handlers';
 import { createProductRuntimeHandlers } from '../runtime-handlers/product-handlers';
 import { createProductCopyRuntimeHandlers } from '../runtime-handlers/product-copy-handlers';
-import { createProductAuditRuntimeHandlers } from '../runtime-handlers/product-audit-handlers';
 import { createProductSourceRuntimeHandlers } from '../runtime-handlers/product-source-handlers';
-import { createQuotaRuntimeHandlers } from '../runtime-handlers/quota-handlers';
-import { createRuleRuntimeHandlers } from '../runtime-handlers/rule-handlers';
-import { createSchedulerRuntimeHandlers } from '../runtime-handlers/scheduler-handlers';
 import { createSettingsRuntimeHandlers } from '../runtime-handlers/settings-handlers';
-import { createShippingRuntimeHandlers } from '../runtime-handlers/shipping-handlers';
-import { createTaobaoWorkspaceRuntimeHandlers } from '../runtime-handlers/taobao-workspace-handlers';
 import { createTaobaoLoginRuntimeHandlers } from '../runtime-handlers/taobao-login-handlers';
-import { createTaobaoRefundRuntimeHandlers } from '../runtime-handlers/taobao-refund-handlers';
-import { createComplianceRuntimeHandlers } from '../runtime-handlers/compliance-handlers';
-import { createViolationWordRuntimeHandlers } from '../runtime-handlers/violation-word-handlers';
-import { createLicenseRuntimeHandlers } from '../runtime-handlers/license-handlers';
+import { createTaobaoWorkspaceRuntimeHandlers } from '../runtime-handlers/taobao-workspace-handlers';
 import { createWxCategoryDataRuntimeHandlers } from '../runtime-handlers/wx-category-data-handlers';
-import { assertFeatureAccess } from '../licensing/licensing-service';
-import { clearDraftPagination, deleteDraft, fetchDrafts, submitDraftAudit } from '../services/draft-service';
-import { runProductAuditTask } from '../services/product-audit-task-service';
-import { runComplianceBatchScan, runComplianceStep, type ScanSessionState } from '../services/compliance-service';
-import type { SessionManager } from '../utils/session-manager';
 import { createRuntimeRouter, type RuntimeFeatureMap, type RuntimeRouter } from './runtime-router';
 
 const FEATURE_CHANNELS = {
@@ -39,65 +28,35 @@ const FEATURE_CHANNELS = {
   'accounts:setActive': null,
   'config:get': null,
   'config:set': null,
-  'orders:list': 'orders',
-  'orders:detail': 'orders',
-  'orders:search': 'orders',
-  'orders:refresh': 'orders',
-  'orders:syncState': 'orders',
-  'orders:decodeAddress': 'orders',
-  'orders:listDeliveryCompanies': 'shipping',
-  'orders:shipFromPurchase': 'shipping',
-  'orderRealAddresses:list': 'orders',
-  'orderRealAddresses:get': 'orders',
-  'orderRealAddresses:fetch': 'orders',
-  'orderRealAddresses:refresh': 'orders',
-  'orderAssociations:list': 'orders',
-  'orderAssociations:set': 'orders',
-  'purchaseLookup:open': 'orders',
-  'purchaseLookup:getCurrentTabSession': 'orders',
-  'purchaseLookup:markPageReady': 'orders',
-  'purchaseLookup:reportChallenge': 'orders',
-  'purchaseLookup:resolveChallenge': 'orders',
-  'purchaseLookup:complete': 'orders',
-  'purchaseLookup:fail': 'orders',
-  'taobaoRefund:open': 'orders',
-  'taobaoRefund:getCurrentTabSession': 'orders',
-  'taobaoRefund:markPageReady': 'orders',
-  'taobaoRefund:reportChallenge': 'orders',
-  'taobaoRefund:resolveChallenge': 'orders',
-  'taobaoRefund:prepared': 'orders',
-  'taobaoRefund:submitted': 'orders',
-  'taobaoRefund:fail': 'orders',
-  'productSources:list': 'orders',
-  'productSources:set': 'orders',
-  'productSources:remove': 'orders',
-  'products:getQrcode': 'orders',
-  'productCopy:list': 'productCopy',
-  'productCopy:remove': 'productCopy',
-  'productCopy:getDraftParameterOptions': 'productCopy',
-  'productCopy:getCreatedProduct': 'productCopy',
-  'productCopy:getDefaultSettings': 'productCopy',
-  'productCopy:saveDefaultSettings': 'productCopy',
-  'productCopy:open': 'productCopy',
-  'productCopy:getCurrentTabSession': 'productCopy',
-  'productCopy:markPageReady': 'productCopy',
-  'productCopy:reportChallenge': 'productCopy',
-  'productCopy:resolveChallenge': 'productCopy',
-  'productCopy:complete': 'productCopy',
-  'productCopy:fail': 'productCopy',
-  'productCopy:suggestWxCategoryFromFullList': 'productCopy',
-  'productCopy:prepareWxDraftBoxProduct': 'productCopy',
-  'productCopy:createPreparedWxDraftBoxProduct': 'productCopy',
-  'productCopy:createWxDraftBoxProduct': 'productCopy',
-  'productCopy:deleteCreatedWxDraftBoxProduct': 'productCopy',
-  'wxCategoryData:downloadProductRules': 'productCopy',
-  'wxCategoryData:getProductRuleCacheStatus': 'productCopy',
-  'drafts:fetch': 'productAudit',
-  'drafts:submitAudit': 'productAudit',
-  'drafts:delete': 'productAudit',
-  'quota:get': 'productAudit',
-  'productAudit:logsGet': null,
-  'productAudit:logsClear': null,
+  'productSources:list': null,
+  'productSources:set': null,
+  'productSources:remove': null,
+  'products:getQrcode': null,
+  'productCopy:list': null,
+  'productCopy:remove': null,
+  'productCopy:getDraftParameterOptions': null,
+  'productCopy:getCreatedProduct': null,
+  'productCopy:getDefaultSettings': null,
+  'productCopy:saveDefaultSettings': null,
+  'productCopy:open': null,
+  'productCopy:getCurrentTabSession': null,
+  'productCopy:markPageReady': null,
+  'productCopy:reportChallenge': null,
+  'productCopy:resolveChallenge': null,
+  'productCopy:complete': null,
+  'productCopy:fail': null,
+  'productCopy:suggestWxCategoryFromFullList': null,
+  'productCopy:prepareWxDraftBoxProduct': null,
+  'productCopy:createPreparedWxDraftBoxProduct': null,
+  'productCopy:createWxDraftBoxProduct': null,
+  'productCopy:deleteCreatedWxDraftBoxProduct': null,
+  'wxCategoryData:downloadProductRules': null,
+  'wxCategoryData:getProductRuleCacheStatus': null,
+  'taobaoWorkspace:getCurrentRole': null,
+  'taobaoLogin:getState': null,
+  'taobaoLogin:probeNow': null,
+  'taobaoLogin:reportFromContent': null,
+  'taobaoLogin:openLoginPage': null,
   'activityLogs:list': null,
   'activityLogs:clear': null,
   'notifications:list': null,
@@ -108,57 +67,10 @@ const FEATURE_CHANNELS = {
   'notifications:updatePreference': null,
   'settings:get': null,
   'settings:update': null,
-  'scheduledJobs:list': null,
-  'scheduledJobs:add': null,
-  'scheduledJobs:update': null,
-  'scheduledJobs:remove': null,
-  'scheduledJobs:runNow': null,
-  'scheduledJobs:stopRun': null,
-  'productAudit:run': 'productAudit',
-  'productAudit:stop': 'productAudit',
-  'productAudit:precheckCategory': 'productAudit',
-  'productAudit:configGet': 'productAudit',
-  'productAudit:configSet': 'productAudit',
-  'violationWords:getGlobal': 'compliance',
-  'violationWords:setGlobal': 'compliance',
-  'violationWords:getModule': 'compliance',
-  'violationWords:setModule': 'compliance',
-  'violationWords:getDefaults': 'compliance',
-  'violationWords:getSettings': 'compliance',
-  'compliance:batchScan': 'compliance',
-  'compliance:scanStep': 'compliance',
-  'compliance:batchDelete': 'compliance',
-  'compliance:stop': 'compliance',
-  'productAudit:failurePolicyGet': 'productAudit',
-  'productAudit:failurePolicyGetDefaults': 'productAudit',
-  'productAudit:failurePolicySet': 'productAudit',
-  'statusRules:get': 'productAudit',
-  'statusRules:set': 'productAudit',
-  'statusRules:reset': 'productAudit',
-  'shipping:open': 'shipping',
-  'shipping:getCurrentTabSession': 'shipping',
-  'shipping:markPageReady': 'shipping',
-  'shipping:complete': 'shipping',
-  'shipping:fail': 'shipping',
-  'taobaoWorkspace:getCurrentRole': 'shipping',
-  // 淘宝登录态检测不收费，映射到 null；登录态本身是观测能力，不绑定 LicensedFeature。
-  'taobaoLogin:getState': null,
-  'taobaoLogin:probeNow': null,
-  'taobaoLogin:reportFromContent': null,
-  'taobaoLogin:openLoginPage': null,
-  'license:get': null,
-  'license:activate': null,
-  'license:refresh': null,
-  'license:clear': null,
   'app:version': null,
-} as const satisfies RuntimeFeatureMap;
+};
 
 interface CreateBackgroundRouterOptions {
-  taskSessions: SessionManager<void>;
-  scanSessions: SessionManager<ScanSessionState>;
-  getCurrentTabShippingSession: (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
-  getCurrentTabPurchaseLookupSession: (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
-  getCurrentTabTaobaoRefundSession: (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
   getCurrentTabProductCopySession: (sender?: chrome.runtime.MessageSender) => Promise<unknown>;
 }
 
@@ -169,52 +81,15 @@ interface CreateBackgroundRouterOptions {
  */
 export function createBackgroundRouter(options: CreateBackgroundRouterOptions): RuntimeRouter {
   return createRuntimeRouter({
-    ...createAccountRuntimeHandlers({
-      onAccountRemoved(accountId) {
-        clearDraftPagination(accountId);
-      },
-    }),
-    ...createOrderRuntimeHandlers(),
-    ...createRealAddressRuntimeHandlers(),
-    ...createOrderAssociationRuntimeHandlers(),
-    ...createPurchaseLookupRuntimeHandlers(options.getCurrentTabPurchaseLookupSession),
-    ...createTaobaoRefundRuntimeHandlers(options.getCurrentTabTaobaoRefundSession),
-    ...createProductCopyRuntimeHandlers(options.getCurrentTabProductCopySession),
-    ...createWxCategoryDataRuntimeHandlers(),
-    ...createDraftRuntimeHandlers({
-      fetchDrafts,
-      submitDraftAudit,
-      deleteDraft,
-    }),
+    ...createAccountRuntimeHandlers(),
     ...createProductRuntimeHandlers(),
     ...createProductSourceRuntimeHandlers(),
-    ...createShippingRuntimeHandlers(options.getCurrentTabShippingSession),
+    ...createProductCopyRuntimeHandlers(options.getCurrentTabProductCopySession),
+    ...createWxCategoryDataRuntimeHandlers(),
     ...createTaobaoWorkspaceRuntimeHandlers(),
     ...createTaobaoLoginRuntimeHandlers(),
-    ...createSchedulerRuntimeHandlers(),
-    ...createProductAuditRuntimeHandlers({
-      run: (accountId, config) => runProductAuditTask(accountId, config, options.taskSessions),
-      stop(accountId) {
-        options.taskSessions.stop(accountId);
-      },
-    }),
-    ...createComplianceRuntimeHandlers({
-      batchScan: (accountId, limit) => runComplianceBatchScan(accountId, options.scanSessions, limit),
-      scanStep: (accountId, action) => runComplianceStep(accountId, options.scanSessions, action),
-      stop(accountId) {
-        options.scanSessions.stop(accountId);
-      },
-    }),
-    ...createViolationWordRuntimeHandlers(),
-    ...createRuleRuntimeHandlers(),
-    ...createQuotaRuntimeHandlers(),
     ...createLogRuntimeHandlers(),
     ...createNotificationRuntimeHandlers(),
     ...createSettingsRuntimeHandlers(),
-    ...createLicenseRuntimeHandlers(),
-    ...createAppRuntimeHandlers(),
-  }, {
-    featureMap: FEATURE_CHANNELS,
-    assertFeatureAccess,
   });
 }

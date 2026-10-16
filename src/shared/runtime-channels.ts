@@ -1,6 +1,17 @@
+/**
+ * 全局 IPC channel 协议。
+ *
+ * 「复制商品」业务域只声明这一份 channel 集合，由 src/shared/extension-api.ts 暴露给前端
+ * 调用。任何新增 channel 都必须先在 productCopy* / productSources* / wxCategoryData*
+ * / accounts* / config* / taobaoWorkspace* / taobaoLogin* / activityLogs* /
+ * notifications* / settings* / app:* 命名空间下加。
+ *
+ * 已删除的订单 / 草稿 / 提审 / 调度 / 合规 / 退款 / 发货 / 鉴权 / 违规词 相关 channel 不再
+ * 在这里声明。
+ */
 import type { ActivityLogEntry } from './activity-log';
 import type { NotificationEntry, NotificationPreference } from './notification';
-import type { AppSettings, AppSettingsPatch, ViolationWordsSettings } from './settings';
+import type { AppSettings, AppSettingsPatch } from './settings';
 import type {
   Account,
   ProductCopyCreatedProductRecord,
@@ -16,58 +27,16 @@ import type {
   CreateWxProductDraftSuggestionInput,
   DeleteCreatedWxDraftBoxProductInput,
   DeleteCreatedWxDraftBoxProductResult,
-  CreateShippingSessionInput,
-  DeliveryCompanyOption,
-  DraftProduct,
-  DraftProductDeleteInput,
-  DraftProductDeleteResult,
-  LicenseActivationInput,
-  LicenseState,
   LogEntry,
-  Order,
-  OrderAddressInfo,
-  OrderAssociation,
-  OrderListFilters,
-  LocalOrderListResult,
-  OrderRefreshResult,
-  OrderRealAddressCache,
-  OrderSearchParams,
-  OrderScope,
-  OrderSearchSource,
-  OrderSyncState,
-  ShipOrderFromPurchaseInput,
-  ShipOrderFromPurchaseResult,
-  CreatePurchaseLookupSessionInput,
-  CreateTaobaoRefundSessionInput,
   ProductSourceBinding,
   ProductSourceItem,
   ProductQrcodeResult,
   ProductCopySession,
-  ProductAuditCategoryPrecheckInput,
-  ProductAuditCategoryPrecheckResult,
-  ProductAuditFailurePolicy,
-  ProductAuditTaskConfig,
-  ProductAuditTaskResult,
-  PurchaseLookupSession,
-  QuotaResult,
-  ScheduledJob,
-  ScheduledJobInput,
-  ScheduledJobView,
-  ScheduledJobRunNowResult,
-  ScheduledJobStopRunResult,
-  ShippingSession,
-  TaobaoRefundPrepareSnapshot,
-  TaobaoRefundSession,
-  StatusRule,
-  TaobaoWorkspaceRole,
-  TaobaoLoginSnapshot,
-  TaobaoSecurityChallengeSnapshot,
-  TaobaoPurchaseOrderSnapshot,
-  TaobaoProductSnapshot,
-  ScanItem,
-  ComplianceScanResult,
-  ViolationWordModule,
   SyncWxCategoryProductRulesInput,
+  TaobaoProductSnapshot,
+  TaobaoSecurityChallengeSnapshot,
+  TaobaoLoginSnapshot,
+  TaobaoWorkspaceRole,
   WxDraftBoxProductPrepareResult,
   WxProductDraftSuggestionResult,
   WxProductDraftCreationResult,
@@ -84,53 +53,6 @@ export interface RuntimeChannels {
   'accounts:setActive': { args: [accountId: string]; result: void };
   'config:get': { args: [accountId: string]; result: Config };
   'config:set': { args: [accountId: string, config: Config]; result: { success: boolean; error?: string } };
-
-  'drafts:fetch': { args: [accountId: string, reset?: boolean]; result: { products: DraftProduct[]; hasMore: boolean } };
-  'drafts:submitAudit': { args: [accountId: string, productId: string]; result: { success: boolean; error?: string } };
-  'drafts:delete': { args: [accountId: string, input: DraftProductDeleteInput]; result: DraftProductDeleteResult };
-
-  'orders:list': {
-    args: [scope: OrderScope, filters?: OrderListFilters];
-    result: LocalOrderListResult;
-  };
-  'orders:detail': { args: [accountId: string, orderId: string, options?: { refresh?: boolean }]; result: Order };
-  'orders:search': {
-    args: [scope: OrderScope, params: OrderSearchParams, source: OrderSearchSource];
-    result: LocalOrderListResult;
-  };
-  'orders:refresh': { args: [scope: OrderScope]; result: OrderRefreshResult };
-  'orders:syncState': { args: [scope: OrderScope]; result: OrderSyncState };
-  'orders:decodeAddress': { args: [accountId: string, orderId: string]; result: OrderAddressInfo };
-  'orders:listDeliveryCompanies': { args: [accountId: string]; result: DeliveryCompanyOption[] };
-  'orders:shipFromPurchase': { args: [input: ShipOrderFromPurchaseInput]; result: ShipOrderFromPurchaseResult };
-
-  'orderRealAddresses:list': { args: [accountId: string]; result: OrderRealAddressCache[] };
-  'orderRealAddresses:get': { args: [accountId: string, orderId: string]; result: OrderRealAddressCache | null };
-  'orderRealAddresses:fetch': { args: [accountId: string, orderId: string]; result: OrderRealAddressCache };
-  'orderRealAddresses:refresh': { args: [accountId: string, orderId: string]; result: OrderRealAddressCache };
-
-  'orderAssociations:list': { args: [accountId: string]; result: OrderAssociation[] };
-  'orderAssociations:set': {
-    args: [accountId: string, orderId: string, input: Pick<OrderAssociation, 'internalRemark' | 'linkedOrders'>];
-    result: OrderAssociation;
-  };
-
-  'purchaseLookup:open': { args: [input: CreatePurchaseLookupSessionInput]; result: PurchaseLookupSession };
-  'purchaseLookup:getCurrentTabSession': { args: []; result: PurchaseLookupSession | null };
-  'purchaseLookup:markPageReady': { args: [sessionId: string]; result: PurchaseLookupSession };
-  'purchaseLookup:reportChallenge': { args: [sessionId: string, snapshot: TaobaoSecurityChallengeSnapshot]; result: PurchaseLookupSession };
-  'purchaseLookup:resolveChallenge': { args: [sessionId: string]; result: PurchaseLookupSession };
-  'purchaseLookup:complete': { args: [sessionId: string, snapshot: TaobaoPurchaseOrderSnapshot]; result: OrderAssociation };
-  'purchaseLookup:fail': { args: [sessionId: string, error: string]; result: PurchaseLookupSession };
-
-  'taobaoRefund:open': { args: [input: CreateTaobaoRefundSessionInput]; result: TaobaoRefundSession };
-  'taobaoRefund:getCurrentTabSession': { args: []; result: TaobaoRefundSession | null };
-  'taobaoRefund:markPageReady': { args: [sessionId: string]; result: TaobaoRefundSession };
-  'taobaoRefund:reportChallenge': { args: [sessionId: string, snapshot: TaobaoSecurityChallengeSnapshot]; result: TaobaoRefundSession };
-  'taobaoRefund:resolveChallenge': { args: [sessionId: string]; result: TaobaoRefundSession };
-  'taobaoRefund:prepared': { args: [sessionId: string, snapshot: TaobaoRefundPrepareSnapshot]; result: TaobaoRefundSession };
-  'taobaoRefund:submitted': { args: [sessionId: string, snapshot: TaobaoRefundPrepareSnapshot]; result: TaobaoRefundSession };
-  'taobaoRefund:fail': { args: [sessionId: string, error: string]; result: TaobaoRefundSession };
 
   'productSources:list': { args: [accountId: string]; result: ProductSourceBinding[] };
   'productSources:set': { args: [accountId: string, productId: string, sources: ProductSourceItem[]]; result: ProductSourceBinding };
@@ -159,22 +81,14 @@ export interface RuntimeChannels {
   'wxCategoryData:downloadProductRules': { args: [input: SyncWxCategoryProductRulesInput]; result: SyncWxCategoryProductRulesResult };
   'wxCategoryData:getProductRuleCacheStatus': { args: []; result: WxCategoryProductRuleCacheStatus };
 
-  'shipping:open': { args: [input: CreateShippingSessionInput]; result: ShippingSession };
-  'shipping:getCurrentTabSession': { args: []; result: ShippingSession | null };
-  'shipping:markPageReady': { args: [sessionId: string]; result: ShippingSession };
-  'shipping:complete': { args: [sessionId: string]; result: ShippingSession };
-  'shipping:fail': { args: [sessionId: string, error: string]; result: ShippingSession };
   'taobaoWorkspace:getCurrentRole': { args: []; result: TaobaoWorkspaceRole | null };
-  // 淘宝登录态：getState 读内存态、probeNow 触发一次即时探测、reportFromContent 由 content 主动回报。
+
+  /** 淘宝登录态：getState 读内存态、probeNow 触发一次即时探测、reportFromContent 由 content 主动回报。 */
   'taobaoLogin:getState': { args: []; result: TaobaoLoginSnapshot };
   'taobaoLogin:probeNow': { args: []; result: TaobaoLoginSnapshot };
   'taobaoLogin:reportFromContent': { args: [snapshot: TaobaoLoginSnapshot]; result: void };
   'taobaoLogin:openLoginPage': { args: []; result: void };
 
-  'quota:get': { args: [accountId: string, force?: boolean]; result: QuotaResult };
-
-  'productAudit:logsGet': { args: [accountId: string]; result: LogEntry[] };
-  'productAudit:logsClear': { args: [accountId: string]; result: void };
   'activityLogs:list': { args: []; result: ActivityLogEntry[] };
   'activityLogs:clear': { args: []; result: void };
   'notifications:list': { args: []; result: NotificationEntry[] };
@@ -186,51 +100,12 @@ export interface RuntimeChannels {
   'settings:get': { args: []; result: AppSettings };
   'settings:update': { args: [patch: AppSettingsPatch]; result: AppSettings };
 
-  'scheduledJobs:list': { args: []; result: ScheduledJobView[] };
-  'scheduledJobs:add': { args: [job: ScheduledJobInput]; result: ScheduledJob };
-  'scheduledJobs:update': { args: [jobId: string, patch: Partial<ScheduledJob>]; result: void };
-  'scheduledJobs:remove': { args: [jobId: string]; result: void };
-  'scheduledJobs:runNow': { args: [jobId: string]; result: ScheduledJobRunNowResult };
-  'scheduledJobs:stopRun': { args: [jobId: string]; result: ScheduledJobStopRunResult };
-
-  'productAudit:configGet': { args: [accountId: string]; result: ProductAuditTaskConfig };
-  'productAudit:configSet': { args: [accountId: string, config: ProductAuditTaskConfig]; result: void };
-  'productAudit:run': { args: [accountId: string, config: ProductAuditTaskConfig]; result: ProductAuditTaskResult };
-  'productAudit:stop': { args: [accountId: string]; result: void };
-  'productAudit:precheckCategory': { args: [input: ProductAuditCategoryPrecheckInput]; result: ProductAuditCategoryPrecheckResult };
-
-  'violationWords:getGlobal': { args: []; result: string[] };
-  'violationWords:setGlobal': { args: [words: string[]]; result: void };
-  'violationWords:getModule': { args: [module: ViolationWordModule]; result: string[] };
-  'violationWords:setModule': { args: [module: ViolationWordModule, words: string[]]; result: void };
-  'violationWords:getDefaults': { args: []; result: { words: string[]; totalCount: number; violationWords: string[]; brands: string[]; source: string; updatedAt: string; version: number } };
-  'violationWords:getSettings': { args: []; result: ViolationWordsSettings };
-  'compliance:batchScan': { args: [accountId: string, limit?: number]; result: ComplianceScanResult };
-  'compliance:scanStep': {
-    args: [accountId: string, action: 'next' | 'skip' | 'delete'];
-    result:
-      | { type: 'done'; scanned?: number; reason?: string }
-      | { type: 'stopped'; reason?: string }
-      | ({ type: 'violation'; scanned: number } & ScanItem);
-  };
-  'compliance:batchDelete': { args: [accountId: string, violations: ScanItem[]]; result: { deleted: number; errors: number; stopped: boolean } };
-  'compliance:stop': { args: [accountId: string]; result: void };
-
-  'productAudit:failurePolicyGet': { args: []; result: ProductAuditFailurePolicy };
-  'productAudit:failurePolicyGetDefaults': { args: []; result: ProductAuditFailurePolicy };
-  'productAudit:failurePolicySet': { args: [policy: ProductAuditFailurePolicy]; result: void };
-  'statusRules:get': { args: []; result: StatusRule[] };
-  'statusRules:set': { args: [rules: StatusRule[]]; result: void };
-  'statusRules:reset': { args: []; result: StatusRule[] };
-
-  'license:get': { args: []; result: LicenseState };
-  'license:activate': { args: [input: LicenseActivationInput]; result: LicenseState };
-  'license:refresh': { args: []; result: LicenseState };
-  'license:clear': { args: []; result: LicenseState };
-
   'app:version': { args: []; result: string };
 }
 
 export type RuntimeChannel = keyof RuntimeChannels;
 export type RuntimeArgs<K extends RuntimeChannel> = RuntimeChannels[K]['args'];
 export type RuntimeResult<K extends RuntimeChannel> = RuntimeChannels[K]['result'];
+
+// 抑制未使用变量警告：LogEntry / Account 仍然是 service 层常用的 payload 类型。
+type _KeepUsed = LogEntry | Account;

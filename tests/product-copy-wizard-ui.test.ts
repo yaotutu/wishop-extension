@@ -8,23 +8,25 @@ const pageSource = readFileSync(resolve(import.meta.dirname, '../src/pages/produ
 const parameterOptionsSource = readFileSync(resolve(import.meta.dirname, '../src/background/services/product-copy-parameter-options-service.ts'), 'utf8');
 const listingClientSource = readFileSync(resolve(import.meta.dirname, '../src/background/wxshop/listing/api.ts'), 'utf8');
 
-test('product copy is rendered inside the shared account workspace', () => {
+test('product copy is the only top-level dashboard module in product-copy-only build', () => {
+  // 「复制商品」业务域下，整个 Dashboard 只挂一个顶级模块：productCopy。
+  // 不再有 orders / commonFunctions / scheduledJobs / violation / settings 这些 tab。
+  // MODULES 列表的形态：const MODULES: { ... }[] = [ ... ];（花括号在外层声明类型）
+  const moduleListMatch = layoutSource.match(/const MODULES:[\s\S]*?=\s*\[([\s\S]*?)\];/);
+  assert.ok(moduleListMatch, 'Layout should declare a MODULES list');
+  const moduleList = moduleListMatch![1];
+  assert.match(moduleList, /key: 'productCopy', label: '复制商品'/, 'productCopy must be a top-level module');
+  assert.doesNotMatch(moduleList, /key: 'orders'/, 'orders module has been removed in product-copy-only build');
+  assert.doesNotMatch(moduleList, /key: 'commonFunctions'/, 'commonFunctions (product audit) has been removed');
+  assert.doesNotMatch(moduleList, /key: 'scheduledJobs'/, 'scheduledJobs has been removed');
+  assert.doesNotMatch(moduleList, /key: 'violation'/, 'violation/compliance has been removed');
+  assert.doesNotMatch(moduleList, /key: 'settings'/, 'settings tab has been merged into product copy page');
+
+  // ProductCopyPage 必须挂在 activeModule === 'productCopy' 路径上，且接收 activeAccountId。
   assert.match(
     layoutSource,
-    /const ACCOUNT_MODULES = new Set<string>\(\[[^\]]*'productCopy'[^\]]*\]\);/,
-    'productCopy should use the same left account sider as account-scoped modules',
-  );
-
-  assert.match(
-    layoutSource,
-    /activeModule === 'productCopy' && <ProductCopyPage accountId=\{activeAccount\.id\} accountName=\{activeAccount\.name\} \/>/,
-    'ProductCopyPage should receive the selected account from AccountModuleContent',
-  );
-
-  assert.doesNotMatch(
-    layoutSource,
-    /<ProductCopyPage accounts=\{accounts\} activeAccountId=\{activeAccountId\} \/>/,
-    'ProductCopyPage should not be rendered from the non-account module branch',
+    /activeModule === 'productCopy'[\s\S]*<ProductCopyPage[\s\S]*accountId=\{activeAccountId\}[\s\S]*accountName=/,
+    'ProductCopyPage should be rendered with the selected account id/name',
   );
 });
 

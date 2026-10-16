@@ -1,4 +1,4 @@
-import { textOf } from '../dom/text';
+import { textOf } from '../dom/text.ts';
 
 export interface TaobaoPageSnapshot {
   pageType: 'product-detail' | 'checkout' | 'order-detail' | 'unknown';

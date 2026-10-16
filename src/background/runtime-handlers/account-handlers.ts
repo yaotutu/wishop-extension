@@ -1,3 +1,11 @@
+/**
+ * 账号管理 IPC handler。
+ *
+ * 负责维护账号列表（add/remove/update/list/getActive/setActive）和单个账号的微信小店配置
+ * （getConfig/setConfig）。账号被删/配置变更时主动清掉 wxshop 客户端缓存。
+ *
+ * 历史上这里还会停/启所有定时任务、清配额缓存；定时任务相关已经随调度域整体删除。
+ */
 import type { Config } from '../../shared/types';
 import {
   addAccount,
@@ -9,37 +17,33 @@ import {
   setConfig,
   updateAccount,
 } from '../store/account-repository';
-import { removeScheduledJobsForAccount } from '../store/scheduled-job-repository';
-import { startAllScheduledJobs, stopAllScheduledJobs } from '../scheduler/scheduler-center';
 import { removeWxShopClients } from '../wxshop/client-registry';
 import { getAccessToken, removeAccessToken } from '../wxshop/access-token-service';
-import { clearQuotaCache } from '../services/quota-service';
 import type { RuntimeHandlerMap } from '../router/runtime-router';
 
 interface AccountHandlerDeps {
-  onAccountRemoved: (accountId: string) => void;
+  /**
+   * 账号被删后通知调用方。当前 product-copy-only 不再需要清 draft 分页（draft 域已删），
+   * 保留钩子以备后续扩展。
+   */
+  onAccountRemoved?: (accountId: string) => void;
 }
 
-export function createAccountRuntimeHandlers(deps: AccountHandlerDeps): RuntimeHandlerMap {
+export function createAccountRuntimeHandlers(deps: AccountHandlerDeps = {}): RuntimeHandlerMap {
   return {
     async 'accounts:list'() {
       return getAccounts();
     },
     async 'accounts:add'(args) {
       const account = await addAccount(args[0] as string, args[1] as Config);
-      await startAllScheduledJobs();
       return account;
     },
     async 'accounts:remove'(args) {
       const accountId = args[0] as string;
-      await stopAllScheduledJobs();
-      await removeScheduledJobsForAccount(accountId);
       await removeAccount(accountId);
-      await startAllScheduledJobs();
       removeWxShopClients(accountId);
       await removeAccessToken(accountId);
-      clearQuotaCache(accountId);
-      deps.onAccountRemoved(accountId);
+      deps.onAccountRemoved?.(accountId);
       return undefined;
     },
     async 'accounts:update'(args) {
@@ -48,7 +52,6 @@ export function createAccountRuntimeHandlers(deps: AccountHandlerDeps): RuntimeH
       if (patch.config) {
         removeWxShopClients(accountId);
         await removeAccessToken(accountId);
-        clearQuotaCache(accountId);
       }
       return undefined;
     },
@@ -66,7 +69,6 @@ export function createAccountRuntimeHandlers(deps: AccountHandlerDeps): RuntimeH
       await setConfig(accountId, config);
       removeWxShopClients(accountId);
       await removeAccessToken(accountId);
-      clearQuotaCache(accountId);
       try {
         await getAccessToken(accountId, true);
         return { success: true };
