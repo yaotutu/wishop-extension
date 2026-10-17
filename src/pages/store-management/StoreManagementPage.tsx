@@ -20,7 +20,6 @@ interface StoreManagementPageProps {
   addAccount: (name: string, config: Config) => Promise<Account>;
   removeAccount: (id: string) => Promise<void>;
   switchAccount: (id: string) => Promise<void>;
-  onAdded?: (account: Account) => void;
 }
 
 interface BindFormValues {
@@ -30,7 +29,7 @@ interface BindFormValues {
 }
 
 const StoreManagementPage: React.FC<StoreManagementPageProps> = ({
-  accounts, activeAccountId, addAccount, removeAccount, switchAccount, onAdded,
+  accounts, activeAccountId, addAccount, removeAccount, switchAccount,
 }) => {
   const [bindOpen, setBindOpen] = useState(false);
   const [binding, setBinding] = useState(false);
@@ -47,7 +46,6 @@ const StoreManagementPage: React.FC<StoreManagementPageProps> = ({
       message.success(`已绑定「${account.name}」`);
       form.resetFields();
       setBindOpen(false);
-      onAdded?.(account);
     } catch (error) {
       if (error instanceof Error) message.error(error.message);
     } finally {

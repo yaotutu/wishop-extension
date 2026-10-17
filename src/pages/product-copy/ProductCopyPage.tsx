@@ -46,6 +46,7 @@ type ProductCopyWizardStep = 'input' | 'collectionPreview' | 'parameterSettings'
 interface ProductCopyPageProps {
   accountId: string;
   accountName?: string;
+  onNavigateToStoreManagement?: () => void;
 }
 
 const DEFAULT_BRAND_ID = '2100000000';
@@ -720,7 +721,7 @@ function renderCategorySuggestion(suggestion: WxProductDraftSuggestionResult | n
   );
 }
 
-const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountName }) => {
+const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountName, onNavigateToStoreManagement }) => {
   const [form] = Form.useForm<{ url: string }>();
   const [parameterForm] = Form.useForm<ProductCopyParameterFormValues>();
   const queryClient = useQueryClient();
@@ -1424,11 +1425,28 @@ const ProductCopyPage: React.FC<ProductCopyPageProps> = ({ accountId, accountNam
 
   const renderInputStep = (): React.ReactNode => (
     <Space vertical size={16} style={{ width: '100%' }}>
+      {!accountId && (
+        <Alert
+          type="warning"
+          showIcon
+          message="尚未绑定店铺"
+          description="复制商品流程可以先浏览，但要把生成的草稿提交到微信小店，需要先在「店铺管理」里绑定一个账号（AppID + AppSecret）。"
+          action={
+            onNavigateToStoreManagement ? (
+              <Button size="small" type="primary" onClick={onNavigateToStoreManagement}>
+                去绑定
+              </Button>
+            ) : undefined
+          }
+        />
+      )}
       <Alert
         type="info"
         showIcon
-        title={`当前账号：${accountName || accountId}`}
-        description="当前页面的类目转换、图片上传和草稿创建都会使用左侧选中的账号。"
+        title={accountId ? `当前账号：${accountName || accountId}` : '未选择账号'}
+        description={accountId
+          ? '当前页面的类目转换、图片上传和草稿创建都会使用左侧选中的账号。'
+          : '先在左侧「店铺管理」绑定一个店铺，或暂不绑定直接体验流程。'}
       />
       <Form form={form} layout="vertical" onFinish={handleCollect}>
         <Form.Item
