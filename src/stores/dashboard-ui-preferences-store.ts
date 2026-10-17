@@ -1,63 +1,45 @@
 import { create } from 'zustand';
 
-export type DashboardModuleType = 'orders' | 'productCopy' | 'commonFunctions' | 'scheduledJobs' | 'violation' | 'settings';
-export type ProductReviewScope = 'global' | 'account';
-export type ProductReviewGlobalView = 'tasks' | 'rules';
-export type SettingsTab = 'store' | 'violationWords' | 'about' | 'product' | 'license' | 'aiService' | 'purchaseLink' | 'baseData' | 'contact';
+/**
+ * 顶级 Dashboard 模块枚举。
+ *
+ * 「复制商品」业务域下，Dashboard 只挂两个 tab：
+ *  - productCopy：主功能（复制淘宝商品到微信小店草稿箱）
+ *  - storeManagement：次要功能（绑定 / 解绑微信小店账号）
+ *
+ * 旧版的 orders / commonFunctions / scheduledJobs / violation / settings 已经随业务删除。
+ */
+export type DashboardModuleType = 'productCopy' | 'storeManagement';
 
 interface DashboardUiPreferences {
   activeModule: DashboardModuleType;
-  productReviewScope: ProductReviewScope;
-  productReviewGlobalView: ProductReviewGlobalView;
-  settingsTab: SettingsTab;
 }
 
 interface DashboardUiPreferencesState extends DashboardUiPreferences {
   hydrated: boolean;
   hydrate: () => Promise<void>;
   setActiveModule: (activeModule: DashboardModuleType) => void;
-  setProductReviewScope: (productReviewScope: ProductReviewScope) => void;
-  setProductReviewGlobalView: (productReviewGlobalView: ProductReviewGlobalView) => void;
-  setSettingsTab: (settingsTab: SettingsTab) => void;
 }
 
 const STORAGE_KEY = 'dashboardUiPreferences';
 const DEFAULT_PREFERENCES: DashboardUiPreferences = {
-  activeModule: 'commonFunctions',
-  productReviewScope: 'account',
-  productReviewGlobalView: 'tasks',
-  settingsTab: 'about',
+  activeModule: 'productCopy',
 };
-const MODULES = new Set<DashboardModuleType>(['orders', 'productCopy', 'commonFunctions', 'scheduledJobs', 'violation', 'settings']);
-const REVIEW_SCOPES = new Set<ProductReviewScope>(['global', 'account']);
-const REVIEW_GLOBAL_VIEWS = new Set<ProductReviewGlobalView>(['tasks', 'rules']);
-const SETTINGS_TABS = new Set<SettingsTab>(['store', 'violationWords', 'about', 'product', 'license', 'aiService', 'purchaseLink', 'baseData', 'contact']);
+const MODULES = new Set<DashboardModuleType>(['productCopy', 'storeManagement']);
 
 function parsePreferences(value: unknown): DashboardUiPreferences {
   const saved = value as Partial<DashboardUiPreferences> | undefined;
-  const savedSettingsTab = (saved as { settingsTab?: string } | undefined)?.settingsTab;
-  // 旧版本设置页把 AI 配置称为 AI 复制商品；本地偏好读取时静默落到新的系统级 AI 服务页。
-  const normalizedSettingsTab = savedSettingsTab === 'aiProductCopy' ? 'aiService' : savedSettingsTab;
   return {
     activeModule: saved?.activeModule && MODULES.has(saved.activeModule)
       ? saved.activeModule
       : DEFAULT_PREFERENCES.activeModule,
-    productReviewScope: saved?.productReviewScope && REVIEW_SCOPES.has(saved.productReviewScope)
-      ? saved.productReviewScope
-      : DEFAULT_PREFERENCES.productReviewScope,
-    productReviewGlobalView: saved?.productReviewGlobalView && REVIEW_GLOBAL_VIEWS.has(saved.productReviewGlobalView)
-      ? saved.productReviewGlobalView
-      : DEFAULT_PREFERENCES.productReviewGlobalView,
-    settingsTab: normalizedSettingsTab && SETTINGS_TABS.has(normalizedSettingsTab as SettingsTab)
-      ? normalizedSettingsTab as SettingsTab
-      : DEFAULT_PREFERENCES.settingsTab,
   };
 }
 
 function persistPreferences(state: DashboardUiPreferencesState): void {
-  const { activeModule, productReviewScope, productReviewGlobalView, settingsTab } = state;
+  const { activeModule } = state;
   void chrome.storage.local.set({
-    [STORAGE_KEY]: { activeModule, productReviewScope, productReviewGlobalView, settingsTab },
+    [STORAGE_KEY]: { activeModule },
   }).catch(() => {});
 }
 
@@ -70,18 +52,6 @@ export const useDashboardUiPreferencesStore = create<DashboardUiPreferencesState
   },
   setActiveModule(activeModule) {
     set({ activeModule });
-    persistPreferences(get());
-  },
-  setProductReviewScope(productReviewScope) {
-    set({ productReviewScope });
-    persistPreferences(get());
-  },
-  setProductReviewGlobalView(productReviewGlobalView) {
-    set({ productReviewGlobalView });
-    persistPreferences(get());
-  },
-  setSettingsTab(settingsTab) {
-    set({ settingsTab });
     persistPreferences(get());
   },
 }));
